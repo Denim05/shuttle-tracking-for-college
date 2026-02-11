@@ -1,98 +1,154 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import BusMap from '@/components/BusMap';
+import RouteSelectionSheet from '@/components/RouteSelectionSheet';
+import { COLORS, SHADOWS, SPACING } from '@/constants/theme';
+import { useAppStore } from '@/hooks/useAppStore';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+import React, { useEffect, useState } from 'react';
+import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+export default function UserHomeScreen() {
+  const router = useRouter();
+  const { 
+    fetchInitialData, 
+    buses, 
+    stops, 
+    routes, 
+    selectedRouteId,
+    setSelectedRoute,
+    setSelectedStop
+  } = useAppStore();
 
-export default function HomeScreen() {
+  const [filterVisible, setFilterVisible] = useState(false);
+
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
+  const handleStopPress = (stopId: string) => {
+      setSelectedStop(stopId);
+      Alert.alert('Stop Selected', `Stop ID: ${stopId}`);
+  };
+
+  const handleBusPress = (busId: string) => {
+      // Could show bus details modal here
+      console.log('Bus Pressed:', busId);
+  };
+
+  const activeFilterCount = (selectedRouteId ? 1 : 0);
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <View style={styles.container}>
+      {/* Full Screen Map */}
+      <BusMap 
+        buses={buses}
+        stops={stops}
+        routes={routes}
+        selectedRouteId={selectedRouteId}
+        onStopPress={handleStopPress}
+        onBusPress={handleBusPress}
+      />
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+      {/* Header Overlay */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Campus Shuttle</Text>
+        <Text style={styles.headerSubtitle}>Live Tracking</Text>
+      </View>
+
+      {/* Floating Filter Button */}
+      <TouchableOpacity 
+        style={styles.fab} 
+        onPress={() => setFilterVisible(true)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.fabIcon}>
+             <Ionicons name="options" size={24} color="#000" />
+        </View>
+        <Text style={styles.fabText}>
+            {selectedRouteId ? 'FILTER ON' : 'FILTER MAP'}
+        </Text>
+        {activeFilterCount > 0 && (
+            <View style={styles.badge}>
+                <Text style={styles.badgeText}>{activeFilterCount}</Text>
+            </View>
+        )}
+      </TouchableOpacity>
+
+      {/* Selection Modal */}
+      <RouteSelectionSheet 
+        visible={filterVisible} 
+        onClose={() => setFilterVisible(false)} 
+      />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  header: {
+      position: 'absolute',
+      top: 60,
+      left: SPACING.l,
+      zIndex: 10,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  headerTitle: {
+      fontSize: 28,
+      fontWeight: '900',
+      color: COLORS.text,
+      textShadowColor: 'rgba(0,0,0,0.5)',
+      textShadowOffset: { width: 0, height: 2 },
+      textShadowRadius: 4,
   },
+  headerSubtitle: {
+      fontSize: 14,
+      color: COLORS.primary,
+      fontWeight: 'bold',
+      letterSpacing: 2,
+      textShadowColor: 'rgba(0,0,0,0.8)',
+      textShadowOffset: { width: 0, height: 1 },
+      textShadowRadius: 2,
+  },
+  fab: {
+      position: 'absolute',
+      bottom: 100, // Above tab bar
+      alignSelf: 'center',
+      backgroundColor: COLORS.primary,
+      borderRadius: 30,
+      paddingVertical: 12,
+      paddingHorizontal: 24,
+      flexDirection: 'row',
+      alignItems: 'center',
+      ...SHADOWS.glow,
+      zIndex: 10,
+  },
+  fabIcon: {
+      marginRight: 8,
+  },
+  fabText: {
+      color: '#000',
+      fontWeight: 'bold',
+      fontSize: 14,
+      letterSpacing: 1,
+  },
+  badge: {
+     position: 'absolute',
+     top: -5,
+     right: -5,
+     backgroundColor: 'red',
+     borderRadius: 10,
+     width: 20,
+     height: 20,
+     justifyContent: 'center',
+     alignItems: 'center',
+     borderWidth: 2,
+     borderColor: COLORS.background, 
+  },
+  badgeText: {
+      color: 'white',
+      fontSize: 10,
+      fontWeight: 'bold',
+  }
 });
