@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campus Shuttle Use Case Diagram - Stick Figures Final</title>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+
+      // Enable HTML labels for embedding images
+      mermaid.initialize({ startOnLoad: false, securityLevel: "loose" });
+
+      // Simple Stick Figure SVG
+      const svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="80" viewBox="0 0 50 80"><circle cx="25" cy="15" r="10" stroke="#000" stroke-width="2" fill="none"/><line x1="25" y1="25" x2="25" y2="55" stroke="#000" stroke-width="2"/><line x1="25" y1="35" x2="5" y2="45" stroke="#000" stroke-width="2"/><line x1="25" y1="35" x2="45" y2="45" stroke="#000" stroke-width="2"/><line x1="25" y1="55" x2="10" y2="75" stroke="#000" stroke-width="2"/><line x1="25" y1="55" x2="40" y2="75" stroke="#000" stroke-width="2"/></svg>`;
+
+      // Function to base64 encode for embedding
+      const svgBase64 = `data:image/svg+xml;base64,${btoa(svgContent)}`;
+
+      // System Figure (Red)
+      const sysSvgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="50" height="80" viewBox="0 0 50 80"><circle cx="25" cy="15" r="10" stroke="#d32f2f" stroke-width="3" fill="none"/><line x1="25" y1="25" x2="25" y2="55" stroke="#d32f2f" stroke-width="3"/><line x1="25" y1="35" x2="5" y2="45" stroke="#d32f2f" stroke-width="3"/><line x1="25" y1="35" x2="45" y2="45" stroke="#d32f2f" stroke-width="3"/><line x1="25" y1="55" x2="10" y2="75" stroke="#d32f2f" stroke-width="3"/><line x1="25" y1="55" x2="40" y2="75" stroke="#d32f2f" stroke-width="3"/></svg>`;
+      const sysSvgBase64 = `data:image/svg+xml;base64,${btoa(sysSvgContent)}`;
+
+      // Use standard "graph LR" - Removing problematic 'linkStyle'
+      const graphDefinition = `graph LR
+    %% Styles
+    classDef actor fill:none,stroke:none,color:#000,font-weight:bold
+    classDef systemActor fill:none,stroke:none,color:#d32f2f,font-weight:bold
+    classDef blueAction fill:#e3f2fd,stroke:#1565c0,stroke-width:2px,rx:20,ry:20,color:#0d47a1
+    classDef greenAction fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,rx:20,ry:20,color:#1b5e20
+    classDef yellowAction fill:#fffde7,stroke:#fbc02d,stroke-width:2px,rx:20,ry:20,color:#f57f17
+    classDef redAction fill:#ffebee,stroke:#c62828,stroke-width:2px,rx:20,ry:20,color:#b71c1c
+    
+    %% Actors with dynamic Base64 Images
+    S["<img src='${svgBase64}' width='40' /><br>Student"]:::actor
+    D["<img src='${svgBase64}' width='40' /><br>Driver"]:::actor
+    M["<img src='${svgBase64}' width='40' /><br>Manager"]:::actor
+    A["<img src='${svgBase64}' width='40' /><br>Admin"]:::actor
+
+    %% System Actor
+    Sys["<img src='${sysSvgBase64}' width='40' /><br>SYSTEM"]:::systemActor
+
+    subgraph System ["Campus Shuttle System"]
+        direction TB
+        
+        %% Blue Actions (View/Read)
+        UC1(View Live Map):::blueAction
+        UC2(Filter Routes):::blueAction
+        UC3(View Bus Details):::blueAction
+        UC4(Select Bus Stop):::blueAction
+        
+        %% Green Actions (Core Process/Action)
+        UC5(Select Bus to Drive):::greenAction
+        UC6(Start Broadcasting):::greenAction
+        UC10(Update Bus Status):::greenAction
+        UC12(Manage Entities):::greenAction
+        
+        %% Yellow Actions (Output/Report)
+        UC8(View Telemetry):::yellowAction
+        UC9(View Fleet Status):::yellowAction
+        UC11(View Dashboard Stats):::yellowAction
+        UC13(Monitor Live Fleet):::yellowAction
+        
+        %% Red Actions (System/Critical)
+        UC7(Stop Broadcasting):::redAction
+        
+        %% System Internal Tasks
+        UC14(Calculate ETA):::redAction
+        UC15(Push Notifications):::redAction
+        UC16(Log Activity):::redAction
+    end
+
+    %% Connections
+    S --- UC1
+    S --- UC2
+    S --- UC3
+    S --- UC4
+    
+    D --- UC5
+    D --- UC6
+    D --- UC7
+    D --- UC8
+    
+    M --- UC9
+    M --- UC10
+    
+    A --- UC11
+    A --- UC12
+    A --- UC13
+    
+    %% System Connections (Dashed Red Lines)
+    UC6 -.-> Sys
+    UC7 -.-> Sys
+    UC14 -.-> Sys
+    UC15 -.-> Sys
+    UC16 -.-> Sys
+    
+    %% Internal Links
+    UC6 -.-> UC14
+    UC10 -.-> UC15
+
+    %% Style the subgraph border to be dashed
+    style System fill:#fafafa,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+`;
+
+      const renderGraph = async () => {
+        const element = document.getElementById("mermaid");
+        try {
+          const { svg } = await mermaid.render("graphDiv", graphDefinition);
+          element.innerHTML = svg;
+
+          // Enable download button
+          const downloadBtn = document.getElementById("downloadBtn");
+          downloadBtn.onclick = () => {
+            const blob = new Blob([svg], { type: "image/svg+xml" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = "usecase_stick_figures_final.svg";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          };
+          downloadBtn.style.display = "block";
+        } catch (error) {
+          element.innerHTML = `<pre style="color:red">Render Error: ${error.message}</pre>`;
+          console.error(error);
+        }
+      };
+
+      renderGraph();
+    </script>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background-color: #e3f2fd;
+        margin: 0;
+      }
+      #mermaid {
+        background: white;
+        padding: 30px;
+        border-radius: 12px;
+        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+        text-align: center;
+      }
+      #downloadBtn {
+        display: none;
+        padding: 12px 24px;
+        background-color: #1976d2;
+        color: white;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 16px;
+        font-weight: bold;
+        transition: background 0.3s;
+      }
+      #downloadBtn:hover {
+        background-color: #1565c0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mermaid">Loading Final Diagram...</div>
+    <button id="downloadBtn">Download SVG</button>
+  </body>
+</html>

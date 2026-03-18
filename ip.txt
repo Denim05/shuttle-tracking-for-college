@@ -1,0 +1,3 @@
+Ethernet 5: 172.19.149.9
+VMware Network Adapter VMnet1: 192.168.216.1
+VMware Network Adapter VMnet8: 192.168.168.1

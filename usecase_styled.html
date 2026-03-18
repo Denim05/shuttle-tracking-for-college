@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campus Shuttle Use Case Diagram</title>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({ startOnLoad: false });
+
+      // Using "graph LR" (Flowchart) syntax with styling to match the reference image
+      const graphDefinition = `graph LR
+    %% Styles
+    classDef actor fill:#fff,stroke:#333,stroke-width:2px,color:#000
+    classDef blueAction fill:#fff,stroke:#4b6cb7,stroke-width:2px,color:#000
+    classDef greenAction fill:#fff,stroke:#2dce89,stroke-width:2px,color:#000
+    classDef yellowAction fill:#fff,stroke:#fbbc05,stroke-width:2px,color:#000
+    classDef redAction fill:#fff,stroke:#f5365c,stroke-width:2px,color:#000
+    
+    %% Actors
+    S((Student)):::actor
+    D((Driver)):::actor
+    M((Manager)):::actor
+    A((Admin)):::actor
+
+    subgraph System ["«System» Campus Shuttle Tracking"]
+        direction TB
+        
+        %% Blue Actions (View/Read)
+        UC1([View Live Map]):::blueAction
+        UC2([Filter Routes]):::blueAction
+        UC3([View Bus Details]):::blueAction
+        UC4([Select Bus Stop]):::blueAction
+        
+        %% Green Actions (Core Process/Action)
+        UC5([Select Bus to Drive]):::greenAction
+        UC6([Start Broadcasting]):::greenAction
+        UC10([Update Bus Status]):::greenAction
+        UC12([Manage Entities]):::greenAction
+        
+        %% Yellow Actions (Output/Report)
+        UC8([View Telemetry]):::yellowAction
+        UC9([View Fleet Status]):::yellowAction
+        UC11([View Dashboard Stats]):::yellowAction
+        UC13([Monitor Live Fleet]):::yellowAction
+        
+        %% Red Actions (System/Critical)
+        UC7([Stop Broadcasting]):::redAction
+    end
+
+    %% Connections
+    S --- UC1
+    S --- UC2
+    S --- UC3
+    S --- UC4
+    
+    D --- UC5
+    D --- UC6
+    D --- UC7
+    D --- UC8
+    
+    M --- UC9
+    M --- UC10
+    
+    A --- UC11
+    A --- UC12
+    A --- UC13
+    
+    %% Style the subgraph border to be dashed and blue-ish like the reference
+    style System fill:#fff,stroke:#333,stroke-width:2px,stroke-dasharray: 5 5
+`;
+
+      const renderGraph = async () => {
+        const element = document.getElementById("mermaid");
+        try {
+          const { svg } = await mermaid.render("graphDiv", graphDefinition);
+          element.innerHTML = svg;
+        } catch (error) {
+          element.innerHTML = `<pre style="color:red">Render Error: ${error.message}</pre>`;
+          console.error(error);
+        }
+      };
+
+      renderGraph();
+    </script>
+    <style>
+      body {
+        font-family: sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background-color: #f4f4f4;
+        margin: 0;
+      }
+      #mermaid {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mermaid">Loading Diagram...</div>
+  </body>
+</html>

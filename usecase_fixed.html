@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campus Shuttle Use Case Diagram</title>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+      mermaid.initialize({ startOnLoad: true });
+    </script>
+    <style>
+      body {
+        font-family: sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background-color: #f4f4f4;
+        margin: 0;
+      }
+      .mermaid {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="mermaid">
+      usecaseDiagram actor "Student" as S; actor "Driver" as D; actor "Manager"
+      as M; actor "Admin" as A; package "Campus Shuttle System" { usecase "View
+      Live Map" as UC1; usecase "Filter Routes" as UC2; usecase "View Bus
+      Details" as UC3; usecase "Select Bus Stop" as UC4; usecase "Select Bus to
+      Drive" as UC5; usecase "Start Broadcasting Location" as UC6; usecase "Stop
+      Broadcasting" as UC7; usecase "View Telemetry (Speed/Heading)" as UC8;
+      usecase "View Fleet Status" as UC9; usecase "Update Bus Status
+      (Delay/Offline)" as UC10; usecase "View Dashboard Stats" as UC11; usecase
+      "Manage Entities (Users/Drivers)" as UC12; usecase "Monitor Live Fleet" as
+      UC13; } S --> UC1; S --> UC2; S --> UC3; S --> UC4; D --> UC5; D --> UC6;
+      D --> UC7; D --> UC8; M --> UC9; M --> UC10; A --> UC11; A --> UC12; A -->
+      UC13; A --|> M : inherits rights;
+    </div>
+  </body>
+</html>

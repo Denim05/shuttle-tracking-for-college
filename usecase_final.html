@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Campus Shuttle Use Case Diagram</title>
+    <script type="module">
+      import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs";
+
+      mermaid.initialize({ startOnLoad: false });
+
+      // Using explicit newline characters to be robust against file system issues
+      const graphDefinition =
+        "usecaseDiagram\n" +
+        'actor "Student" as S\n' +
+        'actor "Driver" as D\n' +
+        'actor "Manager" as M\n' +
+        'actor "Admin" as A\n' +
+        'package "Campus Shuttle System" {\n' +
+        '    usecase "View Live Map" as UC1\n' +
+        '    usecase "Filter Routes" as UC2\n' +
+        '    usecase "View Bus Details" as UC3\n' +
+        '    usecase "Select Bus Stop" as UC4\n' +
+        '    usecase "Select Bus to Drive" as UC5\n' +
+        '    usecase "Start Broadcasting Location" as UC6\n' +
+        '    usecase "Stop Broadcasting" as UC7\n' +
+        '    usecase "View Telemetry (Speed/Heading)" as UC8\n' +
+        '    usecase "View Fleet Status" as UC9\n' +
+        '    usecase "Update Bus Status (Delay/Offline)" as UC10\n' +
+        '    usecase "View Dashboard Stats" as UC11\n' +
+        '    usecase "Manage Entities (Users/Drivers)" as UC12\n' +
+        '    usecase "Monitor Live Fleet" as UC13\n' +
+        "}\n" +
+        "S --> UC1\n" +
+        "S --> UC2\n" +
+        "S --> UC3\n" +
+        "S --> UC4\n" +
+        "D --> UC5\n" +
+        "D --> UC6\n" +
+        "D --> UC7\n" +
+        "D --> UC8\n" +
+        "M --> UC9\n" +
+        "M --> UC10\n" +
+        "A --> UC11\n" +
+        "A --> UC12\n" +
+        "A --> UC13\n" +
+        "A --|> M";
+
+      const renderGraph = async () => {
+        const element = document.getElementById("mermaid");
+        try {
+          const { svg } = await mermaid.render("graphDiv", graphDefinition);
+          element.innerHTML = svg;
+        } catch (error) {
+          element.innerHTML = `<pre style="color:red">Render Error: ${error.message}</pre>`;
+          console.error(error);
+        }
+      };
+
+      renderGraph();
+    </script>
+    <style>
+      body {
+        font-family: sans-serif;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 100vh;
+        background-color: #f4f4f4;
+        margin: 0;
+      }
+      #mermaid {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="mermaid">Loading Diagram...</div>
+  </body>
+</html>

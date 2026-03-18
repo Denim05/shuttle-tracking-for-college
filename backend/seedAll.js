@@ -5,13 +5,12 @@ const argon2 = require('argon2');
 // Import Models
 const Admin = require('./models/Admin');
 const Manager = require('./models/Manager');
-const Driver = require('./models/Driver');
 const User = require('./models/User');
 const Route = require('./models/Route');
 const Bus = require('./models/Bus');
 const Student = require('./models/Student');
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sistec_chalo';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/sistec_chalo_new';
 
 const MOCK_ROUTES = [
   {
@@ -75,8 +74,7 @@ const MOCK_BUSES = [
     currentLat: 37.7752,
     currentLng: -122.4185,
     status: 'On-time',
-    heading: 65,
-    driverUsername: 'driver' // Will map to driverId dynamically
+    heading: 65
   },
   {
     routeName: 'Gold Route',
@@ -97,8 +95,8 @@ const MOCK_BUSES = [
 ];
 
 const MOCK_STUDENTS = [
-    { name: 'Student 1', studentId: 'SIS-001', pickupPoint: 'Gandhi Nagar', contactNumber: '9000000001' },
-    { name: 'Student 2', studentId: 'SIS-002', pickupPoint: 'Lalghati', contactNumber: '9000000002' },
+  { name: 'Student 1', studentId: 'SIS-001', pickupPoint: 'Gandhi Nagar', contactNumber: '9000000001' },
+  { name: 'Student 2', studentId: 'SIS-002', pickupPoint: 'Lalghati', contactNumber: '9000000002' },
 ];
 
 async function seedAll() {
@@ -109,13 +107,12 @@ async function seedAll() {
     // 1. CLEAR DATABASE
     console.log('🧹 Clearing existing data...');
     await Promise.all([
-        Admin.deleteMany({}),
-        Manager.deleteMany({}),
-        Driver.deleteMany({}),
-        User.deleteMany({}),
-        Route.deleteMany({}),
-        Bus.deleteMany({}),
-        Student.deleteMany({})
+      Admin.deleteMany({}),
+      Manager.deleteMany({}),
+      User.deleteMany({}),
+      Route.deleteMany({}),
+      Bus.deleteMany({}),
+      Student.deleteMany({})
     ]);
 
     // 2. CREATE USERS
@@ -123,56 +120,46 @@ async function seedAll() {
     const passwordHash = await argon2.hash('123456');
 
     await Admin.create({ username: 'admin', password: passwordHash, email: 'admin@sistec.ac.in' });
-    
-    await Manager.create({ 
-        username: 'manager', 
-        password: passwordHash, 
-        name: 'System Manager', 
-        employeeId: 'MGR-001', 
-        department: 'Transport' 
-    });
 
-    const driverDoc = await Driver.create({ 
-        username: 'driver', 
-        password: passwordHash, 
-        name: 'Ramu Kaka', 
-        driverId: 'DL-MP04-2024', 
-        contactNumber: '9988776655', 
-        status: 'Active' 
+    await Manager.create({
+      username: 'manager',
+      password: passwordHash,
+      name: 'System Manager',
+      employeeId: 'MGR-001',
+      department: 'Transport'
     });
 
     const usersToCreate = [
-        { username: 'student', email: 'student@sistec.ac.in' },
-        { username: 'Denim', email: 'denim@sistec.ac.in' },
-        { username: 'Dhruv', email: 'druv@sistec.ac.in' },
-        { username: 'Pankaj', email: 'pankaj@sistec.ac.in' },
-        { username: 'Prashant', email: 'prashant@sistec.ac.in' },
-        { username: 'Palak', email: 'palak@sistec.ac.in' },
-        { username: 'Satyam', email: 'satyam@sistec.ac.in' }
+      { username: 'student', email: 'student@sistec.ac.in' },
+      { username: 'Denim', email: 'denim@sistec.ac.in' },
+      { username: 'Dhruv', email: 'druv@sistec.ac.in' },
+      { username: 'Pankaj', email: 'pankaj@sistec.ac.in' },
+      { username: 'Prashant', email: 'prashant@sistec.ac.in' },
+      { username: 'Palak', email: 'palak@sistec.ac.in' },
+      { username: 'Satyam', email: 'satyam@sistec.ac.in' }
     ];
 
     for (const u of usersToCreate) {
-        await User.create({
-            username: u.username,
-            password: passwordHash,
-            email: u.email,
-            status: 'Active'
-        });
+      await User.create({
+        username: u.username,
+        password: passwordHash,
+        email: u.email,
+        status: 'Active'
+      });
     }
 
     // 3. CREATE ROUTES
     console.log('🛣️ Creating Routes...');
     const routeDocs = await Route.insertMany(MOCK_ROUTES);
-    
+
     // Helper to find route ID by name
     const getRouteId = (name) => routeDocs.find(r => r.name === name)?._id;
 
     // 4. CREATE BUSES
     console.log('🚌 Creating Buses...');
     const busesWithIds = MOCK_BUSES.map(bus => ({
-        ...bus,
-        routeId: getRouteId(bus.routeName),
-        driverId: bus.driverUsername === 'driver' ? driverDoc.username : null // Linking mock driver
+      ...bus,
+      routeId: getRouteId(bus.routeName)
     }));
     await Bus.insertMany(busesWithIds);
 
@@ -180,17 +167,16 @@ async function seedAll() {
     console.log('🎓 Creating Students...');
     // Assign random route to students
     const studentsWithRoutes = MOCK_STUDENTS.map(s => ({
-        ...s,
-        routeId: routeDocs[Math.floor(Math.random() * routeDocs.length)]._id
+      ...s,
+      routeId: routeDocs[Math.floor(Math.random() * routeDocs.length)]._id
     }));
     await Student.insertMany(studentsWithRoutes);
 
     console.log('✨ Seed All Complete!');
     console.log('   - Admin: admin / 123456');
     console.log('   - Manager: manager / 123456');
-    console.log('   - Driver: driver / 123456');
     console.log('   - Users: student / 123456 (and others)');
-    
+
     process.exit(0);
   } catch (err) {
     console.error('❌ Seeding Failed:', err);
