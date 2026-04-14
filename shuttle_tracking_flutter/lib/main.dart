@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -7,7 +8,17 @@ import 'screens/login_screen.dart';
 import 'screens/user_dashboard.dart';
 import 'screens/admin_dashboard.dart';
 import 'screens/manager_dashboard.dart';
+import 'screens/driver_dashboard.dart';
+class MyHttpOverrides extends HttpOverrides {
+  @override
+  HttpClient createHttpClient(SecurityContext? context) {
+    return super.createHttpClient(context)
+      ..badCertificateCallback = (X509Certificate cert, String host, int port) => true;
+  }
+}
+
 void main() {
+  HttpOverrides.global = MyHttpOverrides();
   WidgetsFlutterBinding.ensureInitialized();
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
@@ -25,7 +36,11 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => AuthService()),
-        Provider(create: (_) => SocketService()),
+        Provider(create: (_) {
+          final service = SocketService();
+          service.initSocket(); // Initialize immediately
+          return service;
+        }),
       ],
       child: AnnotatedRegion<SystemUiOverlayStyle>(
         value: const SystemUiOverlayStyle(
@@ -75,6 +90,8 @@ class AuthWrapper extends StatelessWidget {
                 return const AdminDashboard();
               case 'manager':
                 return const ManagerDashboard();
+              case 'driver':
+                return const DriverDashboard();
               case 'user':
               case 'guest':
               default:

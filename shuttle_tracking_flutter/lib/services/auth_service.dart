@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -27,16 +28,23 @@ class AuthService with ChangeNotifier {
     try {
       final response = await http.post(
         Uri.parse('${AppConstants.apiUrl}/auth/login'),
-        headers: {'Content-Type': 'application/json'},
+        headers: {
+          'Content-Type': 'application/json',
+        },
         body: jsonEncode({
           'username': username, 
           'password': password, 
           'role': role
         }),
-      ).timeout(const Duration(seconds: 10));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
+        dynamic data;
+        try {
+          data = jsonDecode(response.body);
+        } catch (e) {
+          throw Exception('Server returned invalid data (not JSON). Check your backend status.');
+        }
         _token = data['token'];
         _currentUser = User.fromJson(data['user']);
         _isAuthenticated = true;
@@ -48,11 +56,21 @@ class AuthService with ChangeNotifier {
         notifyListeners();
         return true;
       } else {
-        throw Exception(jsonDecode(response.body)['error'] ?? 'Login failed');
+        String errorMessage = 'Login failed';
+        try {
+          final errorData = jsonDecode(response.body);
+          errorMessage = errorData['error'] ?? errorData['message'] ?? errorMessage;
+        } catch (_) {
+          errorMessage = 'Server error (${response.statusCode}). Check if backend is running.';
+        }
+        throw Exception(errorMessage);
       }
     } catch (e) {
       _isAuthenticating = false;
       notifyListeners();
+      if (e is TimeoutException) {
+        throw Exception('Connection timed out. Ensure your phone and laptop are on the same Wi-Fi and the IP in constants.dart is correct.');
+      }
       rethrow;
     }
   }

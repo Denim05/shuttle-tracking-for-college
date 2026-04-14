@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/constants.dart';
@@ -26,7 +27,7 @@ class ApiService {
       );
       return _processResponse(response);
     } catch (e) {
-      throw Exception('Failed to connect to server');
+      throw Exception('Connection Error: $e');
     }
   }
 
@@ -36,10 +37,13 @@ class ApiService {
         Uri.parse('${AppConstants.apiUrl}/$endpoint'),
         headers: await _getHeaders(),
         body: jsonEncode(body),
-      );
+      ).timeout(const Duration(seconds: 10));
       return _processResponse(response);
     } catch (e) {
-      throw Exception('Failed to connect to server');
+      if (e is TimeoutException) {
+        throw Exception('Server connection timed out. The cloud might be waking up...');
+      }
+      throw Exception('Connection failed. Please check your internet or ensure backend changes are pushed to GitHub.');
     }
   }
 
@@ -70,13 +74,19 @@ class ApiService {
 
   dynamic _processResponse(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      return jsonDecode(response.body);
+      try {
+        return jsonDecode(response.body);
+      } catch (e) {
+        throw Exception('Server returned invalid data (not JSON). Check your backend status.');
+      }
     } else {
-      var error = 'Unknown error';
+      var error = 'Server Error (${response.statusCode})';
       try {
         final body = jsonDecode(response.body);
         error = body['error'] ?? body['message'] ?? error;
-      } catch (_) {}
+      } catch (_) {
+        error = 'Network Error: Ensure your backend is running on port 5000.';
+      }
       throw Exception(error);
     }
   }

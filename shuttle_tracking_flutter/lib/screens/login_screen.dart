@@ -12,15 +12,15 @@ class LoginScreen extends StatefulWidget {
   @override
   State<LoginScreen> createState() => _LoginScreenState();
 }
-
 class _LoginScreenState extends State<LoginScreen> {
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   
   String _selectedRole = 'user';
-  bool _isLoading = false;
+  bool _isLoginLoading = false;
+  bool _isGuestLoading = false;
 
-  final List<String> _roles = ['user', 'admin', 'manager'];
+  final List<String> _roles = ['user', 'driver', 'admin', 'manager'];
 
   Future<void> _handleLogin() async {
     if (_usernameController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -30,7 +30,7 @@ class _LoginScreenState extends State<LoginScreen> {
       return;
     }
 
-    setState(() => _isLoading = true);
+    setState(() => _isLoginLoading = true);
 
     try {
       final success = await Provider.of<AuthService>(context, listen: false)
@@ -46,13 +46,13 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isLoginLoading = false);
       }
     }
   }
 
   Future<void> _handleGuestLogin() async {
-    setState(() => _isLoading = true);
+    setState(() => _isGuestLoading = true);
     try {
       await Provider.of<AuthService>(context, listen: false).loginAsGuest();
     } catch (e) {
@@ -62,7 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isGuestLoading = false);
       }
     }
   }
@@ -81,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Color(0xFF0f2027), Color(0xFF203a43), Color(0xFF2c5364)],
+            colors: [Color(0xFF02040A), Color(0xFF060B19), Color(0xFF0B132B)],
           ),
         ),
         child: SafeArea(
@@ -91,23 +91,35 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  // Glassmorphic Logo Container
+                  // App Logo Container
                   Container(
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: Colors.white.withValues(alpha: 0.1),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                      color: const Color(0xFF0F1528),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF38ef7d).withValues(alpha: 0.2),
-                          blurRadius: 20,
+                          color: const Color(0xFF1A4CFF).withValues(alpha: 0.15),
+                          blurRadius: 30,
                           spreadRadius: 5,
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.directions_bus, size: 50, color: Color(0xFF38ef7d)),
+                    child: Center(
+                      child: Icon(
+                        Icons.keyboard_arrow_up_rounded, 
+                        size: 70, 
+                        color: const Color(0xFF1A4CFF),
+                        shadows: [
+                          Shadow(
+                            color: const Color(0xFF1A4CFF).withValues(alpha: 0.5),
+                            blurRadius: 20,
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 24),
                   Text(
@@ -124,7 +136,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       fontWeight: FontWeight.w300,
-                      color: const Color(0xFF38ef7d),
+                      color: const Color(0xFF1A4CFF),
                       letterSpacing: 4,
                     ),
                   ),
@@ -132,121 +144,79 @@ class _LoginScreenState extends State<LoginScreen> {
 
                   // Glassmorphic Login Card
                   Container(
-                    padding: const EdgeInsets.all(32),
+                    padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
+                      color: Colors.white.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.2),
+                          blurRadius: 40,
+                          offset: const Offset(0, 20),
+                        ),
+                      ],
                     ),
                     child: Column(
                       children: [
-                        CustomTextField(
-                          controller: _usernameController,
-                          hintText: 'Username',
-                          icon: Icons.person_outline,
-                        ),
-                        const SizedBox(height: 16),
-                        CustomTextField(
-                          controller: _passwordController,
-                          hintText: 'Password',
-                          icon: Icons.lock_outline,
-                          isPassword: true,
-                        ),
-                        const SizedBox(height: 24),
-
-                        // Login Button
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            onPressed: _isLoading ? null : _handleLogin,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF38ef7d),
-                              disabledBackgroundColor: const Color(0xFF38ef7d).withValues(alpha: 0.7),
-                              foregroundColor: Colors.black,
-                              disabledForegroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(vertical: 18),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              elevation: 0,
-                            ),
-                            child: _isLoading
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(color: Colors.black, strokeWidth: 2),
-                                  )
-                                : const Text(
-                                    'LOGIN',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      letterSpacing: 1.5,
-                                    ),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        
-                        // Guest Button
-                        TextButton(
-                          onPressed: _isLoading ? null : _handleGuestLogin,
-                          child: Text(
-                            'Continue as Guest',
-                            style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.7),
-                              fontSize: 14,
-                            ),
-                          ),
-                        ),
-                        
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 20),
-                          child: Divider(color: Colors.white12),
-                        ),
-
-                        // Role Selection
-                        Text(
-                          'SELECT ROLE',
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: 11,
-                            letterSpacing: 2,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
+                        // Role Selection Header
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 4,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1A4CFF),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'IDENTIFY AS',
+                              style: GoogleFonts.outfit(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                letterSpacing: 1.5,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Improved Role Selection
+                        Row(
                           children: _roles.map((role) {
                             final isSelected = _selectedRole == role;
                             IconData roleIcon;
+                            String label;
                             switch (role) {
-                              case 'admin': roleIcon = Icons.admin_panel_settings_outlined; break;
-                              case 'manager': roleIcon = Icons.manage_accounts_outlined; break;
-                              default: roleIcon = Icons.person_outline;
+                              case 'admin': roleIcon = Icons.shield_outlined; label = 'ADMIN'; break;
+                              case 'manager': roleIcon = Icons.settings_outlined; label = 'MANAGER'; break;
+                              case 'driver': roleIcon = Icons.directions_bus_filled_outlined; label = 'DRIVER'; break;
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  default: roleIcon = Icons.person_outline_rounded; label = 'USER';
                             }
 
                             return Expanded(
                               child: GestureDetector(
                                 onTap: () => setState(() => _selectedRole = role),
                                 child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
+                                  duration: const Duration(milliseconds: 400),
                                   margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  padding: const EdgeInsets.symmetric(vertical: 12),
+                                  padding: const EdgeInsets.symmetric(vertical: 14),
                                   decoration: BoxDecoration(
                                     color: isSelected 
-                                        ? const Color(0xFF38ef7d) 
-                                        : Colors.white.withValues(alpha: 0.05),
+                                        ? const Color(0xFF1A4CFF) 
+                                        : Colors.white.withValues(alpha: 0.03),
                                     borderRadius: BorderRadius.circular(16),
                                     border: Border.all(
-                                      color: isSelected ? Colors.transparent : Colors.white10,
+                                      color: isSelected ? Colors.transparent : Colors.white.withValues(alpha: 0.05),
                                     ),
                                     boxShadow: isSelected ? [
                                       BoxShadow(
-                                        color: const Color(0xFF38ef7d).withValues(alpha: 0.3),
-                                        blurRadius: 10,
-                                        spreadRadius: 1,
+                                        color: const Color(0xFF1A4CFF).withValues(alpha: 0.4),
+                                        blurRadius: 15,
+                                        offset: const Offset(0, 4),
                                       )
                                     ] : [],
                                   ),
@@ -255,26 +225,110 @@ class _LoginScreenState extends State<LoginScreen> {
                                     children: [
                                       Icon(
                                         roleIcon,
-                                        size: 18,
-                                        color: isSelected ? Colors.black : Colors.white38,
+                                        size: 20,
+                                        color: isSelected ? Colors.white : Colors.white24,
                                       ),
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 6),
                                       Text(
-                                        role.toUpperCase(),
+                                        label,
                                         style: GoogleFonts.outfit(
-                                          color: isSelected ? Colors.black : Colors.white60,
-                                          fontSize: 10,
-                                          fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                          letterSpacing: 1,
+                                          color: isSelected ? Colors.white : Colors.white38,
+                                          fontSize: 9,
+                                          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w500,
+                                          letterSpacing: 0.5,
                                         ),
                                       ),
                                     ],
                                   ),
                                 ),
                               ).animate(target: isSelected ? 1 : 0)
-                               .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 200.ms, curve: Curves.easeOutBack),
+                               .shimmer(duration: 1000.ms, color: Colors.white24),
                             );
                           }).toList(),
+                        ),
+                        
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 24),
+                          child: Divider(color: Colors.white10, thickness: 1),
+                        ),
+
+                        CustomTextField(
+                          controller: _usernameController,
+                          hintText: 'Username',
+                          icon: Icons.alternate_email_rounded,
+                        ),
+                        const SizedBox(height: 16),
+                        CustomTextField(
+                          controller: _passwordController,
+                          hintText: 'Password',
+                          icon: Icons.lock_outline_rounded,
+                          isPassword: true,
+                        ),
+                        const SizedBox(height: 32),
+
+                        // Login Button
+                        SizedBox(
+                          width: double.infinity,
+                          height: 58,
+                          child: ElevatedButton(
+                            onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleLogin,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF1A4CFF),
+                              disabledBackgroundColor: const Color(0xFF1A4CFF).withValues(alpha: 0.6),
+                              foregroundColor: Colors.white,
+                              elevation: 8,
+                              shadowColor: const Color(0xFF1A4CFF).withValues(alpha: 0.5),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(18),
+                              ),
+                            ),
+                            child: _isLoginLoading
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                  )
+                                : Text(
+                                    'SIGN IN',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.5,
+                                    ),
+                                  ),
+                          ).animate(onPlay: (controller) => controller.repeat(reverse: true))
+                           .shimmer(duration: 2000.ms, color: Colors.white12),
+                        ),
+                        const SizedBox(height: 16),
+                        
+                        // Guest Button
+                        TextButton(
+                          onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.white54,
+                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 24),
+                          ),
+                          child: _isGuestLoading
+                              ? const SizedBox(
+                                  height: 20,
+                                  width: 20,
+                                  child: CircularProgressIndicator(color: Colors.white54, strokeWidth: 2),
+                                )
+                              : RichText(
+                                  text: TextSpan(
+                                    style: GoogleFonts.outfit(fontSize: 14, color: Colors.white54),
+                                    children: [
+                                      const TextSpan(text: 'Not a Registered User? '),
+                                      TextSpan(
+                                        text: 'Continue as Guest',
+                                        style: TextStyle(
+                                          color: const Color(0xFF1A4CFF).withValues(alpha: 0.8),
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                         ),
                       ],
                     ),

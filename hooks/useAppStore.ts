@@ -17,7 +17,7 @@ const getApiUrl = () => {
     // If using Tunnel (ngrok/expo), debuggerHost might be a domain.
     // Port 5000 is NOT tunneled by default. We must use the LAN IP.
     // DETECTED IP: 10.131.148.86
-    const LAN_IP = '10.131.148.86';
+    const LAN_IP = '10.116.176.86';
 
     if (!localhost) {
         if (Platform.OS === 'android') {

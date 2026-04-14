@@ -19,21 +19,19 @@ class RouteModel {
       name: json['name'] ?? '',
       color: json['color'] ?? '#000000',
       coordinates: (json['coordinates'] as List<dynamic>?)
-              ?.map((c) => {
+              ?.map<Map<String, double>>((c) => {
                     'latitude': (c['latitude'] ?? 0.0).toDouble(),
                     'longitude': (c['longitude'] ?? 0.0).toDouble(),
                   })
-              .toList()
-              .cast<Map<String, double>>() ??
+              .toList() ??
           [],
       stops: (json['stops'] as List<dynamic>?)
-              ?.map((s) => {
+              ?.map<Map<String, dynamic>>((s) => {
                     'name': s['name'] ?? '',
                     'lat': (s['lat'] ?? 0.0).toDouble(),
                     'lng': (s['lng'] ?? 0.0).toDouble(),
                   })
-              .toList()
-              .cast<Map<String, dynamic>>() ??
+              .toList() ??
           [],
     );
   }

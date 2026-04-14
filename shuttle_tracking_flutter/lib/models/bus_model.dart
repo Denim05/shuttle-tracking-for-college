@@ -7,10 +7,11 @@ class Bus {
   final double currentLng;
   final double heading;
   final double speed;
-  final String status;
+  final String status; // 'On-time', 'Delayed', 'Offline'
   final String? driverId;
-  final String occupancy;
-  final List<dynamic>? etas;
+  final String occupancy; // 'Low', 'Medium', 'High'
+  final List<BusETA> etas;
+  final DateTime lastUpdated;
 
   Bus({
     required this.id,
@@ -24,7 +25,8 @@ class Bus {
     required this.status,
     this.driverId,
     this.occupancy = 'Low',
-    this.etas,
+    this.etas = const [],
+    required this.lastUpdated,
   });
 
   factory Bus.fromJson(Map<String, dynamic> json) {
@@ -40,7 +42,26 @@ class Bus {
       status: json['status'] ?? 'Offline',
       driverId: json['driverId'],
       occupancy: json['occupancy'] ?? 'Low',
-      etas: json['etas'],
+      etas: (json['etas'] as List? ?? [])
+          .map((e) => BusETA.fromJson(e))
+          .toList(),
+      lastUpdated: json['lastUpdated'] != null 
+          ? DateTime.parse(json['lastUpdated']) 
+          : DateTime.now(),
+    );
+  }
+}
+
+class BusETA {
+  final String stopName;
+  final int minutes;
+
+  BusETA({required this.stopName, required this.minutes});
+
+  factory BusETA.fromJson(Map<String, dynamic> json) {
+    return BusETA(
+      stopName: json['stopName'] ?? '',
+      minutes: (json['minutes'] ?? 0).toInt(),
     );
   }
 }
