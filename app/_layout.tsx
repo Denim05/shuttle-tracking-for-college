@@ -22,8 +22,8 @@ export default function RootLayout() {
 
   useEffect(() => {
     // if (loaded) {
-      SplashScreen.hideAsync();
-      fetchInitialData();
+    SplashScreen.hideAsync();
+    fetchInitialData();
     // }
   }, [loaded, fetchInitialData]);
 
@@ -34,7 +34,7 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <LocationTracker />
-      <StatusBar style="light" />
+      <StatusBar style="light" backgroundColor="transparent" translucent={true} />
       <Stack
         screenOptions={{
           headerShown: false,
