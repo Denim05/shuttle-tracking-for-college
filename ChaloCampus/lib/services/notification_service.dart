@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -9,6 +11,9 @@ class NotificationService {
       FlutterLocalNotificationsPlugin();
 
   Future<void> init() async {
+    // flutter_local_notifications does not support web — skip init on web.
+    if (kIsWeb) return;
+
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
@@ -22,6 +27,20 @@ class NotificationService {
         // Handle notification tap
       },
     );
+
+    // Create the high-priority channel for Android
+    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+      'chalocampus_pulse_alerts',
+      'Pulse Alerts',
+      description: 'Geofencing and proximity alerts for ChaloCampus',
+      importance: Importance.max,
+      playSound: true,
+      enableVibration: true,
+    );
+
+    await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
+        ?.createNotificationChannel(channel);
   }
 
   Future<void> showNotification({
@@ -29,6 +48,13 @@ class NotificationService {
     required String title,
     required String body,
   }) async {
+    // On web, notifications are handled by the browser natively.
+    // This service is a no-op on web.
+    if (kIsWeb) {
+      debugPrint('[Web Notification] $title: $body');
+      return;
+    }
+
     const AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
       'chalocampus_pulse_alerts',
@@ -37,7 +63,7 @@ class NotificationService {
       importance: Importance.max,
       priority: Priority.high,
       ticker: 'ticker',
-      color: const Color(0xFF00F0FF),
+      color: Color(0xFF00F0FF),
       styleInformation: BigTextStyleInformation(''),
     );
 
@@ -52,10 +78,4 @@ class NotificationService {
       notificationDetails,
     );
   }
-}
-
-// Global color helper if needed or import from theme
-class Color {
-  final int value;
-  const Color(this.value);
 }
