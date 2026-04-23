@@ -2,6 +2,6 @@
 <project version="4">
   <component name="VcsDirectoryMappings">
     <mapping directory="" vcs="Git" />
-    <mapping directory="$PROJECT_DIR$/shuttle_tracking_flutter/backend" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/ChaloCampus/backend" vcs="Git" />
   </component>
 </project>
