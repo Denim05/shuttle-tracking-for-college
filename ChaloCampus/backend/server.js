@@ -75,7 +75,7 @@ app.get('/', (req, res) => {
     res.json({
         status: 'ChaloCampus Backend Online',
         database: mongoose.connection.name,
-        version: '1.0.5-DB-SYNCED',
+        version: '1.0.6-DB-FIXED',
         timestamp: new Date().toISOString()
     });
 });
