@@ -5,7 +5,7 @@ const Bus = require('./models/Bus');
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/chalocampus';
 
 async function runSimulation() {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' });
     const bus = await Bus.findOne({ busNumber: "MP-04-P-0001" });
     if (!bus) {
         console.error('Bus not found! Seed first.');

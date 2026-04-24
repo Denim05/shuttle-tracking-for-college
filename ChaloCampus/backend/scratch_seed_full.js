@@ -8,7 +8,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_use
 
 async function seedData() {
     try {
-        await mongoose.connect(MONGODB_URI);
+        await mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' });
         console.log('✅ Connected to MongoDB');
 
         // 1. Clear existing data

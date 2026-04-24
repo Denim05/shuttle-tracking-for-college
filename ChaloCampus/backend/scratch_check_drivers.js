@@ -4,7 +4,7 @@ const MONGODB_URI = 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa
 
 async function checkDrivers() {
     try {
-        await mongoose.connect(MONGODB_URI);
+        await mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' });
         const drivers = await Driver.find({});
         console.log('DRIVERS FOUND:', JSON.stringify(drivers, null, 2));
         process.exit(0);
