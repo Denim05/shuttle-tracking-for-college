@@ -3,7 +3,7 @@ require('dotenv').config();
 
 async function checkUsers() {
     try {
-        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chalocampus');
+        await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/chalocampus', { dbName: 'chalocampus' });
         console.log('Connected to DB');
         
         const User = mongoose.model('User', new mongoose.Schema({
