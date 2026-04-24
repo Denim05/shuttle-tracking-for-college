@@ -40,7 +40,7 @@ const MOCK_ROUTES = [
   },
 ];
 
-mongoose.connect(MONGODB_URI)
+mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' })
   .then(async () => {
     console.log('✅ Connected to MongoDB for Pulse Seeding...');
 

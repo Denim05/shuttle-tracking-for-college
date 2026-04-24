@@ -18,7 +18,7 @@ async function seedUsers() {
             process.exit(1);
         }
 
-        await mongoose.connect(MONGODB_URI);
+        await mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' });
         console.log('✅ Connected to MongoDB');
 
         // Default Password Hash

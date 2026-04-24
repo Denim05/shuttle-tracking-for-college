@@ -144,7 +144,7 @@ const MOCK_STUDENTS = [
 
 async function seedAll() {
   try {
-    await mongoose.connect(MONGODB_URI);
+    await mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' });
     console.log('Connected to MongoDB');
 
     // 1. CLEAR DATABASE
