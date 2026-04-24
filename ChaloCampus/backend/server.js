@@ -62,10 +62,14 @@ app.use('/api/', limiter);
 const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/chalocampus';
 const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/chalocampus$1');
 
+console.log(`📡 [DB] Connecting to Cluster... (Target Database: chalocampus)`);
+console.log(`📡 [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****:****@')}`);
+
 mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' })
     .then(() => {
         const dbName = mongoose.connection.name;
-        console.log(`✅ MongoDB Connected! Database: ${dbName}`);
+        console.log(`\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m`);
+        console.log(`\x1b[32m✅ [DB] ACTIVE DATABASE: ${dbName}\x1b[0m`);
     })
     .catch(err => {
         console.error('❌ MongoDB Connection Error:', err);
@@ -77,7 +81,8 @@ app.get('/', (req, res) => {
     res.json({
         status: 'ChaloCampus Backend Online',
         database: mongoose.connection.name,
-        version: '1.0.8-DB-FORCE',
+        readyState: mongoose.connection.readyState,
+        version: '1.0.9-DIAGNOSTIC',
         timestamp: new Date().toISOString()
     });
 });
