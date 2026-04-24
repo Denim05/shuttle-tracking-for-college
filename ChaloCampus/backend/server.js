@@ -68,8 +68,9 @@ console.log(`📡 [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****
 mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' })
     .then(() => {
         const dbName = mongoose.connection.name;
-        console.log(`\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m`);
-        console.log(`\x1b[32m✅ [DB] ACTIVE DATABASE: ${dbName}\x1b[0m`);
+        process.stdout.write(`\n\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
+        process.stdout.write(`\x1b[32m✅ [DB] ACTIVE DATABASE: ${dbName}\x1b[0m\n`);
+        console.log(`✅ MongoDB Connected! Database: ${dbName}`);
     })
     .catch(err => {
         console.error('❌ MongoDB Connection Error:', err);
@@ -208,7 +209,11 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/guest/routes', async (req, res) => {
     try {
         const routes = await Route.find();
-        res.json(routes);
+        res.json({ 
+            version: '1.0.10-VERIFY',
+            database: mongoose.connection.name,
+            routes 
+        });
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch routes' });
     }
