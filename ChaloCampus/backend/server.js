@@ -58,7 +58,9 @@ const limiter = rateLimit({
 app.use('/api/', limiter);
 
 // MongoDB Connection
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/chalocampus';
+// Force 'chalocampus' database in the URI if it's missing or set to 'test'
+const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/chalocampus';
+const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/chalocampus$1');
 
 mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' })
     .then(() => {
@@ -75,7 +77,7 @@ app.get('/', (req, res) => {
     res.json({
         status: 'ChaloCampus Backend Online',
         database: mongoose.connection.name,
-        version: '1.0.7-FINAL-RELEASE',
+        version: '1.0.8-DB-FORCE',
         timestamp: new Date().toISOString()
     });
 });
