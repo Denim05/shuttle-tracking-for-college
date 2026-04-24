@@ -261,16 +261,18 @@ class _UserDashboardState extends State<UserDashboard> {
     final socketService = Provider.of<SocketService>(context, listen: false);
     final topPadding = MediaQuery.of(context).padding.top;
     return Positioned(
-      top: topPadding + 10, left: 20, right: 80,
+      top: topPadding + 10, left: 16, right: 16,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        height: 56,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
         decoration: BoxDecoration(
-          color: const Color(0xFF0D121F).withValues(alpha: 0.95),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8))],
+          color: const Color(0xFF0D121F).withValues(alpha: 0.96),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 16, offset: const Offset(0, 4))],
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             GestureDetector(
               onTap: () {
@@ -282,27 +284,28 @@ class _UserDashboardState extends State<UserDashboard> {
                 Future.delayed(1.seconds, () => _tapCounter = 0);
               },
               child: Container(
-                padding: const EdgeInsets.all(8),
+                width: 34, height: 34,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2D5BFF).withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
+                  color: const Color(0xFF2D5BFF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.directions_bus_filled_rounded, color: Color(0xFF2D5BFF), size: 18),
+                child: const Icon(Icons.directions_bus_filled_rounded, color: Color(0xFF2D5BFF), size: 17),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Text(
                     'CHALO CAMPUS',
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
-                      fontSize: 11,
+                      fontSize: 10,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 1,
+                      height: 1.2,
                     ),
                   ),
                   const SizedBox(height: 2),
@@ -323,16 +326,18 @@ class _UserDashboardState extends State<UserDashboard> {
                            .fadeOut(duration: 400.ms);
                         },
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 5),
                       Flexible(
                         child: Text(
-                          _selectedRoute?.name ?? 'Select Route',
+                          _selectedRoute?.name ?? 'Tap ⇄ to select route',
                           style: GoogleFonts.plusJakartaSans(
-                            color: _selectedRoute != null ? const Color(0xFF00F0FF) : Colors.white24,
+                            color: _selectedRoute != null ? const Color(0xFF00F0FF) : Colors.white30,
                             fontSize: 10,
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w700,
+                            height: 1.2,
                           ),
                           overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ),
                     ],
@@ -340,11 +345,16 @@ class _UserDashboardState extends State<UserDashboard> {
                 ],
               ),
             ),
-            IconButton(
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              icon: const Icon(Icons.swap_horiz_rounded, color: Colors.white70, size: 20),
-              onPressed: _showRouteSelection,
+            GestureDetector(
+              onTap: _showRouteSelection,
+              child: Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.swap_horiz_rounded, color: Colors.white60, size: 18),
+              ),
             ),
           ],
         ),
