@@ -60,7 +60,7 @@ app.use('/api/', limiter);
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/chalocampus';
 
-mongoose.connect(MONGODB_URI)
+mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' })
     .then(() => {
         const dbName = mongoose.connection.name;
         console.log(`✅ MongoDB Connected! Database: ${dbName}`);
