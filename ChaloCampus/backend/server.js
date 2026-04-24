@@ -66,24 +66,82 @@ console.log(`📡 [DB] Connecting to Cluster... (Target Database: chalocampus)`)
 console.log(`📡 [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****:****@')}`);
 
 mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' })
-    .then(() => {
+    .then(async () => {
         const dbName = mongoose.connection.name;
         process.stdout.write(`\n\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
         process.stdout.write(`\x1b[32m✅ [DB] ACTIVE DATABASE: ${dbName}\x1b[0m\n`);
         console.log(`✅ MongoDB Connected! Database: ${dbName}`);
+        // Auto-seed real SGI routes on first boot if DB is empty
+        await autoSeedRoutes();
     })
     .catch(err => {
         console.error('❌ MongoDB Connection Error:', err);
-        console.log('Ensure you have MongoDB installed and running locally on port 27017');
     });
+
+// ─── Auto-Seed: Seeds all 13 real Sagar Group of Institutions routes ──────────
+// Only runs if the Route collection is empty (safe to deploy multiple times)
+async function autoSeedRoutes() {
+    try {
+        const Route = require('./models/Route');
+        const Bus   = require('./models/Bus');
+        const count = await Route.countDocuments();
+        if (count > 0) {
+            console.log(`🗂️  [SEED] ${count} routes already exist — skipping auto-seed.`);
+            return;
+        }
+        console.log('🌱 [SEED] No routes found — seeding real SGI bus routes...');
+
+        const SGI_ROUTES = [
+            { busNo:'01', vehicle:'MP04 PA 3497', name:'Gandinagar Route',              color:'#6C63FF', driver:'Ghanshyam Nagar',       stops:['Gandinagar','Pul Bogda','Roshanpura','Manavseva Square','Bharat Mata Square','Ashoka Garden Chouraha','Nehru Nagar','Ratibad Campus'] },
+            { busNo:'02', vehicle:'MP04 PA 3498', name:'Ashoka Garden Route (Bus 02)',   color:'#FF6B6B', driver:'Rahul Verma',            stops:['Bhopal Railway Station Platform-1','Pushpa Nagar','Sangam Tent House','80-feet Road','Ashoka Garden Pani ki Tanki','Prabhat Square','Bogda Pull','Jinsi Square','Roshanpura','Dipo','Ratibad Campus'] },
+            { busNo:'03', vehicle:'MP04 PA 3501', name:'Karond Route',                   color:'#00F0FF', driver:'Praveen Pal',            stops:['DwarkaDham SPS Campus','Lambakheda','Karond','Bhanpur','Chhola Mandir','Best Prize','Kalyan Nagar','Shiv Mandir','Karond Sabzi Mandi','DIG Bungla','Nadra Bus Stand','Bharat Talkies','Jahangirabad','PHQ','Roshanpura','Bharat Mata Square','Ratibad Campus'] },
+            { busNo:'04', vehicle:'MP04 PA 3504', name:'Kolar Road Route',               color:'#FFB347', driver:'Mukesh Shisodiya',       stops:['DPS School','Bairagarh','610 Kolar','Babadiya Kala','Aura Mall','Shivay Complex','10 No Shop','Arera Petrol Pump','Patrakar Colony','Pancheel Nagar','Vaishali Nagar','Nehru Nagar','Ratibad Campus'] },
+            { busNo:'05', vehicle:'MP04 PA 3510', name:'Ashoka Garden Route (Bus 05)',   color:'#FF2E63', driver:'Babloo Meena',           stops:['Bhopal Railway Station Platform-1','Pushpa Nagar','Sangam Tent House','80-feet Road','Ashoka Garden Pani ki Tanki','Prabhat Square','Ratibad Campus'] },
+            { busNo:'06', vehicle:'MP04 PA 3511', name:'Ashta Route',                    color:'#A8FF78', driver:'Raj Kumar',             stops:['Alipur','Old Bus Stand','Bhopal Naka','Bajaranga Colony','Colony Square','Banjari Mata','Kachanariya Jod','Kotri','Jat Khedi Jod','Amlaha','Bhadakhedi Jod','Goodwela','Jhagriya By-pass Sehore','Jhagriya','Ratibad Campus'] },
+            { busNo:'07', vehicle:'MP04 PA 3512', name:'Kolar Route (Bus 07)',            color:'#F7971E', driver:'Virendra',              stops:['Gehnu Kheda','D-Mart','Lalita Nagar','Naya Pura','Mandakini','J.K. Hospital','Bansal Hospital','10 Number','Arera Petrol Pump','Kolar Tiraha','Panchsil Nagar','Vaishali Nagar','Nehru Nagar Chauraha','Nehru Nagar Naya Basera','Dipo 100 Daily Office','Ratibad Campus'] },
+            { busNo:'09', vehicle:'MP04 PA 3513', name:'Mandideep Route',                color:'#2D5BFF', driver:'Satish Tomar',           stops:['Satlapur','Vardhman','Sarakiya','HEG/Mandideep','Samardha','Radhapuram','Pal Dhaba','Indus Town','11 Meal','Misrod','Ashima Mall','Danish Nagar','Bagsawaniya Thana','SP Office','Narayan Nagar','Ganesh Mandir','BJP Office','Nutan College','Durga Petrol Pump','Narmada Bhawan','Panchsil Nagar','Mata Mandir','PNT','Nehru Nagar New Basti','Nehru Nagar Square','Ratibad Campus'] },
+            { busNo:'10', vehicle:'MP04 PA 3523', name:'Ashoka Garden Route (Bus 10)',   color:'#B721FF', driver:'Devendra Parmar',        stops:['Bhopal Railway Station Platform-1','Pushpa Nagar','Sangam Tent House','80-feet Road','Ashoka Garden Pani ki Tanki','Prabhat Square','Bogda Pull','Jinsi Square','Roshanpura','Dipo','Ratibad Campus'] },
+            { busNo:'11', vehicle:'MP04 PA 3522', name:'SLV Route',                      color:'#21D4FD', driver:'Tulsi Das',             stops:['SOS','Transport Nagar','Patel Nagar','Anand Nagar Police Choki','Ratna Giri Chourha','Viranda Van Nagar','Tanatan Daba','Narela Chouraha','Ayodhya Nagar Square','Piplani Chouraha','Indrapuri','ITI','Bijli Gate','Subhash Nagar','Vallabh Bhavan','Ratibad Campus'] },
+            { busNo:'12', vehicle:'MP04 PA 3521', name:'Neelbad Route',                  color:'#43E97B', driver:'Arjun Maran',           stops:['Neelbad','Ratibad Campus'] },
+            { busNo:'13', vehicle:'MP04 PA 2288', name:'Sehore Route',                   color:'#FA709A', driver:'Mukesh Verma',          stops:['Bishan Khedi','Bhav Khedi','Khakar Kheda','Daite Colony','Kodiya','Ganesh Mandir Sehore','Moti Baba Mandir','Reliance Petrol Pump','Kohli Pura','Ganga Ashram','Bhopal Naka','Chanakya Puri','Chanakya Puri Vishal Mega Mart','Ratibad Campus'] },
+            { busNo:'14', vehicle:'MP04 PA 2290', name:'Fanda Route',                    color:'#FEE140', driver:'Sunil Kumar Prajapati', stops:['Fanda','Pipaliya','Padli Jod','Kolas','Naya Gano','Sastakhedi','Tilakhedi','Deheriya','Mundla','Narela','Khokariya','Kodiya','Kajlash','Nanni','Ratibad Campus'] },
+        ];
+
+        for (const r of SGI_ROUTES) {
+            const route = await Route.create({
+                name: r.name,
+                color: r.color,
+                stops: r.stops.map(name => ({ name })),
+                coordinates: [], // No fake polyline
+            });
+            await Bus.create({
+                busNumber: r.vehicle,
+                name: `Bus ${r.busNo} - ${r.name}`,
+                routeId: route._id.toString(),
+                routeName: r.name,
+                routeColor: r.color,
+                currentLat: 23.1270,
+                currentLng: 77.3494,
+                heading: 0, speed: 0,
+                status: 'On-time',
+                occupancy: 'Low',
+                etas: [],
+                lastUpdated: new Date(),
+            });
+            console.log(`  ✅ [SEED] Bus ${r.busNo}: ${r.name}`);
+        }
+        console.log(`🎉 [SEED] Done! Seeded ${SGI_ROUTES.length} routes & buses.`);
+    } catch (err) {
+        console.error('❌ [SEED] Auto-seed failed:', err.message);
+    }
+}
 
 // Simple Route
 app.get('/', (req, res) => {
     res.json({
         status: 'ChaloCampus Backend Online',
         database: mongoose.connection.name,
-        readyState: mongoose.connection.readyState,
-        version: '1.0.9-DIAGNOSTIC',
+        version: '2.1.0-AUTOSEED',
         timestamp: new Date().toISOString()
     });
 });
