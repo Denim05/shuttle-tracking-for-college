@@ -156,6 +156,8 @@ const Manager = require('./models/Manager');
 const User = require('./models/User');
 const Alert = require('./models/Alert');
 const Notification = require('./models/Notification');
+const Complaint = require('./models/Complaint');
+const Schedule = require('./models/Schedule');
 
 // Helper to broadcast stats
 const broadcastStats = async () => {
@@ -813,8 +815,178 @@ app.post('/api/manager/seed', async (req, res) => {
     }
 });
 
+// ─── ETA TO MY STOP ─────────────────────────────────────────────────────────
+// GET /api/eta?routeId=...&stopName=...
+// Returns minutes until the active bus on a route reaches the named stop.
+app.get('/api/eta', async (req, res) => {
+    const { routeId, stopName } = req.query;
+    if (!routeId || !stopName) {
+        return res.status(400).json({ error: 'routeId and stopName are required' });
+    }
+    try {
+        const buses = await Bus.find({ routeId }).sort({ lastUpdated: -1 }).limit(1);
+        if (!buses.length) return res.json({ eta: null, message: 'No active bus on this route' });
+
+        const bus = buses[0];
+        const route = await Route.findById(routeId);
+        if (!route) return res.status(404).json({ error: 'Route not found' });
+
+        const stop = route.stops.find(
+            s => s.name.toLowerCase().trim() === stopName.toLowerCase().trim()
+        );
+        if (!stop) return res.status(404).json({ error: 'Stop not found on route' });
+
+        // Use stop coords if they exist; else return null ETA
+        if (stop.lat == null || stop.lng == null) {
+            return res.json({ eta: null, message: 'Stop coordinates not yet configured', stopName: stop.name });
+        }
+
+        const speed = bus.speed > 5 ? bus.speed : 30; // default 30 km/h
+        const minutes = calculateETA(bus.currentLat, bus.currentLng, stop.lat, stop.lng, speed);
+
+        res.json({
+            eta: minutes,
+            busId: bus._id.toString(),
+            busNumber: bus.busNumber,
+            routeName: route.name,
+            stopName: stop.name,
+            busLat: bus.currentLat,
+            busLng: bus.currentLng,
+            speed: bus.speed,
+            lastUpdated: bus.lastUpdated,
+        });
+    } catch (err) {
+        console.error('❌ ETA Error:', err);
+        res.status(500).json({ error: 'Failed to calculate ETA' });
+    }
+});
+
+// ─── SCHEDULE ────────────────────────────────────────────────────────────────
+// GET  /api/schedule?routeId=...   → all schedule entries for a route
+// POST /api/schedule               → create/upsert schedule entry (admin/manager)
+app.get('/api/schedule', async (req, res) => {
+    const { routeId } = req.query;
+    try {
+        const query = routeId ? { routeId } : {};
+        const schedules = await Schedule.find(query).sort({ stopName: 1 });
+        res.json(schedules);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch schedules' });
+    }
+});
+
+app.post('/api/schedule', authMiddleware, async (req, res) => {
+    const { routeId, routeName, stopName, times, daysActive } = req.body;
+    if (!routeId || !stopName || !times) {
+        return res.status(400).json({ error: 'routeId, stopName and times are required' });
+    }
+    try {
+        const entry = await Schedule.findOneAndUpdate(
+            { routeId, stopName },
+            { routeId, routeName, stopName, times, daysActive: daysActive || ['Mon','Tue','Wed','Thu','Fri','Sat'] },
+            { upsert: true, new: true }
+        );
+        res.json(entry);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to save schedule' });
+    }
+});
+
+// ─── COMPLAINTS ──────────────────────────────────────────────────────────────
+// POST /api/complaints           → user submits a complaint
+// GET  /api/complaints           → manager/admin lists complaints
+// PUT  /api/complaints/:id       → manager updates status
+app.post('/api/complaints', authMiddleware, async (req, res) => {
+    const { routeId, routeName, driverName, busNumber, category, description } = req.body;
+    if (!description) return res.status(400).json({ error: 'description is required' });
+    try {
+        const complaint = await Complaint.create({
+            userId:      req.user.id,
+            userName:    req.body.userName || 'User',
+            routeId,
+            routeName,
+            driverName,
+            busNumber,
+            category:    category || 'other',
+            description,
+        });
+
+        // Notify managers via socket
+        io.emit('newComplaint', complaint);
+        console.log(`🚨 [Complaint] New from user ${req.user.id}: "${description.substring(0,60)}..."`);
+
+        res.status(201).json(complaint);
+    } catch (err) {
+        console.error('❌ Complaint Error:', err);
+        res.status(500).json({ error: 'Failed to submit complaint' });
+    }
+});
+
+app.get('/api/complaints', authMiddleware, async (req, res) => {
+    try {
+        const complaints = await Complaint.find().sort({ createdAt: -1 }).limit(100);
+        res.json(complaints);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch complaints' });
+    }
+});
+
+app.put('/api/complaints/:id', authMiddleware, async (req, res) => {
+    try {
+        const updated = await Complaint.findByIdAndUpdate(
+            req.params.id,
+            { status: req.body.status },
+            { new: true }
+        );
+        res.json(updated);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update complaint' });
+    }
+});
+
+// ─── DELAY ALERT SUBSCRIPTION ────────────────────────────────────────────────
+// POST /api/subscribe-delay  { routeId, userId }
+// Stores intent server-side; when manager marks a bus delayed or ETA drift > 5min,
+// the server emits a 'busDelayed' event to all connected sockets (clients filter by routeId).
+app.post('/api/subscribe-delay', authMiddleware, async (req, res) => {
+    const { routeId } = req.body;
+    if (!routeId) return res.status(400).json({ error: 'routeId is required' });
+    // Simple in-memory subscription store (could be upgraded to Redis/DB)
+    if (!global.delaySubscribers) global.delaySubscribers = {};
+    if (!global.delaySubscribers[routeId]) global.delaySubscribers[routeId] = new Set();
+    global.delaySubscribers[routeId].add(req.user.id);
+    res.json({ success: true, message: `Subscribed to delay alerts for route ${routeId}` });
+});
+
+// Manager or server can POST to this to fire a delay alert to all subscribers
+app.post('/api/notify-delay', authMiddleware, async (req, res) => {
+    const { routeId, routeName, message, delayMinutes } = req.body;
+    if (!routeId || !message) return res.status(400).json({ error: 'routeId and message required' });
+    try {
+        const payload = {
+            routeId,
+            routeName: routeName || routeId,
+            message,
+            delayMinutes: delayMinutes || 0,
+            timestamp: new Date().toISOString(),
+        };
+        io.emit('busDelayed', payload);
+
+        // Also persist as a notification so it appears in the alerts feed
+        const notif = await Notification.create({ message, type: 'critical' });
+        io.emit('notification', notif);
+        io.emit('systemAlert', { message, type: 'critical', timestamp: payload.timestamp });
+
+        console.log(`⚠️ [Delay Alert] Route ${routeName}: ${message}`);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to send delay alert' });
+    }
+});
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
     console.log(`📡 Socket.io ready for connections`);
 });
+

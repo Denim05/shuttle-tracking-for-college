@@ -202,6 +202,10 @@ class SocketService with ChangeNotifier {
   void listenToNotifications(Function(dynamic) callback) =>
       _on('notification', callback);
 
+  /// Listens for bus delay events emitted by manager or server.
+  void listenToBusDelayed(Function(dynamic) callback) =>
+      _on('busDelayed', callback);
+
   void off(String event) => _socket?.off(event);
 
   // ─── Emit Methods ────────────────────────────────────────────────────────

@@ -15,6 +15,8 @@ import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'fleet_radar_screen.dart';
+import 'schedule_screen.dart';
+import 'complaint_screen.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -36,6 +38,11 @@ class _UserDashboardState extends State<UserDashboard> {
   
   final List<Map<String, dynamic>> _alertHistory = [];
   bool _isSosActive = false;
+
+  // ── New Feature State ──────────────────────────────────────────────────────
+  int? _etaMinutes;          // ETA to user's assigned pickup stop
+  bool _etaLoading = false;
+  bool _delaySubscribed = false; // Whether user subscribed to delay alerts
 
   @override
   void initState() {
@@ -90,9 +97,7 @@ class _UserDashboardState extends State<UserDashboard> {
     final socketService = Provider.of<SocketService>(context, listen: false);
     socketService.initSocket();
 
-    // General broadcast notifications are now handled centrally by BusStore
-    // which triggers the local notification pop-up and updates the feed.
-    
+    // Proximity approach alert (existing)
     socketService.listenToBusApproach((data) {
       if (mounted) {
         final auth = Provider.of<AuthService>(context, listen: false);
@@ -118,6 +123,80 @@ class _UserDashboardState extends State<UserDashboard> {
         }
       }
     });
+
+    // ── Delay alert listener (new) ──────────────────────────────────────────
+    socketService.listenToBusDelayed((data) {
+      if (!mounted) return;
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final myRouteId = auth.currentUser?.routeId ?? _selectedRoute?.id;
+      if (myRouteId == null) return;
+      // Only notify if this delay concerns the user's route
+      if (data['routeId'] == myRouteId) {
+        final msg = data['message'] ?? 'Your bus is running late.';
+        NotificationService().showNotification(
+          title: '⚠️ Bus Delay Alert',
+          body: msg,
+        );
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Expanded(child: Text(msg, style: const TextStyle(color: Colors.white))),
+              ],
+            ),
+            backgroundColor: const Color(0xFFFF2E63),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        );
+      }
+    });
+  }
+
+  // Fetch ETA to user's pickup stop from backend
+  Future<void> _fetchETA() async {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final routeId = _selectedRoute?.id ?? auth.currentUser?.routeId;
+    final stopName = auth.currentUser?.pickupPoint;
+    if (routeId == null || stopName == null || stopName.isEmpty) return;
+
+    setState(() => _etaLoading = true);
+    try {
+      final data = await _apiService.get(
+        'eta?routeId=${Uri.encodeQueryComponent(routeId)}&stopName=${Uri.encodeQueryComponent(stopName)}',
+      );
+      if (mounted) {
+        setState(() {
+          _etaMinutes = data['eta'] as int?;
+          _etaLoading = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _etaLoading = false);
+    }
+  }
+
+  // Subscribe user to delay notifications for selected route
+  Future<void> _subscribeToDelay() async {
+    final routeId = _selectedRoute?.id;
+    if (routeId == null) return;
+    try {
+      await _apiService.post('subscribe-delay', { 'routeId': routeId });
+      if (mounted) {
+        setState(() => _delaySubscribed = true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('✅ You will be notified if the bus is late!'),
+            backgroundColor: const Color(0xFF2D5BFF),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
+        );
+      }
+    } catch (_) {}
   }
 
   void _updateActiveBus(BusStore busStore) {
@@ -478,24 +557,141 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildStatGrid() {
     final isLive = _activeBus != null && _activeBus!.status != 'Offline';
-    
-    // Calculate a dynamic ETA based on average city speed (25km/h) if we have data
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final hasPickup = (auth.currentUser?.pickupPoint ?? '').isNotEmpty;
+
+    // Prefer real stop-specific ETA fetched from backend
     String etaDisplay = '--';
-    if (isLive) {
-      // For demo, we use a simple distance logic or the bus's own ETA list
+    if (_etaLoading) {
+      etaDisplay = '...';
+    } else if (_etaMinutes != null) {
+      etaDisplay = '$_etaMinutes MIN';
+    } else if (isLive) {
       if (_activeBus!.etas.isNotEmpty) {
         etaDisplay = '${_activeBus!.etas.first.minutes} MIN';
-      } else {
-        etaDisplay = '8 MIN'; // Fallback
       }
     }
 
-    return Row(
+    return Column(
       children: [
-        Expanded(child: _buildStatItem('ETA', etaDisplay, Icons.timer_outlined)),
-        const SizedBox(width: 16),
-        Expanded(child: _buildStatItem('VELOCITY', isLive ? '${_activeBus!.speed.toInt()} KM/H' : '--', Icons.speed_rounded)),
+        Row(
+          children: [
+            Expanded(
+              child: GestureDetector(
+                onTap: hasPickup && isLive ? _fetchETA : null,
+                child: Stack(
+                  children: [
+                    _buildStatItem(
+                      hasPickup ? 'ETA TO STOP' : 'ETA',
+                      etaDisplay,
+                      Icons.timer_outlined,
+                    ),
+                    if (hasPickup && isLive)
+                      Positioned(
+                        top: 10, right: 10,
+                        child: Icon(
+                          Icons.refresh_rounded,
+                          color: const Color(0xFF2D5BFF).withValues(alpha: 0.5),
+                          size: 14,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(child: _buildStatItem('VELOCITY', isLive ? '${_activeBus!.speed.toInt()} KM/H' : '--', Icons.speed_rounded)),
+          ],
+        ),
+        if (hasPickup && _selectedRoute != null) ...[
+          const SizedBox(height: 12),
+          Text(
+            'MY STOP: ${auth.currentUser!.pickupPoint!.toUpperCase()}',
+            style: GoogleFonts.plusJakartaSans(
+              color: const Color(0xFF00F0FF).withValues(alpha: 0.6),
+              fontSize: 9,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.5,
+            ),
+          ),
+        ],
+        const SizedBox(height: 20),
+        // Quick Actions Row
+        Row(
+          children: [
+            Expanded(child: _buildQuickAction(
+              icon: Icons.schedule_rounded,
+              label: 'SCHEDULE',
+              color: const Color(0xFF00F0FF),
+              onTap: _selectedRoute != null
+                  ? () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => ScheduleScreen(route: _selectedRoute!)))
+                  : null,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _buildQuickAction(
+              icon: _delaySubscribed
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_none_rounded,
+              label: _delaySubscribed ? 'NOTIFYING' : 'NOTIFY LATE',
+              color: _delaySubscribed ? const Color(0xFF38EF7D) : const Color(0xFFFFB347),
+              onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
+            )),
+            const SizedBox(width: 12),
+            Expanded(child: _buildQuickAction(
+              icon: Icons.report_gmailerrorred_rounded,
+              label: 'REPORT',
+              color: const Color(0xFFFF2E63),
+              onTap: () => Navigator.push(context, MaterialPageRoute(
+                    builder: (_) => ComplaintScreen(
+                      selectedRoute: _selectedRoute,
+                      activeBus: _activeBus,
+                    ))),
+            )),
+          ],
+        ),
       ],
+    );
+  }
+
+  Widget _buildQuickAction({
+    required IconData icon,
+    required String label,
+    required Color color,
+    VoidCallback? onTap,
+  }) {
+    final disabled = onTap == null;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          color: disabled
+              ? Colors.white.withValues(alpha: 0.02)
+              : color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: disabled
+                ? Colors.white.withValues(alpha: 0.03)
+                : color.withValues(alpha: 0.2),
+          ),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: disabled ? Colors.white24 : color, size: 20),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                color: disabled ? Colors.white24 : color,
+                fontSize: 8,
+                fontWeight: FontWeight.w900,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
