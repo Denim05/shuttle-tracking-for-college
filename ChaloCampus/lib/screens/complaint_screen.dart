@@ -81,7 +81,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
         'routeId': widget.selectedRoute?.id,
         'routeName': widget.selectedRoute?.name,
         'driverName': 'Driver',
-        'busNumber': widget.activeBus?.busNumber,
+        'busNumber': widget.activeBus?.routeName,
         'category': _selectedCategory,
         'description': _descController.text.trim(),
       });

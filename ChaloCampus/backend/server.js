@@ -158,6 +158,8 @@ const Alert = require('./models/Alert');
 const Notification = require('./models/Notification');
 const Complaint = require('./models/Complaint');
 const Schedule = require('./models/Schedule');
+const RegistrationForm = require('./models/RegistrationForm');
+const RegistrationSubmission = require('./models/RegistrationSubmission');
 
 // Helper to broadcast stats
 const broadcastStats = async () => {
@@ -981,6 +983,474 @@ app.post('/api/notify-delay', authMiddleware, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Failed to send delay alert' });
+    }
+});
+
+// ─── REGISTRATION FORM SYSTEM ───────────────────────────────────────────────
+
+// Helper to get base URL (used in shareable links)
+const getBaseUrl = (req) => `${req.protocol}://${req.get('host')}`;
+
+// ── PUBLIC: Render the registration HTML form ─────────────────────────────
+app.get('/register/:formId', async (req, res) => {
+    try {
+        const form = await RegistrationForm.findById(req.params.formId);
+        if (!form) return res.status(404).send('<h2>Form not found or expired.</h2>');
+        if (!form.isActive) return res.status(410).send(`
+            <!DOCTYPE html><html><head><meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width,initial-scale=1">
+            <title>Form Closed</title>
+            <style>body{background:#05070E;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:20px}.box{background:#0D121F;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:40px;max-width:400px}</style>
+            </head><body><div class="box"><h2 style="color:#FF2E63">📋 Registration Closed</h2><p style="color:#aaa">This form is no longer accepting submissions.</p><p style="margin-top:20px;color:#666">Contact your college transport department for assistance.</p></div></body></html>
+        `);
+
+        const routes = form.routeOptions || [];
+        const routeOptions = routes.map(r => `<option value="${r.routeId}|${r.routeName}">${r.routeName}</option>`).join('');
+
+        // Build stop options JSON for JS
+        const stopMap = {};
+        if (form.stopOptions) {
+            form.stopOptions.forEach(so => { stopMap[so.routeId] = so.stops || []; });
+        }
+
+        res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${form.title} | ChaloCampus</title>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --blue: #2D5BFF;
+      --cyan: #00F0FF;
+      --red: #FF2E63;
+      --bg: #05070E;
+      --card: #0D121F;
+      --border: rgba(255,255,255,0.07);
+    }
+    body {
+      background: var(--bg);
+      color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      padding: 20px;
+      background-image: radial-gradient(ellipse at top left, rgba(45,91,255,0.08) 0%, transparent 60%);
+    }
+    .container { max-width: 560px; margin: 0 auto; }
+    .header {
+      text-align: center;
+      padding: 40px 20px 32px;
+    }
+    .logo {
+      display: inline-flex; align-items: center; gap: 10px;
+      background: rgba(45,91,255,0.1);
+      border: 1px solid rgba(45,91,255,0.2);
+      border-radius: 14px;
+      padding: 10px 18px;
+      margin-bottom: 24px;
+    }
+    .logo span { font-weight: 900; font-size: 13px; letter-spacing: 2px; color: var(--cyan); }
+    h1 { font-size: clamp(22px, 6vw, 30px); font-weight: 900; color: #fff; margin-bottom: 8px; }
+    .sub { color: rgba(255,255,255,0.45); font-size: 14px; line-height: 1.5; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 28px;
+      padding: 32px 28px;
+      margin-bottom: 16px;
+    }
+    .section-label {
+      font-size: 9px;
+      font-weight: 900;
+      letter-spacing: 2px;
+      color: rgba(255,255,255,0.25);
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .form-group { margin-bottom: 18px; }
+    label {
+      display: block;
+      font-size: 12px;
+      font-weight: 800;
+      color: rgba(255,255,255,0.55);
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+    input, select, textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 14px;
+      padding: 14px 16px;
+      color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 600;
+      outline: none;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+    }
+    input:focus, select:focus { border-color: var(--blue); background: rgba(45,91,255,0.05); }
+    select option { background: #0D121F; color: #fff; }
+    .required::after { content: ' *'; color: var(--red); }
+    .info-box {
+      background: rgba(0,240,255,0.05);
+      border: 1px solid rgba(0,240,255,0.1);
+      border-radius: 14px;
+      padding: 14px 16px;
+      font-size: 12px;
+      color: rgba(255,255,255,0.5);
+      line-height: 1.6;
+      margin-top: 20px;
+    }
+    .info-box strong { color: var(--cyan); }
+    button[type=submit] {
+      width: 100%;
+      background: linear-gradient(135deg, var(--blue), var(--cyan));
+      border: none;
+      border-radius: 18px;
+      padding: 18px;
+      color: #fff;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: 1px;
+      cursor: pointer;
+      transition: opacity 0.2s, transform 0.1s;
+      box-shadow: 0 8px 30px rgba(45,91,255,0.3);
+    }
+    button[type=submit]:active { transform: scale(0.98); opacity: 0.9; }
+    button[type=submit]:disabled { opacity: 0.5; cursor: not-allowed; }
+    .success {
+      display: none;
+      text-align: center;
+      padding: 50px 20px;
+    }
+    .success-icon {
+      width: 80px; height: 80px;
+      background: rgba(0,240,255,0.1);
+      border: 2px solid rgba(0,240,255,0.3);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 20px;
+      font-size: 36px;
+    }
+    .success h2 { font-size: 22px; font-weight: 900; margin-bottom: 10px; }
+    .success p { color: rgba(255,255,255,0.45); font-size: 14px; line-height: 1.6; }
+    .error-msg { color: var(--red); font-size: 11px; margin-top: 5px; display: none; }
+    .footer { text-align: center; padding: 24px; color: rgba(255,255,255,0.2); font-size: 11px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#00F0FF" stroke-width="2.5"><path d="M8 6v6M15 6v6M4 6h16a2 2 0 012 2v8a2 2 0 01-2 2H4a2 2 0 01-2-2V8a2 2 0 012-2z"/></svg>
+        <span>CHALO CAMPUS</span>
+      </div>
+      <h1>${form.title}</h1>
+      <p class="sub">${form.description}</p>
+    </div>
+
+    <form id="regForm">
+      <div class="card">
+        <div class="section-label">Personal Details</div>
+        <div class="form-group">
+          <label class="required">Full Name</label>
+          <input type="text" id="name" name="name" placeholder="e.g. Rahul Sharma" autocomplete="name" required>
+        </div>
+        <div class="form-group">
+          <label class="required">Student / Enrollment ID</label>
+          <input type="text" id="studentId" name="studentId" placeholder="e.g. SGI2024001" required>
+        </div>
+        <div class="form-group">
+          <label class="required">Mobile Number</label>
+          <input type="tel" id="phone" name="phone" placeholder="10-digit number" maxlength="10" required>
+        </div>
+        <div class="form-group">
+          <label>Email Address (optional)</label>
+          <input type="email" id="email" name="email" placeholder="your@email.com" autocomplete="email">
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-label">Transport Preference</div>
+        <div class="form-group">
+          <label class="required">Bus Route</label>
+          <select id="routeSelect" name="routeSelect" required onchange="updateStops()">
+            <option value="">-- Select your route --</option>
+            ${routeOptions}
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="required">Pickup Stop</label>
+          <select id="stopSelect" name="stopSelect" required>
+            <option value="">-- Select route first --</option>
+          </select>
+        </div>
+        <div class="info-box">
+          <strong>ℹ️ Note:</strong> Your route and stop are assigned by the transport manager and may be adjusted after registration is reviewed.
+        </div>
+      </div>
+
+      <button type="submit" id="submitBtn">SUBMIT REGISTRATION</button>
+    </form>
+
+    <div class="success" id="successBox">
+      <div class="card">
+        <div class="success-icon">✅</div>
+        <h2>Registration Submitted!</h2>
+        <p>Your details have been sent to the transport manager for review. You will receive your login credentials once approved.</p>
+        <div class="info-box" style="margin-top: 24px">
+          <strong>What happens next?</strong><br>
+          The manager will verify your details and approve your registration.
+          You will be notified on your mobile/WhatsApp with your login details.
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">ChaloCampus — SGI Transport Management System</div>
+  </div>
+
+  <script>
+    const stopMap = ${JSON.stringify(stopMap)};
+    
+    function updateStops() {
+      const routeVal = document.getElementById('routeSelect').value;
+      const stopSel = document.getElementById('stopSelect');
+      stopSel.innerHTML = '<option value="">-- Select your stop --</option>';
+      if (!routeVal) return;
+      const routeId = routeVal.split('|')[0];
+      const stops = stopMap[routeId] || [];
+      stops.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s; opt.textContent = s;
+        stopSel.appendChild(opt);
+      });
+    }
+
+    document.getElementById('regForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      btn.disabled = true;
+      btn.textContent = 'SUBMITTING...';
+
+      const routeVal = document.getElementById('routeSelect').value;
+      const [routeId, ...routeNameParts] = routeVal.split('|');
+      const routeName = routeNameParts.join('|');
+
+      const body = {
+        name: document.getElementById('name').value.trim(),
+        studentId: document.getElementById('studentId').value.trim(),
+        phone: document.getElementById('phone').value.trim(),
+        email: document.getElementById('email').value.trim(),
+        routeId,
+        routeName,
+        pickupStop: document.getElementById('stopSelect').value,
+      };
+
+      try {
+        const res = await fetch('/api/public/register/${req.params.formId}', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (res.ok) {
+          document.getElementById('regForm').style.display = 'none';
+          document.getElementById('successBox').style.display = 'block';
+          window.scrollTo(0, 0);
+        } else {
+          alert(data.error || 'Submission failed. Please try again.');
+          btn.disabled = false;
+          btn.textContent = 'SUBMIT REGISTRATION';
+        }
+      } catch(err) {
+        alert('Network error. Please check your internet and try again.');
+        btn.disabled = false;
+        btn.textContent = 'SUBMIT REGISTRATION';
+      }
+    });
+  </script>
+</body>
+</html>`);
+    } catch (err) {
+        console.error('Registration form error:', err);
+        res.status(500).send('Server error');
+    }
+});
+
+// ── PUBLIC: Handle form submission ────────────────────────────────────────
+app.post('/api/public/register/:formId', async (req, res) => {
+    const { name, studentId, phone, email, routeId, routeName, pickupStop } = req.body;
+    if (!name || !studentId || !phone || !routeId || !pickupStop) {
+        return res.status(400).json({ error: 'All required fields must be filled.' });
+    }
+    try {
+        const form = await RegistrationForm.findById(req.params.formId);
+        if (!form || !form.isActive) {
+            return res.status(410).json({ error: 'This form is no longer accepting submissions.' });
+        }
+        // Check duplicate studentId for this form
+        const dup = await RegistrationSubmission.findOne({ formId: form._id, studentId });
+        if (dup) {
+            return res.status(409).json({ error: 'A submission with this Student ID already exists for this form.' });
+        }
+
+        const submission = await RegistrationSubmission.create({
+            formId: form._id, name, studentId, phone, email, routeId, routeName, pickupStop,
+        });
+        // Increment counter
+        await RegistrationForm.findByIdAndUpdate(form._id, { $inc: { submissionCount: 1 } });
+
+        // Notify managers in real-time
+        io.emit('newRegistration', {
+            id: submission._id,
+            name, studentId, routeName, pickupStop,
+            submittedAt: submission.submittedAt,
+        });
+        console.log(`📝 [Registration] New submission: ${name} (${studentId}) → ${routeName}`);
+        res.status(201).json({ success: true });
+    } catch (err) {
+        console.error('Registration submission error:', err);
+        res.status(500).json({ error: 'Server error. Please try again.' });
+    }
+});
+
+// ── MANAGER: Create a new registration form ───────────────────────────────
+app.post('/api/manager/registration-form', authMiddleware, async (req, res) => {
+    const { title, description, routeOptions, stopOptions } = req.body;
+    try {
+        // Close any existing active form by this manager
+        await RegistrationForm.updateMany({ createdBy: req.user.id, isActive: true }, { isActive: false, closedAt: new Date() });
+
+        const form = await RegistrationForm.create({
+            title: title || 'ChaloCampus Bus Registration',
+            description: description || 'Register for the college bus service by filling in this form.',
+            routeOptions: routeOptions || [],
+            stopOptions:  stopOptions  || [],
+            createdBy: req.user.id,
+            isActive: true,
+        });
+
+        const shareUrl = `${getBaseUrl(req)}/register/${form._id}`;
+        console.log(`📋 [Form Created] ID: ${form._id} | URL: ${shareUrl}`);
+        res.status(201).json({ form, shareUrl });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to create form' });
+    }
+});
+
+// ── MANAGER: Get active form + share link ─────────────────────────────────
+app.get('/api/manager/registration-form', authMiddleware, async (req, res) => {
+    try {
+        const form = await RegistrationForm.findOne({ isActive: true }).sort({ createdAt: -1 });
+        if (!form) return res.json({ form: null, shareUrl: null });
+        const shareUrl = `${getBaseUrl(req)}/register/${form._id}`;
+        res.json({ form, shareUrl });
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to fetch form' });
+    }
+});
+
+// ── MANAGER: Close a form ─────────────────────────────────────────────────
+app.put('/api/manager/registration-form/:id/close', authMiddleware, async (req, res) => {
+    try {
+        const form = await RegistrationForm.findByIdAndUpdate(
+            req.params.id, { isActive: false, closedAt: new Date() }, { new: true }
+        );
+        res.json(form);
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to close form' });
+    }
+});
+
+// ── MANAGER: List all submissions ─────────────────────────────────────────
+app.get('/api/manager/registrations', authMiddleware, async (req, res) => {
+    try {
+        const { status } = req.query;
+        const query = status ? { status } : {};
+        const submissions = await RegistrationSubmission.find(query)
+            .sort({ submittedAt: -1 })
+            .limit(200);
+        res.json(submissions);
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to fetch registrations' });
+    }
+});
+
+// ── MANAGER: Approve → auto-create user account ───────────────────────────
+app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, res) => {
+    try {
+        const submission = await RegistrationSubmission.findById(req.params.id);
+        if (!submission) return res.status(404).json({ error: 'Submission not found' });
+        if (submission.status === 'approved') return res.status(400).json({ error: 'Already approved' });
+
+        // Generate username: first name + last 4 of studentId
+        const firstName = submission.name.split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+        const suffix = submission.studentId.slice(-4);
+        let username = `${firstName}${suffix}`;
+
+        // Ensure unique username
+        const existing = await User.findOne({ username });
+        if (existing) username = `${username}_${Date.now().toString().slice(-3)}`;
+
+        // Generate a simple readable password: Name + Last3ofPhone
+        const rawPassword = `${firstName.charAt(0).toUpperCase()}${firstName.slice(1)}@${submission.phone.slice(-3)}`;
+        const hashedPassword = await argon2.hash(rawPassword);
+
+        const newUser = await User.create({
+            username,
+            password: hashedPassword,
+            name: submission.name,
+            email: submission.email || undefined,
+            phone: submission.phone,
+            studentId: submission.studentId,
+            routeId: submission.routeId,
+            pickupPoint: submission.pickupStop,
+            status: 'Active',
+            userId: submission.studentId,
+            proximityAlertsEnabled: true,
+        });
+
+        // Update submission record
+        await RegistrationSubmission.findByIdAndUpdate(req.params.id, {
+            status: 'approved',
+            generatedUsername: username,
+            generatedPassword: rawPassword, // stored plain so manager can share it
+            createdUserId: newUser._id.toString(),
+            reviewedAt: new Date(),
+        });
+
+        // Notify managers
+        io.emit('registrationApproved', { id: req.params.id, name: submission.name, username });
+        broadcastStats();
+
+        res.json({
+            success: true,
+            username,
+            password: rawPassword,
+            message: `Account created! Share with ${submission.name}: Username "${username}", Password "${rawPassword}"`
+        });
+    } catch (err) {
+        console.error('Approval error:', err);
+        res.status(500).json({ error: 'Failed to approve registration' });
+    }
+});
+
+// ── MANAGER: Reject a submission ──────────────────────────────────────────
+app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res) => {
+    try {
+        const updated = await RegistrationSubmission.findByIdAndUpdate(
+            req.params.id,
+            { status: 'rejected', rejectionNote: req.body.note || '', reviewedAt: new Date() },
+            { new: true }
+        );
+        res.json(updated);
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to reject registration' });
     }
 });
 

@@ -10,6 +10,7 @@ import '../models/route_model.dart';
 import '../services/socket_service.dart';
 import '../services/bus_store.dart';
 import '../components/bus_map.dart';
+import 'registration_manager_screen.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -166,7 +167,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Widget build(BuildContext context) {
     final socketService = Provider.of<SocketService>(context);
     return DefaultTabController(
-      length: 5,
+      length: 6,
       child: Scaffold(
         backgroundColor: const Color(0xFF02040A),
         body: ValueListenableBuilder<bool>(
@@ -276,6 +277,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           const Tab(icon: Icon(Icons.map_rounded, size: 20), text: 'Map'),
                           const Tab(icon: Icon(Icons.badge_rounded, size: 20), text: 'Drivers'),
                           const Tab(icon: Icon(Icons.people_alt_rounded, size: 20), text: 'Users'),
+                          const Tab(icon: Icon(Icons.assignment_ind_rounded, size: 20), text: 'Register'),
                           Tab(
                             icon: Consumer<BusStore>(
                               builder: (_, store, __) => Stack(
@@ -315,6 +317,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               _buildMapTab(),
                               _buildDriverTab(),
                               _buildUserTab(),
+                              RegistrationManagerScreen(routes: _routes),
                               _buildAlertTab(),
                             ],
                           ),
