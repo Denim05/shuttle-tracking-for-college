@@ -542,6 +542,35 @@ app.put('/api/users/profile', authMiddleware, async (req, res) => {
     }
 });
 
+// User: Change Password
+app.put('/api/users/change-password', authMiddleware, async (req, res) => {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+        return res.status(400).json({ error: 'Both current and new password are required.' });
+    }
+    if (newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+    }
+    try {
+        const user = await User.findById(req.user.id);
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        // Verify current password
+        const valid = await argon2.verify(user.password, currentPassword);
+        if (!valid) return res.status(401).json({ error: 'Current password is incorrect.' });
+
+        // Hash and save new password
+        const hashed = await argon2.hash(newPassword);
+        await User.findByIdAndUpdate(req.user.id, { password: hashed });
+
+        console.log(`🔑 [Password Changed] User: ${user.username}`);
+        res.json({ success: true, message: 'Password changed successfully.' });
+    } catch (err) {
+        console.error('Change password error:', err);
+        res.status(500).json({ error: 'Failed to change password.' });
+    }
+});
+
 // Manager: Get Drivers
 app.get('/api/manager/drivers', authMiddleware, async (req, res) => {
     try {
@@ -1388,30 +1417,29 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
         if (!submission) return res.status(404).json({ error: 'Submission not found' });
         if (submission.status === 'approved') return res.status(400).json({ error: 'Already approved' });
 
-        // Generate username: first name + last 4 of studentId
-        const firstName = submission.name.split(' ')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
-        const suffix = submission.studentId.slice(-4);
-        let username = `${firstName}${suffix}`;
+        // USERNAME = Enrollment Number (studentId) — student logs in with their ID
+        const username = submission.studentId.trim();
 
-        // Ensure unique username
+        // Check if account already exists with this enrollment number
         const existing = await User.findOne({ username });
-        if (existing) username = `${username}_${Date.now().toString().slice(-3)}`;
+        if (existing) {
+            return res.status(409).json({ error: `An account with enrollment number "${username}" already exists.` });
+        }
 
-        // Generate a simple readable password: Name + Last3ofPhone
-        const rawPassword = `${firstName.charAt(0).toUpperCase()}${firstName.slice(1)}@${submission.phone.slice(-3)}`;
+        // PASSWORD = SGI@<EnrollmentNumber>  (college-standard, easy to remember)
+        // e.g. studentId = "SGI2024001"  → password = "SGI@SGI2024001"
+        const rawPassword = `SGI@${username}`;
         const hashedPassword = await argon2.hash(rawPassword);
 
         const newUser = await User.create({
-            username,
+            username,                              // enrollment number
             password: hashedPassword,
-            name: submission.name,
             email: submission.email || undefined,
             phone: submission.phone,
-            studentId: submission.studentId,
             routeId: submission.routeId,
             pickupPoint: submission.pickupStop,
             status: 'Active',
-            userId: submission.studentId,
+            userId: submission.studentId,          // also stored as userId
             proximityAlertsEnabled: true,
         });
 
@@ -1419,12 +1447,11 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
         await RegistrationSubmission.findByIdAndUpdate(req.params.id, {
             status: 'approved',
             generatedUsername: username,
-            generatedPassword: rawPassword, // stored plain so manager can share it
+            generatedPassword: rawPassword,        // plain — manager can share it once
             createdUserId: newUser._id.toString(),
             reviewedAt: new Date(),
         });
 
-        // Notify managers
         io.emit('registrationApproved', { id: req.params.id, name: submission.name, username });
         broadcastStats();
 
@@ -1432,7 +1459,7 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
             success: true,
             username,
             password: rawPassword,
-            message: `Account created! Share with ${submission.name}: Username "${username}", Password "${rawPassword}"`
+            message: `Account created for ${submission.name}!\n\nUsername: "${username}"\nPassword: "${rawPassword}"\n\nShare these with the student. They can change their password after first login.`
         });
     } catch (err) {
         console.error('Approval error:', err);

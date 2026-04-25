@@ -892,6 +892,21 @@ class _UserDashboardState extends State<UserDashboard> {
               const SizedBox(height: 20),
               Text(user?.username ?? 'Guest User', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
               Text((user?.role ?? 'explorer').toUpperCase(), style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
+              if (user?.userId != null) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF00F0FF).withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.15)),
+                  ),
+                  child: Text(
+                    'Enrollment: ${user!.userId}',
+                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -915,7 +930,7 @@ class _UserDashboardState extends State<UserDashboard> {
                   ),
                   title: Text(n.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
                   subtitle: Text(_formatAlertTime(n.timestamp.toIso8601String()), style: const TextStyle(color: Colors.white24, fontSize: 9)),
-                  onTap: () => setState(() => _currentIndex = 1), // Jump to alerts tab
+                  onTap: () => setState(() => _currentIndex = 1),
                 )),
               if (latestNotifs.isNotEmpty)
                 Center(
@@ -937,6 +952,25 @@ class _UserDashboardState extends State<UserDashboard> {
           _buildProfileTile('PICKUP', user?.pickupPoint ?? 'NOT SET', Icons.location_on_outlined),
           _buildProfileTile('ROUTE', _selectedRoute?.name ?? 'NOT ASSIGNED', Icons.alt_route_rounded),
         ]),
+        const SizedBox(height: 24),
+        // ── Account / Security ─────────────────────────────────────────────
+        _buildProfileSection('ACCOUNT', [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF6C63FF).withValues(alpha: 0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.lock_outline_rounded, color: Color(0xFF6C63FF), size: 18),
+            ),
+            title: Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+            subtitle: Text('Update your login password', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
+            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+            onTap: () => _showChangePasswordSheet(auth),
+          ),
+        ]),
         const SizedBox(height: 40),
         ElevatedButton(
           onPressed: () => auth.logout(),
@@ -951,6 +985,141 @@ class _UserDashboardState extends State<UserDashboard> {
         ),
       ],
     ).animate().fadeIn();
+  }
+
+  void _showChangePasswordSheet(AuthService auth) {
+    final currentCtrl = TextEditingController();
+    final newCtrl     = TextEditingController();
+    final confirmCtrl = TextEditingController();
+    bool saving = false;
+    bool showCurrent = false;
+    bool showNew     = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          Future<void> submit() async {
+            final cur = currentCtrl.text.trim();
+            final nw  = newCtrl.text.trim();
+            final cnf = confirmCtrl.text.trim();
+            if (cur.isEmpty || nw.isEmpty || cnf.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('All fields are required.'), backgroundColor: Color(0xFFFF2E63)));
+              return;
+            }
+            if (nw.length < 6) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('New password must be at least 6 characters.'), backgroundColor: Color(0xFFFF2E63)));
+              return;
+            }
+            if (nw != cnf) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('New passwords do not match.'), backgroundColor: Color(0xFFFF2E63)));
+              return;
+            }
+            // Capture before async gap
+            final messenger = ScaffoldMessenger.of(context);
+            final nav = Navigator.of(ctx);
+            setSheetState(() => saving = true);
+            try {
+              await auth.changePassword(cur, nw);
+              if (mounted) {
+                nav.pop();
+                messenger.showSnackBar(SnackBar(
+                  content: const Text('✅ Password changed successfully!'),
+                  backgroundColor: const Color(0xFF38EF7D),
+                  behavior: SnackBarBehavior.floating,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ));
+              }
+            } catch (e) {
+              setSheetState(() => saving = false);
+              final msg = e.toString().replaceFirst('Exception: ', '');
+              messenger.showSnackBar(SnackBar(
+                content: Text(msg),
+                backgroundColor: const Color(0xFFFF2E63),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ));
+            }
+          }
+
+          return Padding(
+            padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+            child: Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFF0D121F),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+              ),
+              padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
+                  const SizedBox(height: 20),
+                  Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+                  const SizedBox(height: 4),
+                  Text('Enter your current password, then set a new one.', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 13)),
+                  const SizedBox(height: 24),
+                  _pwField(ctx, 'Current Password', currentCtrl, showCurrent, () => setSheetState(() => showCurrent = !showCurrent)),
+                  const SizedBox(height: 14),
+                  _pwField(ctx, 'New Password (min 6 chars)', newCtrl, showNew, () => setSheetState(() => showNew = !showNew)),
+                  const SizedBox(height: 14),
+                  _pwField(ctx, 'Confirm New Password', confirmCtrl, showNew, null),
+                  const SizedBox(height: 28),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: saving ? null : submit,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2D5BFF),
+                        padding: const EdgeInsets.all(18),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        elevation: 0,
+                      ),
+                      child: saving
+                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                          : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _pwField(BuildContext ctx, String hint, TextEditingController ctrl, bool visible, VoidCallback? onToggle) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+      ),
+      child: TextField(
+        controller: ctrl,
+        obscureText: !visible,
+        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          suffixIcon: onToggle != null
+              ? IconButton(
+                  icon: Icon(visible ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: Colors.white24, size: 20),
+                  onPressed: onToggle,
+                )
+              : null,
+        ),
+      ),
+    );
   }
 
   Widget _buildProfileSection(String title, List<Widget> children) {

@@ -150,4 +150,24 @@ class AuthService with ChangeNotifier {
       debugPrint('Error updating proximity alerts: $e');
     }
   }
+
+  /// Changes the authenticated user's password.
+  /// Throws an [Exception] with a user-facing message on failure.
+  Future<void> changePassword(String currentPassword, String newPassword) async {
+    if (_token == null) throw Exception('Not authenticated.');
+    final response = await http.put(
+      Uri.parse('${AppConstants.apiUrl}/users/change-password'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $_token',
+      },
+      body: jsonEncode({'currentPassword': currentPassword, 'newPassword': newPassword}),
+    ).timeout(const Duration(seconds: 20));
+
+    if (response.statusCode != 200) {
+      String msg = 'Failed to change password.';
+      try { msg = jsonDecode(response.body)['error'] ?? msg; } catch (_) {}
+      throw Exception(msg);
+    }
+  }
 }
