@@ -78,7 +78,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   Future<void> _createForm() async {
     if (_selectedRoutes.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Select at least one route'), backgroundColor: Color(0xFFFF2E63)));
+        const SnackBar(content: Text('Select at least one route'), backgroundColor: Colors.redAccent));
       return;
     }
     setState(() => _creating = true);
@@ -107,7 +107,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       if (mounted) {
         setState(() => _creating = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFFF2E63)));
+          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
       }
     }
   }
@@ -126,7 +126,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       if (!mounted) return;
       final msg = data['message'] ?? 'Approved';
       showDialog(context: context, builder: (_) => AlertDialog(
-        backgroundColor: const Color(0xFF0D121F),
+        backgroundColor: Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         title: Text('✅ Account Created', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -144,14 +144,14 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Credentials copied!'), backgroundColor: Color(0xFF2D5BFF)));
             },
-            child: Text('COPY & CLOSE', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontWeight: FontWeight.w900)),
+            child: Text('COPY & CLOSE', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontWeight: FontWeight.w900)),
           ),
         ],
       ));
       _loadSubmissions();
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e'), backgroundColor: const Color(0xFFFF2E63)));
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent));
     }
   }
 
@@ -180,9 +180,9 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF02040A),
+      backgroundColor: Color(0xFF121212),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF02040A),
+        backgroundColor: Color(0xFF121212),
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70),
@@ -194,8 +194,8 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
         ]),
         bottom: TabBar(
           controller: _tab,
-          indicatorColor: const Color(0xFF00F0FF),
-          labelColor: const Color(0xFF00F0FF),
+          indicatorColor: Colors.blueAccent,
+          labelColor: Colors.blueAccent,
           unselectedLabelColor: Colors.white38,
           labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 11),
           tabs: const [Tab(text: 'FORM & LINK'), Tab(text: 'SUBMISSIONS')],
@@ -218,18 +218,18 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: const Color(0xFF0D121F),
+            color: Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
               Container(
                 width: 10, height: 10,
-                decoration: const BoxDecoration(color: Color(0xFF00F0FF), shape: BoxShape.circle),
+                decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
               ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
               const SizedBox(width: 8),
-              Text('FORM ACTIVE', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
+              Text('FORM ACTIVE', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
             ]),
             const SizedBox(height: 12),
             Text(_activeForm!['title'] ?? '', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
@@ -261,7 +261,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))));
               })),
               const SizedBox(width: 10),
-              Expanded(child: _btn('CLOSE FORM', const Color(0xFFFF2E63), _closeForm)),
+              Expanded(child: _btn('CLOSE FORM', Colors.redAccent, _closeForm)),
             ]),
           ]),
         ).animate().fadeIn().slideY(begin: 0.05),
@@ -286,7 +286,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
-              color: sel ? const Color(0xFF2D5BFF).withValues(alpha: 0.1) : const Color(0xFF0D121F),
+              color: sel ? const Color(0xFF2D5BFF).withValues(alpha: 0.1) : Color(0xFF1E1E1E),
               borderRadius: BorderRadius.circular(16),
               border: Border.all(color: sel ? const Color(0xFF2D5BFF).withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.04)),
             ),
@@ -294,7 +294,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
               Icon(Icons.alt_route_rounded, color: sel ? const Color(0xFF2D5BFF) : Colors.white24, size: 18),
               const SizedBox(width: 12),
               Expanded(child: Text(r.name, style: GoogleFonts.plusJakartaSans(color: sel ? Colors.white : Colors.white60, fontWeight: FontWeight.w700, fontSize: 13))),
-              if (sel) const Icon(Icons.check_circle_rounded, color: Color(0xFF00F0FF), size: 18),
+              if (sel) const Icon(Icons.check_circle_rounded, color: Colors.blueAccent, size: 18),
             ]),
           ),
         );
@@ -337,7 +337,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: _filterStatus == f ? _statusColor(f).withValues(alpha: 0.15) : const Color(0xFF0D121F),
+                  color: _filterStatus == f ? _statusColor(f).withValues(alpha: 0.15) : Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: _filterStatus == f ? _statusColor(f).withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.05)),
                 ),
@@ -379,7 +379,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D121F),
+        color: Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: color.withValues(alpha: 0.15)),
       ),
@@ -414,19 +414,19 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: const Color(0xFF00F0FF).withValues(alpha: 0.05),
+              color: Colors.blueAccent.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.15)),
+              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.15)),
             ),
             child: Row(children: [
-              const Icon(Icons.key_rounded, color: Color(0xFF00F0FF), size: 14),
+              const Icon(Icons.key_rounded, color: Colors.blueAccent, size: 14),
               const SizedBox(width: 8),
               Text('${s['generatedUsername']} / ${s['generatedPassword']}',
-                style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 11, fontWeight: FontWeight.w700)),
+                style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700)),
               const Spacer(),
               GestureDetector(
                 onTap: () => Clipboard.setData(ClipboardData(text: 'Username: ${s['generatedUsername']}\nPassword: ${s['generatedPassword']}')),
-                child: const Icon(Icons.copy_rounded, color: Color(0xFF00F0FF), size: 16),
+                child: const Icon(Icons.copy_rounded, color: Colors.blueAccent, size: 16),
               ),
             ]),
           ),
@@ -436,7 +436,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           Row(children: [
             Expanded(child: _btn('APPROVE', const Color(0xFF38EF7D), () => _approve(s['_id']))),
             const SizedBox(width: 10),
-            Expanded(child: _btn('REJECT', const Color(0xFFFF2E63), () => _reject(s['_id']))),
+            Expanded(child: _btn('REJECT', Colors.redAccent, () => _reject(s['_id']))),
           ]),
         ],
       ]),
@@ -445,7 +445,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
 
   Color _statusColor(String s) => switch (s) {
     'approved' => const Color(0xFF38EF7D),
-    'rejected' => const Color(0xFFFF2E63),
+    'rejected' => Colors.redAccent,
     'pending'  => const Color(0xFFFFB347),
     _          => const Color(0xFF2D5BFF),
   };
@@ -456,7 +456,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   );
 
   Widget _inputField(String hint, TextEditingController ctrl, {int maxLines = 1}) => Container(
-    decoration: BoxDecoration(color: const Color(0xFF0D121F), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
+    decoration: BoxDecoration(color: Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
     child: TextField(
       controller: ctrl,
       maxLines: maxLines,

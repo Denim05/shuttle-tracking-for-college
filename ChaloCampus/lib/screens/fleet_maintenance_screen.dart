@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
 
@@ -36,9 +36,9 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
         setState(() {
           _isLoading = false;
           _fleet = [
-            {'id': 'B-101', 'routeName': 'Main Loop', 'status': 'Nominal', 'health': 0.98},
+            {'id': 'B-101', 'routeName': 'Main Loop', 'status': 'Normal', 'health': 0.98},
             {'id': 'B-102', 'routeName': 'Express A', 'status': 'Warning', 'health': 0.72},
-            {'id': 'B-103', 'routeName': 'Express B', 'status': 'Critical', 'health': 0.15},
+            {'id': 'B-103', 'routeName': 'Express B', 'status': 'Issue', 'health': 0.15},
             {'id': 'B-104', 'routeName': 'South Loop', 'status': 'Offline', 'health': 0.0},
           ];
         });
@@ -49,14 +49,14 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF02040A),
+      backgroundColor: Color(0xFF121212),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('FLEET MAINTENANCE', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
+        title: Text('Fleet Maintenance', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F0FF)))
+        ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
         : ListView.builder(
             padding: const EdgeInsets.all(20),
             itemCount: _fleet.length,
@@ -67,7 +67,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                 margin: const EdgeInsets.only(bottom: 16),
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF161420),
+                  color: Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: statusColor.withValues(alpha: 0.1)),
                 ),
@@ -88,11 +88,11 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                         children: [
                           Text(
                             bus['id'] ?? 'N/A',
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
                           ),
                           Text(
                             bus['routeName'] ?? 'Unknown Route',
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -102,7 +102,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                       children: [
                         Text(
                           bus['status'].toUpperCase(),
-                          style: GoogleFonts.plusJakartaSans(color: statusColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                          style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
                         ),
                         const SizedBox(height: 4),
                         Container(
@@ -136,9 +136,9 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
 
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
-      case 'nominal': return const Color(0xFF00F0FF);
+      case 'nominal': return Colors.blueAccent;
       case 'warning': return Colors.orangeAccent;
-      case 'critical': return const Color(0xFFFF2E63);
+      case 'critical': return Colors.redAccent;
       default: return Colors.white24;
     }
   }

@@ -168,11 +168,9 @@ class _SplashScreen extends StatelessWidget {
             ),
             const SizedBox(height: 24),
             Text(
-              'CHALO CAMPUS',
-              style: AppTextStyles.label.copyWith(
+              'ChaloCampus',
+              style: AppTextStyles.headlineMedium.copyWith(
                 color    : AppColors.text,
-                fontSize : 14,
-                letterSpacing: 6,
               ),
             ),
             const SizedBox(height: 32),

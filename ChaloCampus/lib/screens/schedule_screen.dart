@@ -57,7 +57,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Color _timeColor(String t) {
     final h = int.tryParse(t.split(':').first) ?? 12;
     if (h < 12) return const Color(0xFFFFB347);  // morning
-    if (h < 17) return const Color(0xFF00F0FF);  // afternoon
+    if (h < 17) return Colors.blueAccent;  // afternoon
     return const Color(0xFFB721FF);               // evening
   }
 
@@ -91,7 +91,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   Text(
                     'SCHEDULE',
                     style: GoogleFonts.plusJakartaSans(
-                      color: const Color(0xFF00F0FF),
+                      color: Colors.blueAccent,
                       fontSize: 9,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 2,
@@ -168,13 +168,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       decoration: BoxDecoration(
-        color: const Color(0xFF0D121F),
+        color: Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
           color: (isFirst
-              ? const Color(0xFF00F0FF)
+              ? Colors.blueAccent
               : isLast
-                  ? const Color(0xFFFF2E63)
+                  ? Colors.redAccent
                   : Colors.white)
               .withValues(alpha: 0.07),
         ),
@@ -192,16 +192,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: isFirst
-                        ? const Color(0xFF00F0FF)
+                        ? Colors.blueAccent
                         : isLast
-                            ? const Color(0xFFFF2E63)
+                            ? Colors.redAccent
                             : const Color(0xFF2D5BFF),
                     boxShadow: [
                       BoxShadow(
                         color: (isFirst
-                                ? const Color(0xFF00F0FF)
+                                ? Colors.blueAccent
                                 : isLast
-                                    ? const Color(0xFFFF2E63)
+                                    ? Colors.redAccent
                                     : const Color(0xFF2D5BFF))
                             .withValues(alpha: 0.5),
                         blurRadius: 8,
@@ -221,9 +221,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   ),
                 ),
                 if (isFirst)
-                  _pill('ORIGIN', const Color(0xFF00F0FF))
+                  _pill('ORIGIN', Colors.blueAccent)
                 else if (isLast)
-                  _pill('FINAL STOP', const Color(0xFFFF2E63)),
+                  _pill('FINAL STOP', Colors.redAccent),
               ],
             ),
           ),

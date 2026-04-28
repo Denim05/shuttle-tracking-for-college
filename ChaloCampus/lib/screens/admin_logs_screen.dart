@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
 
@@ -38,8 +38,8 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
           _isLoading = false;
           // Mock data if real endpoint fails during dev
           _logs = [
-            {'timestamp': DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(), 'level': 'INFO', 'message': 'System Kernel Initialized', 'source': 'KERNEL'},
-            {'timestamp': DateTime.now().subtract(const Duration(minutes: 12)).toIso8601String(), 'level': 'WARN', 'message': 'High latency detected on Node-04', 'source': 'NETWORK'},
+            {'timestamp': DateTime.now().subtract(const Duration(minutes: 5)).toIso8601String(), 'level': 'INFO', 'message': 'System Initialized', 'source': 'KERNEL'},
+            {'timestamp': DateTime.now().subtract(const Duration(minutes: 12)).toIso8601String(), 'level': 'WARN', 'message': 'Connection latency detected', 'source': 'NETWORK'},
             {'timestamp': DateTime.now().subtract(const Duration(minutes: 25)).toIso8601String(), 'level': 'ERROR', 'message': 'Socket handshake failed: Auth mismatch', 'source': 'SOCKET'},
             {'timestamp': DateTime.now().subtract(const Duration(hours: 1)).toIso8601String(), 'level': 'INFO', 'message': 'Database maintenance completed', 'source': 'DB'},
           ];
@@ -51,17 +51,17 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF02040A),
+      backgroundColor: Color(0xFF121212),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('SYSTEM LOGS', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
+        title: Text('System Logs', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
         actions: [
-          IconButton(icon: const Icon(Icons.refresh, color: Color(0xFF00F0FF)), onPressed: _fetchLogs),
+          IconButton(icon: const Icon(Icons.refresh, color: Colors.blueAccent), onPressed: _fetchLogs),
         ],
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F0FF)))
+        ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
         : ListView.builder(
             padding: const EdgeInsets.all(16),
             itemCount: _logs.length,
@@ -72,7 +72,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF161420),
+                  color: Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(16),
                   border: Border.all(color: color.withValues(alpha: 0.1)),
                 ),
@@ -90,24 +90,24 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                           ),
                           child: Text(
                             log['level'] ?? 'INFO',
-                            style: GoogleFonts.plusJakartaSans(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                         Text(
                           _formatTime(log['timestamp']),
-                          style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+                          style: TextStyle(color: Colors.white38, fontSize: 10),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       log['message'] ?? '',
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, height: 1.4),
+                      style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'SOURCE: ${log['source'] ?? 'UNKNOWN'}',
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
                     ),
                   ],
                 ),
@@ -119,10 +119,10 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
 
   Color _getLogColor(String? level) {
     switch (level) {
-      case 'ERROR': return const Color(0xFFFF2E63);
+      case 'ERROR': return Colors.redAccent;
       case 'WARN': return Colors.orangeAccent;
       case 'SUCCESS': return Colors.greenAccent;
-      default: return const Color(0xFF00F0FF);
+      default: return Colors.blueAccent;
     }
   }
 

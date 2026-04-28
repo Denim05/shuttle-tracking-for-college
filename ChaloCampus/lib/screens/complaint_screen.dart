@@ -34,7 +34,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
     'rash_driving': {
       'label': 'Rash Driving',
       'icon': Icons.speed_rounded,
-      'color': Color(0xFFFF2E63),
+      'color': Colors.redAccent,
       'desc': 'Overspeeding, unsafe maneuvers, sudden braking',
     },
     'late_arrival': {
@@ -52,7 +52,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
     'overloaded': {
       'label': 'Bus Overloaded',
       'icon': Icons.people_alt_rounded,
-      'color': Color(0xFF00F0FF),
+      'color': Colors.blueAccent,
       'desc': 'Bus carrying more passengers than capacity',
     },
     'other': {
@@ -92,7 +92,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to submit: $e'),
-            backgroundColor: const Color(0xFFFF2E63),
+            backgroundColor: Colors.redAccent,
           ),
         );
       }
@@ -146,10 +146,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
             width: 90, height: 90,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF00F0FF).withValues(alpha: 0.1),
-              border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3), width: 2),
+              color: Colors.blueAccent.withValues(alpha: 0.1),
+              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3), width: 2),
             ),
-            child: const Icon(Icons.check_rounded, color: Color(0xFF00F0FF), size: 44),
+            child: const Icon(Icons.check_rounded, color: Colors.blueAccent, size: 44),
           ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
           const SizedBox(height: 24),
           Text(
@@ -222,7 +222,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
             const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
-                color: const Color(0xFF0D121F),
+                color: Color(0xFF1E1E1E),
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
               ),
@@ -258,12 +258,12 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
               child: ElevatedButton(
                 onPressed: _isSubmitting ? null : _submitComplaint,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFF2E63),
+                  backgroundColor: Colors.redAccent,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.all(20),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                   elevation: 0,
-                  disabledBackgroundColor: const Color(0xFFFF2E63).withValues(alpha: 0.3),
+                  disabledBackgroundColor: Colors.redAccent.withValues(alpha: 0.3),
                 ),
                 child: _isSubmitting
                     ? const SizedBox(
@@ -304,7 +304,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.1) : const Color(0xFF0D121F),
+          color: isSelected ? color.withValues(alpha: 0.1) : Color(0xFF1E1E1E),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected ? color.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.04),

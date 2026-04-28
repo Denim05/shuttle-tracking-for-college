@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 
 // ─── Color Tokens ────────────────────────────────────────────────────────────
 
@@ -10,15 +10,15 @@ class AppColors {
   static const Color primary        = Color(0xFF2D5BFF);
   static const Color primaryLight   = Color(0xFF4D78FF);
   static const Color primaryDark    = Color(0xFF1A3ACC);
-  static const Color accent         = Color(0xFF00F0FF);
+  static const Color accent         = Colors.blueAccent;
   static const Color accentGreen    = Color(0xFF38EF7D);
 
   // Background / Surface
-  static const Color bg             = Color(0xFF02040A);
-  static const Color bgSecondary    = Color(0xFF05070E);
-  static const Color surface        = Color(0xFF0D121F);
-  static const Color surfaceLight   = Color(0xFF161C35);
-  static const Color card           = Color(0xFF0D121F);
+  static const Color bg             = Color(0xFF121212);
+  static const Color bgSecondary    = Color(0xFF1E1E1E);
+  static const Color surface        = Color(0xFF1E1E1E);
+  static const Color surfaceLight   = Color(0xFF2C2C2C);
+  static const Color card           = Color(0xFF1E1E1E);
 
   // Text
   static const Color text           = Color(0xFFF0F4FF);
@@ -27,14 +27,14 @@ class AppColors {
   static const Color textDisabled   = Color(0xFF2A3350);
 
   // Semantic
-  static const Color success        = Color(0xFF00F0FF);
-  static const Color warning        = Color(0xFFF59E0B);
-  static const Color danger         = Color(0xFFFF2E63);
-  static const Color info           = Color(0xFF4F8EF7);
+  static const Color success        = Colors.green;
+  static const Color warning        = Colors.orange;
+  static const Color danger         = Colors.red;
+  static const Color info           = Colors.blue;
 
   // Status
-  static const Color statusOnline   = Color(0xFF00F0FF);
-  static const Color statusOffline  = Color(0xFFFF2E63);
+  static const Color statusOnline   = Colors.green;
+  static const Color statusOffline  = Colors.red;
   static const Color statusPending  = Color(0xFFF59E0B);
 
   // Borders / Dividers
@@ -168,7 +168,7 @@ class AppDecorations {
 class AppTextStyles {
   AppTextStyles._();
 
-  static TextStyle get displayLarge => GoogleFonts.plusJakartaSans(
+  static TextStyle get displayLarge => TextStyle(
     fontSize  : 40,
     fontWeight: FontWeight.w900,
     color     : AppColors.text,
@@ -176,53 +176,53 @@ class AppTextStyles {
     height    : 1.1,
   );
 
-  static TextStyle get displayMedium => GoogleFonts.plusJakartaSans(
+  static TextStyle get displayMedium => TextStyle(
     fontSize  : 30,
     fontWeight: FontWeight.w800,
     color     : AppColors.text,
     letterSpacing: -0.5,
   );
 
-  static TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
+  static TextStyle get headlineLarge => TextStyle(
     fontSize  : 22,
     fontWeight: FontWeight.w700,
     color     : AppColors.text,
   );
 
-  static TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(
+  static TextStyle get headlineMedium => TextStyle(
     fontSize  : 18,
     fontWeight: FontWeight.w700,
     color     : AppColors.text,
   );
 
-  static TextStyle get headlineSmall => GoogleFonts.plusJakartaSans(
+  static TextStyle get headlineSmall => TextStyle(
     fontSize  : 15,
     fontWeight: FontWeight.w600,
     color     : AppColors.text,
   );
 
-  static TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
+  static TextStyle get bodyLarge => TextStyle(
     fontSize  : 15,
     fontWeight: FontWeight.w400,
     color     : AppColors.textSecondary,
     height    : 1.6,
   );
 
-  static TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
+  static TextStyle get bodyMedium => TextStyle(
     fontSize  : 13,
     fontWeight: FontWeight.w400,
     color     : AppColors.textSecondary,
     height    : 1.5,
   );
 
-  static TextStyle get label => GoogleFonts.plusJakartaSans(
+  static TextStyle get label => TextStyle(
     fontSize  : 11,
     fontWeight: FontWeight.w700,
     color     : AppColors.textMuted,
     letterSpacing: 2.0,
   );
 
-  static TextStyle get caption => GoogleFonts.plusJakartaSans(
+  static TextStyle get caption => TextStyle(
     fontSize  : 10,
     fontWeight: FontWeight.w500,
     color     : AppColors.textMuted,
@@ -246,7 +246,7 @@ class AppTheme {
       surface  : AppColors.surface,
       error    : AppColors.danger,
     ),
-    textTheme: GoogleFonts.plusJakartaSansTextTheme(ThemeData.dark().textTheme).copyWith(
+    textTheme: ThemeData.dark().textTheme.copyWith(
       displayLarge : AppTextStyles.displayLarge,
       headlineLarge: AppTextStyles.headlineLarge,
       bodyLarge    : AppTextStyles.bodyLarge,
@@ -271,9 +271,9 @@ class AppTheme {
       ),
       filled   : true,
       fillColor: Colors.white.withValues(alpha: 0.03),
-      hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
-      labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary),
-      errorStyle: GoogleFonts.plusJakartaSans(color: AppColors.danger, fontSize: 11),
+      hintStyle: TextStyle(color: AppColors.textMuted),
+      labelStyle: TextStyle(color: AppColors.textSecondary),
+      errorStyle: TextStyle(color: AppColors.danger, fontSize: 11),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -284,7 +284,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        textStyle: GoogleFonts.plusJakartaSans(
+        textStyle: TextStyle(
           fontSize  : 15,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,
@@ -294,12 +294,12 @@ class AppTheme {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.primary,
-        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+        textStyle: TextStyle(fontWeight: FontWeight.w600),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surface,
-      contentTextStyle: GoogleFonts.plusJakartaSans(color: AppColors.text),
+      contentTextStyle: TextStyle(color: AppColors.text),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
         side: BorderSide(color: AppColors.border),
@@ -312,14 +312,14 @@ class AppTheme {
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.surface,
-      labelStyle     : GoogleFonts.plusJakartaSans(color: AppColors.text, fontSize: 12),
+      labelStyle     : TextStyle(color: AppColors.text, fontSize: 12),
       side           : BorderSide(color: AppColors.border),
     ),
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation      : 0,
       centerTitle    : true,
-      titleTextStyle : GoogleFonts.plusJakartaSans(
+      titleTextStyle : TextStyle(
         color       : AppColors.text,
         fontSize    : 16,
         fontWeight  : FontWeight.w800,

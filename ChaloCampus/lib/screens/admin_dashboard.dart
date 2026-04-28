@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/auth_service.dart';
 import '../services/api_service.dart';
@@ -102,14 +102,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
     final auth = Provider.of<AuthService>(context, listen: false);
     final socketService = Provider.of<SocketService>(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF02040A),
+      backgroundColor: Color(0xFF121212),
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         title: Text(
-          'CORE ARCHITECT', 
-          style: GoogleFonts.plusJakartaSans(
+          'Admin Panel', 
+          style: TextStyle(
             fontWeight: FontWeight.w900, 
             letterSpacing: 3, 
             color: Colors.white,
@@ -118,11 +118,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ),
         actions: [
           IconButton(
-            icon: Icon(_isRefreshing ? Icons.sync : Icons.refresh_rounded, color: const Color(0xFF00F0FF)),
+            icon: Icon(_isRefreshing ? Icons.sync : Icons.refresh_rounded, color: Colors.blueAccent),
             onPressed: _loadStats,
           ),
           IconButton(
-            icon: const Icon(Icons.power_settings_new_rounded, color: Color(0xFFFF2E63)),
+            icon: const Icon(Icons.power_settings_new_rounded, color: Colors.redAccent),
             onPressed: () => auth.logout(),
           ),
           const SizedBox(width: 8),
@@ -140,11 +140,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   left: 0, right: 0,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    color: const Color(0xFFFF2E63).withValues(alpha: 0.8),
+                    color: Colors.redAccent.withValues(alpha: 0.8),
                     child: Center(
                       child: Text(
-                        '📡 RECONNECTING TO CORE...',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                        '📡 Connecting...',
+                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                       ),
                     ),
                   ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -157,7 +157,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             gradient: RadialGradient(
               center: Alignment(0.5, -0.6),
               radius: 1.5,
-              colors: [Color(0xFF0F172A), Color(0xFF02040A)],
+              colors: [Color(0xFF0F172A), Color(0xFF121212)],
             ),
           ),
           child: SafeArea(
@@ -171,14 +171,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     children: [
                       _buildStatGrid(),
                       const SizedBox(height: 32),
-                      _buildSectionHeader('CORE MANAGEMENT'),
-                      _buildAdminActionTile('Fleet Radar', Icons.radar_rounded, const Color(0xFF00F0FF), () {
+                      _buildSectionHeader('MANAGEMENT'),
+                      _buildAdminActionTile('Fleet Radar', Icons.radar_rounded, Colors.blueAccent, () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetRadarScreen()));
                       }),
-                      _buildAdminActionTile('Test Pulse Alert', Icons.notification_important_rounded, const Color(0xFFFF2E63), () {
+                      _buildAdminActionTile('Send Test Notification', Icons.notification_important_rounded, Colors.redAccent, () {
                         NotificationService().showNotification(
-                          title: 'SYSTEM PULSE TEST',
-                          body: 'High-fidelity telemetry connection confirmed.',
+                          title: 'SYSTEM TEST',
+                          body: 'Test notification sent successfully.',
                         );
                       }),
                       _buildAdminActionTile('Fleet Maintenance', Icons.directions_bus_filled_rounded, Colors.blueAccent, () {
@@ -216,7 +216,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               Text(
                 'CHALO CAMPUS',
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
@@ -228,10 +228,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 children: [
                   Container(
                     width: 6, height: 6,
-                    decoration: const BoxDecoration(color: Color(0xFF00F0FF), shape: BoxShape.circle),
+                    decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
                   ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
                   const SizedBox(width: 8),
-                  Text('SYSTEM KERNEL ACTIVE', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                  Text('SYSTEM ACTIVE', style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
                 ],
               ),
             ],
@@ -239,11 +239,11 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [const Color(0xFF6C63FF).withValues(alpha: 0.1), const Color(0xFF00F0FF).withValues(alpha: 0.05)]),
+              gradient: LinearGradient(colors: [Colors.deepPurpleAccent.withValues(alpha: 0.1), Colors.blueAccent.withValues(alpha: 0.05)]),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.2)),
+              border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
             ),
-            child: const Icon(Icons.terminal_rounded, color: Color(0xFF00F0FF), size: 20),
+            child: const Icon(Icons.terminal_rounded, color: Colors.blueAccent, size: 20),
           ),
         ],
       ),
@@ -261,10 +261,10 @@ class _AdminDashboardState extends State<AdminDashboard> {
           mainAxisSpacing: 14,
           childAspectRatio: 1.5,
           children: [
-            _buildStatCard('FLEET UNITS', _busCount.toString(), Icons.sensors_rounded, const Color(0xFF6C63FF)),
-            _buildStatCard('CORE ROUTES', _routeCount.toString(), Icons.hub_rounded, const Color(0xFF00F0FF)),
-            _buildStatCard('PULSE USERS', _userCount.toString(), Icons.query_stats_rounded, Colors.white),
-            _buildStatCard('UPTIME', '99.9%', Icons.bolt_rounded, const Color(0xFFFF2E63)),
+            _buildStatCard('FLEET COUNT', _busCount.toString(), Icons.sensors_rounded, Colors.deepPurpleAccent),
+            _buildStatCard('ROUTES', _routeCount.toString(), Icons.hub_rounded, Colors.blueAccent),
+            _buildStatCard('Total Users', _userCount.toString(), Icons.query_stats_rounded, Colors.white),
+            _buildStatCard('UPTIME', '99.9%', Icons.bolt_rounded, Colors.redAccent),
           ],
         );
       }
@@ -275,7 +275,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
-        color: const Color(0xFF161420),
+        color: Color(0xFF1E1E1E),
         border: Border.all(color: color.withValues(alpha: 0.1)),
         boxShadow: [
           BoxShadow(color: color.withValues(alpha: 0.02), blurRadius: 20, spreadRadius: 2),
@@ -311,7 +311,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   fit: BoxFit.scaleDown,
                   child: Text(
                     value, 
-                    style: GoogleFonts.plusJakartaSans(
+                    style: TextStyle(
                       fontSize: 24, 
                       color: Colors.white, 
                       fontWeight: FontWeight.w900,
@@ -323,7 +323,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   label, 
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.plusJakartaSans(
+                  style: TextStyle(
                     color: Colors.white38, 
                     fontSize: 7.5, 
                     fontWeight: FontWeight.w900, 
@@ -341,7 +341,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16, left: 4),
-      child: Text(title, style: GoogleFonts.plusJakartaSans(color: const Color(0xFF6C63FF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2.5)),
+      child: Text(title, style: TextStyle(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2.5)),
     );
   }
 
@@ -349,7 +349,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF161420).withValues(alpha: 0.6),
+        color: Color(0xFF1E1E1E).withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
@@ -368,7 +368,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
             child: Icon(icon, color: color, size: 22),
           ),
-          title: Text(title.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1)),
+          title: Text(title.toUpperCase(), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1)),
           trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white10, size: 16),
         ),
       ),
@@ -376,12 +376,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
   }
 
   Widget _buildHealthCard(String service, bool isHealthy) {
-    final color = isHealthy ? const Color(0xFF00F0FF) : const Color(0xFFFF2E63);
+    final color = isHealthy ? Colors.blueAccent : Colors.redAccent;
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF161420).withValues(alpha: 0.4),
+        color: Color(0xFF1E1E1E).withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: color.withValues(alpha: 0.1)),
       ),
@@ -417,7 +417,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               const SizedBox(width: 20),
               Text(
                 service.toUpperCase(), 
-                style: GoogleFonts.plusJakartaSans(
+                style: TextStyle(
                   color: Colors.white70, 
                   fontWeight: FontWeight.w900, 
                   fontSize: 13,
@@ -427,8 +427,8 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ],
           ),
           Text(
-            isHealthy ? 'NOMINAL' : 'CRITICAL', 
-            style: GoogleFonts.plusJakartaSans(
+            isHealthy ? 'OK' : 'ISSUE', 
+            style: TextStyle(
               color: color,
               fontSize: 10, 
               fontWeight: FontWeight.w900, 

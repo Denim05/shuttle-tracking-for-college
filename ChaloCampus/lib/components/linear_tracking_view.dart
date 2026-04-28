@@ -77,7 +77,7 @@ class LinearTrackingView extends StatelessWidget {
                   ),
                   Text(
                     'KM/H',
-                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 10, fontWeight: FontWeight.w900),
+                    style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900),
                   ),
                 ],
               ),
@@ -182,10 +182,10 @@ class LinearTrackingView extends StatelessWidget {
                         Container(
                           padding: const EdgeInsets.all(6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF00F0FF),
+                            color: Colors.blueAccent,
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: [BoxShadow(color: const Color(0xFF00F0FF).withValues(alpha: 0.5), blurRadius: 15)],
+                            boxShadow: [BoxShadow(color: Colors.blueAccent.withValues(alpha: 0.5), blurRadius: 15)],
                           ),
                           child: const Icon(Icons.directions_bus_filled_rounded, color: Colors.black, size: 14),
                         ),

@@ -169,7 +169,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return DefaultTabController(
       length: 6,
       child: Scaffold(
-        backgroundColor: const Color(0xFF02040A),
+        backgroundColor: const Color(0xFF121212),
         body: ValueListenableBuilder<bool>(
           valueListenable: socketService.connectionStatus,
           builder: (context, isConnected, child) {
@@ -181,7 +181,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     gradient: RadialGradient(
                       center: Alignment.topLeft,
                       radius: 1.5,
-                      colors: [Color(0xFF0F172A), Color(0xFF02040A)],
+                      colors: [Color(0xFF0F172A), Color(0xFF121212)],
                     ),
                   ),
                 ),
@@ -192,10 +192,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     left: 0, right: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      color: const Color(0xFFFF2E63).withValues(alpha: 0.8),
+                      color: Colors.redAccent.withValues(alpha: 0.8),
                       child: Center(
                         child: Text(
-                          '📡 SYNCHRONIZING WITH FLEET...',
+                          '📡 Connecting...',
                           style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                         ),
                       ),
@@ -227,10 +227,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                 children: [
                                   Container(
                                     width: 6, height: 6,
-                                    decoration: const BoxDecoration(color: Color(0xFF00F0FF), shape: BoxShape.circle),
+                                    decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
                                   ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
                                   const SizedBox(width: 8),
-                                  Text('COMMAND CENTER', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                                  Text('Admin Panel', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                                 ],
                               ),
                             ],
@@ -252,24 +252,24 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 5),
                       padding: const EdgeInsets.all(4),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF161420),
+                        color: const Color(0xFF1E1E1E),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.1)),
+                        border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.1)),
                       ),
                       child: TabBar(
                         indicator: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              const Color(0xFF6C63FF).withValues(alpha: 0.2),
-                              const Color(0xFF00F0FF).withValues(alpha: 0.1),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                              Colors.blueAccent.withValues(alpha: 0.1),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.3)),
+                          border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
                         ),
                         dividerColor: Colors.transparent,
                         indicatorSize: TabBarIndicatorSize.tab,
-                        labelColor: const Color(0xFF00F0FF),
+                        labelColor: Colors.blueAccent,
                         unselectedLabelColor: Colors.white24,
                         labelStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 10),
                         tabs: [
@@ -290,7 +290,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       child: Container(
                                         padding: const EdgeInsets.all(3),
                                         decoration: const BoxDecoration(
-                                          color: Color(0xFFFF2E63),
+                                          color: Colors.redAccent,
                                           shape: BoxShape.circle,
                                         ),
                                         child: Text(
@@ -384,13 +384,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
               child: Row(
                 children: [
-                  _buildAnalyticsCard('FLEET CAPACITY', '$activeBuses/${buses.length}', Icons.sensors_rounded, const Color(0xFF6C63FF)),
+                  _buildAnalyticsCard('FLEET CAPACITY', '$activeBuses/${buses.length}', Icons.sensors_rounded, Colors.deepPurpleAccent),
                   const SizedBox(width: 12),
-                  _buildAnalyticsCard('OPTIMIZED', '$onTimeBuses', Icons.bolt_rounded, const Color(0xFF00F0FF)),
+                  _buildAnalyticsCard('OPTIMIZED', '$onTimeBuses', Icons.bolt_rounded, Colors.blueAccent),
                   const SizedBox(width: 12),
-                  _buildAnalyticsCard('ANOMALIES', '$delayedBuses', Icons.error_outline_rounded, const Color(0xFFFF2E63)),
+                  _buildAnalyticsCard('ANOMALIES', '$delayedBuses', Icons.error_outline_rounded, Colors.redAccent),
                   const SizedBox(width: 12),
-                  _buildAnalyticsCard('PULSE USERS', '${_users.length}', Icons.query_stats_rounded, Colors.white),
+                  _buildAnalyticsCard('Total Users', '${_users.length}', Icons.query_stats_rounded, Colors.white),
                 ],
               ).animate().slideX(begin: -0.2, end: 0, duration: 400.ms, curve: Curves.easeOutCubic).fadeIn(),
             ),
@@ -399,7 +399,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               child: RefreshIndicator(
                 onRefresh: _loadData,
                 backgroundColor: const Color(0xFF0D0B14),
-                color: const Color(0xFF6C63FF),
+                color: Colors.deepPurpleAccent,
                 child: ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   itemCount: buses.length,
@@ -429,7 +429,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   children: [
                                     Expanded(
                                       child: Text(
-                                        'CORE_ROUTE: ${bus.routeName.toUpperCase()}',
+                                        'Route: ${bus.routeName.toUpperCase()}',
                                         style: GoogleFonts.plusJakartaSans(
                                           color: Colors.white54,
                                           fontSize: 11,
@@ -443,14 +443,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFF00F0FF).withValues(alpha: 0.1),
+                                          color: Colors.blueAccent.withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.2)),
+                                          border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
                                         ),
                                         child: Text(
                                           '${bus.speed.toStringAsFixed(1)} KM/H',
                                           style: GoogleFonts.plusJakartaSans(
-                                            color: const Color(0xFF00F0FF),
+                                            color: Colors.blueAccent,
                                             fontSize: 9,
                                             fontWeight: FontWeight.w900,
                                           ),
@@ -487,7 +487,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF161420),
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: color.withValues(alpha: 0.15)),
         boxShadow: [
@@ -543,14 +543,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        (isActive ? const Color(0xFF6C63FF) : const Color(0xFFFF2E63)).withValues(alpha: 0.2),
-                        (isActive ? const Color(0xFF00F0FF) : const Color(0xFFFF2E63)).withValues(alpha: 0.05),
+                        (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withValues(alpha: 0.2),
+                        (isActive ? Colors.blueAccent : Colors.redAccent).withValues(alpha: 0.05),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: (isActive ? const Color(0xFF6C63FF) : const Color(0xFFFF2E63)).withValues(alpha: 0.3)),
+                    border: Border.all(color: (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withValues(alpha: 0.3)),
                   ),
-                  child: Icon(Icons.shield_rounded, color: isActive ? const Color(0xFF00F0FF) : const Color(0xFFFF2E63)),
+                  child: Icon(Icons.shield_rounded, color: isActive ? Colors.blueAccent : Colors.redAccent),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -572,7 +572,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 _buildStatusChip(isActive ? 'OPERATIONAL' : 'SUSPENDED', isActive),
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert_rounded, color: Colors.white38),
-                  color: const Color(0xFF161420),
+                  color: const Color(0xFF1E1E1E),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(15),
                     side: const BorderSide(color: Colors.white10),
@@ -614,11 +614,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF6C63FF).withValues(alpha: 0.1),
+                    color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
                     shape: BoxShape.circle,
-                    border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.2)),
+                    border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
                   ),
-                  child: const Icon(Icons.person_outline_rounded, color: Color(0xFF00F0FF), size: 20),
+                  child: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent, size: 20),
                 ),
                 const SizedBox(width: 16),
                 Expanded(
@@ -630,7 +630,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       const SizedBox(height: 4),
                       Row(
                         children: [
-                          const Icon(Icons.location_on_rounded, color: Color(0xFF6C63FF), size: 12),
+                          const Icon(Icons.location_on_rounded, color: Colors.deepPurpleAccent, size: 12),
                           const SizedBox(width: 4),
                           Expanded(child: Text(user['pickupPoint'] ?? 'NOT CONFIGURED', style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w500))),
                         ],
@@ -659,18 +659,18 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
           children: [
             // ── Broadcast Composer ─────────────────────────────────────
-            Text('CORE BROADCAST', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1)),
+            Text('Broadcast Message', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1)),
             const SizedBox(height: 8),
-            Text('Dispatch real-time directives to all active units.', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w500)),
+            Text('Send notifications to all app users.', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w500)),
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF161420),
+                color: const Color(0xFF1E1E1E),
                 borderRadius: BorderRadius.circular(32),
-                border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.2)),
+                border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFF6C63FF).withValues(alpha: 0.05), blurRadius: 20),
+                  BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.05), blurRadius: 20),
                 ]
               ),
               child: Column(
@@ -698,9 +698,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         _notifController.clear();
                         messenger.showSnackBar(
                           SnackBar(
-                            backgroundColor: const Color(0xFF00F0FF),
+                            backgroundColor: Colors.blueAccent,
                             behavior: SnackBarBehavior.floating,
-                            content: Text('DIRECTIVE DISPATCHED', style: GoogleFonts.plusJakartaSans(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                            content: Text('Message sent successfully', style: GoogleFonts.plusJakartaSans(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1)),
                           ),
                         );
                       } catch (e) {
@@ -717,18 +717,18 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: _isSending
-                            ? [const Color(0xFF6C63FF).withValues(alpha: 0.4), const Color(0xFF00F0FF).withValues(alpha: 0.4)]
-                            : [const Color(0xFF6C63FF), const Color(0xFF00F0FF)],
+                            ? [Colors.deepPurpleAccent.withValues(alpha: 0.4), Colors.blueAccent.withValues(alpha: 0.4)]
+                            : [Colors.deepPurpleAccent, Colors.blueAccent],
                         ),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
-                          BoxShadow(color: const Color(0xFF6C63FF).withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8)),
+                          BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8)),
                         ],
                       ),
                       child: Center(
                         child: _isSending
                           ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text('INITIATE BROADCAST', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                          : Text('Send Notification', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2)),
                       ),
                     ),
                   ),
@@ -741,22 +741,22 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('LIVE FEED', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                Text('Recent Notifications', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1)),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF00F0FF).withValues(alpha: 0.1),
+                    color: Colors.blueAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.2)),
+                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
                       Container(
                         width: 6, height: 6,
-                        decoration: const BoxDecoration(color: Color(0xFF00F0FF), shape: BoxShape.circle),
+                        decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
                       ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
                       const SizedBox(width: 6),
-                      Text('REAL-TIME', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                      Text('REAL-TIME', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                     ],
                   ),
                 ),
@@ -767,7 +767,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               Container(
                 padding: const EdgeInsets.all(40),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF161420),
+                  color: const Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(24),
                   border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                 ),
@@ -786,12 +786,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 final i = entry.key;
                 final n = entry.value;
                 final isInfo = n.type == 'info';
-                final accent = isInfo ? const Color(0xFF6C63FF) : const Color(0xFFFF2E63);
+                final accent = isInfo ? Colors.deepPurpleAccent : Colors.redAccent;
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
                   padding: const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF161420),
+                    color: const Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.circular(20),
                     border: Border.all(color: accent.withValues(alpha: 0.15)),
                   ),
@@ -857,11 +857,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         content: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF161420).withValues(alpha: 0.95),
+            color: const Color(0xFF1E1E1E).withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.5)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
             boxShadow: [
-              BoxShadow(color: const Color(0xFF6C63FF).withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)
+              BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)
             ],
           ),
           child: Row(
@@ -869,10 +869,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF6C63FF).withValues(alpha: 0.2),
+                  color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.bolt_rounded, color: Color(0xFF00F0FF), size: 20),
+                child: const Icon(Icons.bolt_rounded, color: Colors.blueAccent, size: 20),
               ).animate(onPlay: (controller) => controller.repeat()).shake(duration: 500.ms),
               const SizedBox(width: 16),
               Expanded(
@@ -880,7 +880,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('CORE DIRECTIVE', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                    Text('CORE DIRECTIVE', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                     const SizedBox(height: 2),
                     Text(message, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600)),
                   ],
@@ -910,9 +910,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               decoration: BoxDecoration(
                 color: const Color(0xFF1A0B14),
                 borderRadius: BorderRadius.circular(30),
-                border: Border.all(color: const Color(0xFFFF2E63), width: 3),
+                border: Border.all(color: Colors.redAccent, width: 3),
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFFFF2E63).withValues(alpha: 0.4), blurRadius: 40, spreadRadius: 5),
+                  BoxShadow(color: Colors.redAccent.withValues(alpha: 0.4), blurRadius: 40, spreadRadius: 5),
                 ],
               ),
               child: Column(
@@ -921,20 +921,20 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: const Color(0xFFFF2E63).withValues(alpha: 0.1),
+                      color: Colors.redAccent.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFFF2E63), size: 72),
+                    child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 72),
                   ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1,1), end: const Offset(1.15,1.15), duration: 600.ms),
                   const SizedBox(height: 32),
                   Text(
-                    'PRIORITY 1 SOS',
-                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFFFF2E63), fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: 2),
+                    'Emergency Alert',
+                    style: GoogleFonts.plusJakartaSans(color: Colors.redAccent, fontSize: 32, fontWeight: FontWeight.w900, letterSpacing: 2),
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'IMMEDIATE ATTENTION REQUIRED',
+                    'Please check on the driver.',
                     style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1),
                   ),
                   const SizedBox(height: 32),
@@ -961,12 +961,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     height: 70,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF2E63),
+                        backgroundColor: Colors.redAccent,
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                         elevation: 0,
                       ),
                       onPressed: () => Navigator.pop(context),
-                      child: Text('ACKNOWLEDGE MISSION', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
+                      child: Text('Dismiss Alert', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1.5)),
                     ),
                   ),
                 ],
@@ -983,7 +983,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF6C63FF), size: 16),
+          Icon(icon, color: Colors.deepPurpleAccent, size: 16),
           const SizedBox(width: 12),
           Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
           const Spacer(),
@@ -998,7 +998,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF161420).withValues(alpha: 0.4),
+        color: const Color(0xFF1E1E1E).withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
@@ -1016,11 +1016,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       height: 44, width: 4,
       decoration: BoxDecoration(
-        color: isGood ? const Color(0xFF00F0FF) : const Color(0xFFFF2E63),
+        color: isGood ? Colors.blueAccent : Colors.redAccent,
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: (isGood ? const Color(0xFF00F0FF) : const Color(0xFFFF2E63)).withValues(alpha: 0.4),
+            color: (isGood ? Colors.blueAccent : Colors.redAccent).withValues(alpha: 0.4),
             blurRadius: 10,
           )
         ],
@@ -1044,7 +1044,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   Widget _buildStatusChip(String label, bool active) {
-    final color = active ? const Color(0xFF00F0FF) : const Color(0xFFFF2E63);
+    final color = active ? Colors.blueAccent : Colors.redAccent;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
@@ -1058,7 +1058,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   Widget _buildActionButton(IconData icon, VoidCallback onTap) {
     return IconButton(
-      icon: Icon(icon, color: const Color(0xFF6C63FF), size: 22),
+      icon: Icon(icon, color: Colors.deepPurpleAccent, size: 22),
       onPressed: onTap,
     );
   }
@@ -1071,10 +1071,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           Container(
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: const Color(0xFF6C63FF).withValues(alpha: 0.05),
+              color: Colors.deepPurpleAccent.withValues(alpha: 0.05),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 80, color: const Color(0xFF6C63FF).withValues(alpha: 0.5)),
+            child: Icon(icon, size: 80, color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
           ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack),
           const SizedBox(height: 24),
           Text(
@@ -1088,7 +1088,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           ).animate().fadeIn(delay: 200.ms),
           const SizedBox(height: 12),
           Text(
-            'SYSTEMS OPERATING IN STANDBY MODE',
+            'No activity detected.',
             style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 2),
           ),
         ],
@@ -1098,15 +1098,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   Color _getOccupancyColor(String occ) {
     switch (occ.toLowerCase()) {
-      case 'low': return const Color(0xFF00F0FF);
+      case 'low': return Colors.blueAccent;
       case 'medium': return Colors.orangeAccent;
-      case 'high': return const Color(0xFFFF2E63);
-      default: return const Color(0xFF6C63FF);
+      case 'high': return Colors.redAccent;
+      default: return Colors.deepPurpleAccent;
     }
   }
 
   Color _getStatusColor(String status) {
-    return status == 'On-time' ? const Color(0xFF00F0FF) : Colors.orangeAccent;
+    return status == 'On-time' ? Colors.blueAccent : Colors.orangeAccent;
   }
 
   // Dialogs
@@ -1122,7 +1122,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: Column(
             children: [
@@ -1130,13 +1130,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 24),
               Text('SYSTEM CONTROL', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2)),
-              Text('UNIT_${bus.id.substring(bus.id.length - 4).toUpperCase()}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF6C63FF), fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              Text('UNIT_${bus.id.substring(bus.id.length - 4).toUpperCase()}', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
               const SizedBox(height: 32),
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    _buildDialogOption('Mark Operational', Icons.check_circle_rounded, const Color(0xFF00F0FF), () => _updateBus(bus, status: 'On-time')),
+                    _buildDialogOption('Mark Operational', Icons.check_circle_rounded, Colors.blueAccent, () => _updateBus(bus, status: 'On-time')),
                     _buildDialogOption('Signal Delay', Icons.bolt_rounded, Colors.orangeAccent, () => _updateBus(bus, status: 'Delayed')),
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
@@ -1172,7 +1172,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1180,7 +1180,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
               const SizedBox(height: 24),
               Text('SECTOR ASSIGNMENT', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2)),
-              Text('USER: ${user['name']?.toUpperCase() ?? user['username']?.toUpperCase() ?? 'IDENTIFIED'}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF6C63FF), fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              Text('USER: ${user['name']?.toUpperCase() ?? user['username']?.toUpperCase() ?? 'IDENTIFIED'}', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
               const SizedBox(height: 32),
               Flexible(
                 child: ListView.builder(

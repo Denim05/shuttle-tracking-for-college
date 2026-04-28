@@ -49,7 +49,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Identity Verification Failed', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-          backgroundColor: const Color(0xFFFF2E63),
+          backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -66,7 +66,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Access Denied: ${e.toString().replaceAll('Exception:', '')}', style: GoogleFonts.plusJakartaSans()),
-          backgroundColor: const Color(0xFFFF2E63),
+          backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -120,7 +120,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF151925),
+                      color: Color(0xFF1E1E1E),
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
@@ -163,7 +163,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0D121F),
+                      color: Color(0xFF1E1E1E),
                       borderRadius: BorderRadius.circular(36),
                       border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                     ),
@@ -200,7 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   margin: const EdgeInsets.symmetric(horizontal: 4),
                                   height: 85,
                                   decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFF2D5BFF) : const Color(0xFF151925).withValues(alpha: 0.5),
+                                    color: isSelected ? const Color(0xFF2D5BFF) : Color(0xFF1E1E1E).withValues(alpha: 0.5),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
                                       color: isSelected ? Colors.white24 : Colors.white.withValues(alpha: 0.05),
@@ -332,7 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF151925),
+        color: Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
         border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),

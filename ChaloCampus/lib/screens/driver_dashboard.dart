@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:async';
@@ -60,17 +60,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
               decoration: BoxDecoration(
                 color: const Color(0xFF161421),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF6C63FF).withValues(alpha: 0.5)),
-                boxShadow: [BoxShadow(color: const Color(0xFF6C63FF).withValues(alpha: 0.3), blurRadius: 16)],
+                border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
+                boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 16)],
               ),
               child: Row(
                 children: [
-                  const Icon(Icons.bolt_rounded, color: Color(0xFF00F0FF), size: 20),
+                  const Icon(Icons.bolt_rounded, color: Colors.blueAccent, size: 20),
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
                       data['message'],
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                     ),
                   ),
                 ],
@@ -252,7 +252,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final user = Provider.of<AuthService>(context).currentUser;
     final socketService = Provider.of<SocketService>(context);
     return Scaffold(
-      backgroundColor: const Color(0xFF02040A),
+      backgroundColor: Color(0xFF121212),
       body: ValueListenableBuilder<bool>(
         valueListenable: socketService.connectionStatus,
         builder: (context, isConnected, child) {
@@ -294,11 +294,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   left: 0, right: 0,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    color: const Color(0xFFFF2E63).withValues(alpha: 0.8),
+                    color: Colors.redAccent.withValues(alpha: 0.8),
                     child: Center(
                       child: Text(
                         '📡 SYNCHRONIZING WITH COMMAND...',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                       ),
                     ),
                   ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -324,8 +324,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'CAPTAIN COMMAND',
-                            style: GoogleFonts.plusJakartaSans(
+                            'Driver Dashboard',
+                            style: TextStyle(
                               color: Colors.white,
                               fontSize: 12,
                               fontWeight: FontWeight.w900,
@@ -338,9 +338,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                               _buildSignalStrength(isConnected),
                               const SizedBox(width: 8),
                               Text(
-                                isConnected ? 'CORE PULSE CONNECTED' : 'SYNCHRONIZING...',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: isConnected ? const Color(0xFF00F0FF) : const Color(0xFFFF2E63),
+                                isConnected ? 'Connected' : 'SYNCHRONIZING...',
+                                style: TextStyle(
+                                  color: isConnected ? Colors.blueAccent : Colors.redAccent,
                                   fontSize: 10,
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -390,7 +390,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                               height: 5,
                               margin: const EdgeInsets.only(bottom: 30, top: 8),
                               decoration: BoxDecoration(
-                                gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF00F0FF)]),
+                                gradient: const LinearGradient(colors: [Colors.deepPurpleAccent, Colors.blueAccent]),
                                 borderRadius: BorderRadius.circular(5),
                               ),
                             ),
@@ -398,7 +398,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           
                           _buildDriverHero(user),
                           const SizedBox(height: 32),
-                          _buildTelemetryCard(),
+                          _buildTrackerCard(),
                           const SizedBox(height: 32),
                           _buildBusSelector(),
                           const SizedBox(height: 20),
@@ -427,8 +427,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
           height: 64, width: 64,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            gradient: const LinearGradient(colors: [Color(0xFF6C63FF), Color(0xFF00F0FF)]),
-            boxShadow: [BoxShadow(color: const Color(0xFF6C63FF).withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)],
+            gradient: const LinearGradient(colors: [Colors.deepPurpleAccent, Colors.blueAccent]),
+            boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)],
           ),
           child: const Center(child: Icon(Icons.person_rounded, color: Colors.white, size: 32)),
         ),
@@ -436,15 +436,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('CHALOCAMPUS CAPTAIN', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
-            Text(user?.username.toUpperCase() ?? 'CAPTAIN', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+            Text('Driver Status', style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
+            Text(user?.username.toUpperCase() ?? 'CAPTAIN', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
           ],
         ),
       ],
     ).animate().fadeIn().slideX();
   }
 
-  Widget _buildTelemetryCard() {
+  Widget _buildTrackerCard() {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
@@ -460,15 +460,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('REAL-TIME TELEMETRY', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                  Text('Speedometer', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
                   const SizedBox(height: 8),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(_speedKmH.toStringAsFixed(1), style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: -2)),
+                      Text(_speedKmH.toStringAsFixed(1), style: TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: -2)),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12, left: 8),
-                        child: Text('KM/H', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontSize: 14, fontWeight: FontWeight.w900)),
+                        child: Text('KM/H', style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.w900)),
                       ),
                     ],
                   ),
@@ -494,7 +494,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       begin: Alignment.bottomCenter,
                       end: Alignment.topCenter,
                       colors: _isOnline 
-                        ? [const Color(0xFF6C63FF), isHighest ? const Color(0xFFFF2E63) : const Color(0xFF00F0FF)]
+                        ? [Colors.deepPurpleAccent, isHighest ? Colors.redAccent : Colors.blueAccent]
                         : [Colors.white10, Colors.white10],
                     ),
                     borderRadius: BorderRadius.circular(6),
@@ -522,9 +522,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: (_isOnline ? const Color(0xFF00F0FF) : Colors.white10).withValues(alpha: 0.1),
+            color: (_isOnline ? Colors.blueAccent : Colors.white10).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: (_isOnline ? const Color(0xFF00F0FF) : Colors.white24).withValues(alpha: 0.2)),
+            border: Border.all(color: (_isOnline ? Colors.blueAccent : Colors.white24).withValues(alpha: 0.2)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -535,7 +535,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   builder: (context, time, _) {
                     return Icon(
                       Icons.sensors_rounded, 
-                      color: const Color(0xFF00F0FF), 
+                      color: Colors.blueAccent, 
                       size: 14,
                       key: ValueKey(time?.millisecondsSinceEpoch ?? 0),
                     ).animate(key: ValueKey(time?.millisecondsSinceEpoch ?? 0))
@@ -546,11 +546,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 const SizedBox(width: 8),
                 Container(
                   width: 8, height: 8,
-                  decoration: const BoxDecoration(color: Color(0xFF00F0FF), shape: BoxShape.circle, boxShadow: [BoxShadow(color: Color(0xFF00F0FF), blurRadius: 4)]),
+                  decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle, boxShadow: [BoxShadow(color: Colors.blueAccent, blurRadius: 4)]),
                 ).animate(onPlay: (c) => c.repeat()).scale(duration: 1.seconds, begin: const Offset(1,1), end: const Offset(1.5,1.5)).fadeOut(),
                 const SizedBox(width: 8),
               ],
-              Text(_isOnline ? 'ACTIVE' : 'OFFLINE', style: GoogleFonts.plusJakartaSans(color: _isOnline ? const Color(0xFF00F0FF) : Colors.white38, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              Text(_isOnline ? 'ACTIVE' : 'OFFLINE', style: TextStyle(color: _isOnline ? Colors.blueAccent : Colors.white38, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
             ],
           ),
         ),
@@ -571,11 +571,11 @@ class _DriverDashboardState extends State<DriverDashboard> {
           isExpanded: true,
           dropdownColor: const Color(0xFF0D0B14),
           value: _selectedBusId,
-          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Color(0xFF00F0FF)),
-          hint: Text('SELECT ASSIGNED BUS', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.blueAccent),
+          hint: Text('SELECT ASSIGNED BUS', style: TextStyle(color: Colors.white24, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
           items: _buses.map((bus) => DropdownMenuItem<String>(
             value: bus['_id'],
-            child: Text(bus['routeName'] ?? 'Unknown Route', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(bus['routeName'] ?? 'Unknown Route', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
           )).toList(),
           onChanged: _isOnline ? null : (v) {
             setState(() => _selectedBusId = v);
@@ -597,13 +597,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: _isOnline 
-              ? [const Color(0xFFFF2E63), const Color(0xFFE94560)] 
-              : [const Color(0xFF6C63FF), const Color(0xFF3F37C9)]
+              ? [Colors.redAccent, const Color(0xFFE94560)] 
+              : [Colors.deepPurpleAccent, const Color(0xFF3F37C9)]
           ),
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: (_isOnline ? const Color(0xFFFF2E63) : const Color(0xFF6C63FF)).withValues(alpha: 0.4), 
+              color: (_isOnline ? Colors.redAccent : Colors.deepPurpleAccent).withValues(alpha: 0.4), 
               blurRadius: 25, 
               offset: const Offset(0, 10)
             )
@@ -616,8 +616,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
               Icon(_isOnline ? Icons.stop_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 28),
               const SizedBox(width: 12),
               Text(
-                _isOnline ? 'TERMINATE SESSION' : 'INITIALIZE BROADCAST',
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16),
+                _isOnline ? 'Go Offline' : 'Go Online',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16),
               ),
             ],
           ),
@@ -660,8 +660,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('CRITICAL: SOS DISPATCHED TO COMMAND!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: Colors.white)),
-          backgroundColor: const Color(0xFFFF2E63),
+          content: Text('SOS Alert Sent', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         )
@@ -682,38 +682,38 @@ class _DriverDashboardState extends State<DriverDashboard> {
         height: 70,
         width: double.infinity,
         decoration: BoxDecoration(
-          color: const Color(0xFFFF2E63).withValues(alpha: 0.1),
+          color: Colors.redAccent.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFFFF2E63).withValues(alpha: 0.2), width: 2),
+          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2), width: 2),
         ),
         child: _isSosActive 
-            ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF2E63)))
+            ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.warning_rounded, color: Color(0xFFFF2E63), size: 28),
+                  const Icon(Icons.warning_rounded, color: Colors.redAccent, size: 28),
                   const SizedBox(width: 12),
                   Text(
                     'HOLD 2S FOR SOS',
-                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFFFF2E63), fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 2),
+                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 2),
                   ),
                 ],
               ),
       ),
-    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(color: const Color(0xFFFF2E63).withValues(alpha: 0.2), duration: 2.seconds);
+    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(color: Colors.redAccent.withValues(alpha: 0.2), duration: 2.seconds);
   }
 
   Widget _buildTripStats() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('SESSION OVERVIEW', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
+        Text('SESSION OVERVIEW', style: TextStyle(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
         const SizedBox(height: 16),
         Row(
           children: [
-            _buildSmallStat('DISTANCE', _sessionDistanceKm.toStringAsFixed(1), 'KM', const Color(0xFF6C63FF)),
+            _buildSmallStat('DISTANCE', _sessionDistanceKm.toStringAsFixed(1), 'KM', Colors.deepPurpleAccent),
             const SizedBox(width: 16),
-            _buildSmallStat('STOPS', _sessionStops.toString(), 'PTS', const Color(0xFF00F0FF)),
+            _buildSmallStat('STOPS', _sessionStops.toString(), 'PTS', Colors.blueAccent),
           ],
         ),
       ],
@@ -732,15 +732,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+            Text(label, style: TextStyle(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
+                Text(value, style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
                 const SizedBox(width: 4),
-                Text(unit, style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 10, fontWeight: FontWeight.w900)),
+                Text(unit, style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w900)),
               ],
             ),
           ],
@@ -758,7 +758,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           height: 4.0 + (index * 3),
           margin: const EdgeInsets.only(right: 2),
           decoration: BoxDecoration(
-            color: active ? const Color(0xFF00F0FF) : Colors.white12,
+            color: active ? Colors.blueAccent : Colors.white12,
             borderRadius: BorderRadius.circular(1),
           ),
         );

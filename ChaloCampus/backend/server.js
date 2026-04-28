@@ -22,6 +22,9 @@ const rateLimit = require('express-rate-limit');
  * @returns {number} The estimated arrival time in minutes.
  */
 const calculateETA = (busLat, busLng, stopLat, stopLng, speed) => {
+    if (busLat === undefined || busLng === undefined || stopLat === undefined || stopLng === undefined) return 0;
+    if (isNaN(busLat) || isNaN(busLng) || isNaN(stopLat) || isNaN(stopLng)) return 0;
+    
     if (!speed || speed < 5) speed = 30; // Default 30km/h
     const R = 6371; // Radius of earth in km
     const dLat = (stopLat - busLat) * Math.PI / 180;
@@ -32,7 +35,8 @@ const calculateETA = (busLat, busLng, stopLat, stopLng, speed) => {
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     const distance = R * c; // in km
     const timeInHours = distance / speed;
-    return Math.round(timeInHours * 60); // Return in minutes
+    const minutes = Math.round(timeInHours * 60);
+    return isNaN(minutes) ? 0 : minutes;
 };
 const authMiddleware = require('./middleware/authMiddleware');
 
@@ -691,6 +695,12 @@ io.on('connection', (socket) => {
                 const route = await Route.findById(bus.routeId);
                 if (route && route.stops) {
                     for (const stop of route.stops) {
+                        // Skip stops without valid coordinates to prevent NaN errors
+                        if (!stop.lat || !stop.lng) {
+                            etas.push({ stopName: stop.name, minutes: 0 });
+                            continue;
+                        }
+
                         const R = 6371; // km
                         const dLat = (stop.lat - lat) * Math.PI / 180;
                         const dLon = (stop.lng - lng) * Math.PI / 180;
