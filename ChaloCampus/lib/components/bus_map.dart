@@ -584,6 +584,14 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 isActive: _isFollowing,
               ),
               const SizedBox(height: 12),
+              // Drive Mode toggle button
+              _buildMapControl(
+                icon: Icons.navigation_rounded,
+                onTap: _toggleDriveMode,
+                isActive: _isDriveMode,
+                activeColor: const Color(0xFF00C853),
+              ),
+              const SizedBox(height: 12),
               _buildMapControl(
                 icon: Icons.my_location_rounded,
                 onTap: _getCurrentLocation,
@@ -591,6 +599,36 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             ],
           ),
         ),
+
+        // Drive Mode top HUD
+        if (_isDriveMode && _focusedBus != null)
+          Positioned(
+            top: 16,
+            left: 16,
+            right: 80,
+            child: GestureDetector(
+              onTap: _toggleDriveMode,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00C853),
+                  borderRadius: BorderRadius.circular(20),
+                  boxShadow: [BoxShadow(color: const Color(0xFF00C853).withValues(alpha: 0.4), blurRadius: 16)],
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.navigation_rounded, color: Colors.white, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      'DRIVE MODE  •  ${(_animatedHeadings[_focusedBus!.id] ?? 0).toInt()}°  •  Tap to exit',
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
 
         // Bus Detail Card
         if (_focusedBus != null)
@@ -751,7 +789,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     ).animate().slideX(begin: 0.5, end: 0);
   }
 
-  Widget _buildMapControl({required IconData icon, required VoidCallback onTap, bool isActive = false}) {
+  Widget _buildMapControl({required IconData icon, required VoidCallback onTap, bool isActive = false, Color? activeColor}) {
+    final Color activeBg = (activeColor ?? const Color(0xFF1A4CFF)).withValues(alpha: 0.85);
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -761,9 +800,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           child: Container(
             width: 48, height: 48,
             decoration: BoxDecoration(
-              color: isActive ? const Color(0xFF1A4CFF).withValues(alpha: 0.8) : Colors.black.withValues(alpha: 0.5),
+              color: isActive ? activeBg : Colors.black.withValues(alpha: 0.5),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              border: Border.all(color: isActive ? (activeColor ?? const Color(0xFF1A4CFF)).withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1)),
+              boxShadow: isActive ? [BoxShadow(color: (activeColor ?? const Color(0xFF1A4CFF)).withValues(alpha: 0.4), blurRadius: 12)] : [],
             ),
             child: Icon(icon, color: Colors.white, size: 22),
           ),
