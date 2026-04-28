@@ -292,15 +292,19 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       newMarkers[bus.id] = Marker(
         markerId: MarkerId(bus.id),
         position: pos,
-        rotation: heading,
-        // anchor at the arrow tip so rotation looks natural
-        anchor: const Offset(0.5, 0.85),
+        rotation: 0, // rotation is handled by camera bearing in drive mode
+        anchor: const Offset(0.5, 0.75), // pin tail anchor point
         flat: true,
+        consumeTapEvents: false,
         infoWindow: InfoWindow(
           title: 'Shuttle $label',
           snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}',
         ),
-        onTap: () => setState(() => _focusedBus = bus),
+        onTap: () => setState(() {
+          _focusedBus = bus;
+          _isDriveMode = true;
+          _isFollowing = true;
+        }),
         icon: icon,
         zIndex: isFocused ? 2.0 : 1.0,
       );
