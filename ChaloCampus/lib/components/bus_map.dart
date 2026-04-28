@@ -45,10 +45,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   final Map<String, LatLng> _animatedPositions = {};
   final Map<String, double> _animatedHeadings = {};
   
-  BitmapDescriptor? _busIcon;
-  BitmapDescriptor? _focusedBusIcon;
+  final Map<String, BitmapDescriptor> _busIcons = {};
+  final Map<String, BitmapDescriptor> _focusedBusIcons = {};
   
-  static const int _maxTrailPoints = 15;
+  static const int _maxTrailPoints = 20;
+  static const LatLng _bhopal = LatLng(23.2599, 77.4126);
 
   String? _darkMapStyle;
 
@@ -56,61 +57,142 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _loadMapStyle();
-    _createMarkerIcons();
+    _precacheAllBusIcons();
   }
 
-  Future<void> _createMarkerIcons() async {
-    _busIcon = await _getAssetIcon(Colors.blueAccent);
-    _focusedBusIcon = await _getAssetIcon(Colors.white);
+  Future<void> _precacheAllBusIcons() async {
+    for (final bus in widget.buses) {
+      final label = bus.id.substring(bus.id.length.clamp(4, bus.id.length) - 4).toUpperCase();
+      await _ensureBusIcon(bus.id, label, isFocused: false);
+      await _ensureBusIcon(bus.id, label, isFocused: true);
+    }
     if (mounted) setState(() {});
   }
 
-  Future<BitmapDescriptor> _getAssetIcon(Color color) async {
-    final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
-    final Canvas canvas = Canvas(pictureRecorder);
-    const double size = 120.0;
-    
-    // Shadow
-    final Paint shadowPaint = Paint()
-      ..color = color.withValues(alpha: 0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    canvas.drawCircle(const Offset(size/2, size/2), size/3, shadowPaint);
+  Future<void> _ensureBusIcon(String busId, String label, {required bool isFocused}) async {
+    final key = isFocused ? 'focused_$busId' : busId;
+    if (_busIcons.containsKey(key)) return;
+    final icon = await _drawBusMarker(label, isFocused: isFocused);
+    if (mounted) setState(() => (isFocused ? _focusedBusIcons : _busIcons)[busId] = icon);
+  }
 
-    // Background Circle
-    final Paint bgPaint = Paint()..color = const Color(0xFF0D0B14);
-    canvas.drawCircle(const Offset(size/2, size/2), size/3, bgPaint);
-    
-    // Border
-    final Paint borderPaint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 4;
-    canvas.drawCircle(const Offset(size/2, size/2), size/3, borderPaint);
+  /// Draws a premium Google-Maps navigation-style marker:
+  /// - A large neon circle with a crisp bus icon (the "head")
+  /// - A sharp pointed teardrop arrow below it (the "pin")
+  /// - A soft glow/halo behind everything
+  /// - A pulsing LIVE green dot
+  Future<BitmapDescriptor> _drawBusMarker(String label, {bool isFocused = false}) async {
+    // Canvas dimensions – tall enough to fit circle + arrow + glow bleed
+    const double size  = 120.0; // circle diameter
+    const double total = 170.0; // total canvas height
+    const double cx    = 85.0;  // horizontal centre
+    const double cy    = 65.0;  // vertical centre of the circle
 
-    // Bus Icon (Simplified path or just Text/Icon)
-    TextPainter textPainter = TextPainter(textDirection: TextDirection.ltr);
-    textPainter.text = TextSpan(
+    final Color accent = isFocused ? const Color(0xFFFFFFFF) : const Color(0xFF3D7FFF);
+    final Color bg     = isFocused ? const Color(0xFF1A4CFF) : const Color(0xFF0A0E2C);
+    final Color glow   = isFocused ? const Color(0xFFFFFFFF) : const Color(0xFF3D7FFF);
+
+    final ui.PictureRecorder rec = ui.PictureRecorder();
+    final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, cx * 2, total));
+
+    // ── 1. Outer halo (soft glow) ───────────────────────────────────────────
+    canvas.drawCircle(
+      Offset(cx, cy),
+      size / 2 + 12,
+      Paint()
+        ..color = glow.withValues(alpha: 0.25)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
+    );
+
+    // ── 2. Shadow ring ──────────────────────────────────────────────────────
+    canvas.drawCircle(
+      Offset(cx, cy + 4),
+      size / 2,
+      Paint()
+        ..color = Colors.black.withValues(alpha: 0.45)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+    );
+
+    // ── 3. Main filled circle (background) ─────────────────────────────────
+    canvas.drawCircle(Offset(cx, cy), size / 2, Paint()..color = bg);
+
+    // ── 4. Neon border ring ─────────────────────────────────────────────────
+    canvas.drawCircle(
+      Offset(cx, cy),
+      size / 2,
+      Paint()
+        ..color = accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = isFocused ? 5.0 : 3.5,
+    );
+
+    // ── 5. Bus icon (centred) ───────────────────────────────────────────────
+    final TextPainter iconTP = TextPainter(textDirection: TextDirection.ltr);
+    iconTP.text = TextSpan(
       text: String.fromCharCode(Icons.directions_bus_rounded.codePoint),
       style: TextStyle(
-        fontSize: 45.0,
+        fontSize: 52.0,
         fontFamily: Icons.directions_bus_rounded.fontFamily,
-        color: color,
+        package: Icons.directions_bus_rounded.fontPackage,
+        color: accent,
       ),
     );
-    textPainter.layout();
-    textPainter.paint(canvas, Offset(size/2 - textPainter.width/2, size/2 - textPainter.height/2));
+    iconTP.layout();
+    iconTP.paint(canvas, Offset(cx - iconTP.width / 2, cy - iconTP.height / 2));
 
-    // Direction Pointer (Triangle)
-    final Path path = Path();
-    path.moveTo(size/2, 10);
-    path.lineTo(size/2 - 10, 25);
-    path.lineTo(size/2 + 10, 25);
-    path.close();
-    canvas.drawPath(path, Paint()..color = color);
+    // ── 6. Bus label above the circle ───────────────────────────────────────
+    final TextPainter labelTP = TextPainter(textDirection: TextDirection.ltr);
+    labelTP.text = TextSpan(
+      text: label,
+      style: TextStyle(
+        fontSize: 20,
+        fontWeight: FontWeight.w900,
+        color: Colors.white,
+        letterSpacing: 2.0,
+        shadows: [Shadow(color: bg, blurRadius: 6)],
+      ),
+    );
+    labelTP.layout();
+    labelTP.paint(canvas, Offset(cx - labelTP.width / 2, cy - size / 2 - labelTP.height - 4));
 
-    final ui.Image image = await pictureRecorder.endRecording().toImage(size.toInt(), size.toInt());
-    final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(byteData!.buffer.asUint8List());
+    // ── 7. LIVE green dot (top-right of circle) ─────────────────────────────
+    canvas.drawCircle(
+      Offset(cx + size / 2 - 10, cy - size / 2 + 10),
+      9,
+      Paint()..color = const Color(0xFF00E676),
+    );
+    canvas.drawCircle(
+      Offset(cx + size / 2 - 10, cy - size / 2 + 10),
+      9,
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+
+    // ── 8. Teardrop arrow pointing DOWN (direction of travel) ───────────────
+    final double arrowTip  = cy + size / 2 + 28; // tip of arrow
+    final double arrowBase = cy + size / 2 - 2;  // base (flush with circle)
+    final Path arrow = Path()
+      ..moveTo(cx, arrowTip)                    // tip
+      ..lineTo(cx - 14, arrowBase)              // left shoulder
+      ..cubicTo(cx - 6, arrowBase + 4, cx + 6, arrowBase + 4, cx + 14, arrowBase) // curve at base
+      ..lineTo(cx, arrowTip)
+      ..close();
+
+    canvas.drawPath(arrow, Paint()..color = bg);
+    canvas.drawPath(
+      arrow,
+      Paint()
+        ..color = accent
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0,
+    );
+
+    final ui.Image img = await rec.endRecording()
+        .toImage((cx * 2).toInt(), total.toInt());
+    final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(bd!.buffer.asUint8List());
   }
 
   Future<void> _loadMapStyle() async {
@@ -227,35 +309,37 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   void _updateMarkers() {
     final Map<String, Marker> newMarkers = {};
     
-    // User Location Marker (Blue Dot)
-    newMarkers['user_location'] = Marker(
-      markerId: const MarkerId('user_location'),
-      position: _center,
-      icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueAzure),
-    );
-
     for (var bus in widget.buses) {
       final isFocused = _focusedBus?.id == bus.id;
       final pos = _animatedPositions[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
       final heading = _animatedHeadings[bus.id] ?? bus.heading;
-      final busIdLabel = bus.id.substring(bus.id.length - 4).toUpperCase();
-      
-      // Main Bus Marker
+      final label = bus.id.substring(bus.id.length.clamp(4, bus.id.length) - 4).toUpperCase();
+
+      // Trigger async icon creation if not yet cached
+      _ensureBusIcon(bus.id, label, isFocused: false);
+      _ensureBusIcon(bus.id, label, isFocused: true);
+
+      final icon = isFocused
+          ? (_focusedBusIcons[bus.id] ?? _busIcons[bus.id] ?? BitmapDescriptor.defaultMarker)
+          : (_busIcons[bus.id] ?? BitmapDescriptor.defaultMarker);
+
       newMarkers[bus.id] = Marker(
         markerId: MarkerId(bus.id),
         position: pos,
         rotation: heading,
-        anchor: const Offset(0.5, 0.5),
+        // anchor at the arrow tip so rotation looks natural
+        anchor: const Offset(0.5, 0.85),
         flat: true,
         infoWindow: InfoWindow(
-          title: 'Shuttle $busIdLabel',
-          snippet: '${bus.speed.toInt()} km/h • ${bus.occupancy} Load',
+          title: 'Shuttle $label',
+          snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}',
         ),
         onTap: () => setState(() => _focusedBus = bus),
-        icon: isFocused ? (_focusedBusIcon ?? BitmapDescriptor.defaultMarker) : (_busIcon ?? BitmapDescriptor.defaultMarker),
+        icon: icon,
+        zIndex: isFocused ? 2.0 : 1.0,
       );
 
-      // Add Stop markers for the focused bus route
+      // Stop markers (only when bus is focused)
       if (isFocused && widget.selectedRoute != null) {
         for (var stop in widget.selectedRoute!.stops) {
           final stopId = 'stop_${stop['name']}';
@@ -263,7 +347,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             markerId: MarkerId(stopId),
             position: LatLng(stop['lat'], stop['lng']),
             icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-            alpha: 0.8,
+            alpha: 0.85,
             infoWindow: InfoWindow(title: stop['name']),
           );
         }
@@ -271,19 +355,17 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
       // Update trail
       final trail = _busTrails[bus.id] ?? [];
-      if (trail.isEmpty || Geolocator.distanceBetween(trail.first.latitude, trail.first.longitude, pos.latitude, pos.longitude) > 10.0) {
+      if (trail.isEmpty || Geolocator.distanceBetween(
+        trail.first.latitude, trail.first.longitude, pos.latitude, pos.longitude) > 8.0) {
         trail.insert(0, pos);
         if (trail.length > _maxTrailPoints) trail.removeLast();
         _busTrails[bus.id] = trail;
       }
     }
 
-    if (mounted) {
-      setState(() {
-        _markers.clear();
-        _markers.addAll(newMarkers);
-      });
-    }
+    if (mounted) setState(() { _markers
+      ..clear()
+      ..addAll(newMarkers); });
   }
 
   void _updatePolylines() {
@@ -432,11 +514,23 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     return Stack(
       children: [
         GoogleMap(
-          initialCameraPosition: CameraPosition(target: _center, zoom: 14),
+          initialCameraPosition: CameraPosition(
+            target: widget.buses.isNotEmpty 
+              ? LatLng(widget.buses.first.currentLat, widget.buses.first.currentLng) 
+              : _bhopal,
+            zoom: 15,
+          ),
           onMapCreated: (controller) {
             _mapController = controller;
-            if (_currentMapType == MapType.none) { // We'll use 'none' for our custom dark
+            if (_currentMapType == MapType.none) {
                _mapController?.setMapStyle(_darkMapStyle);
+            }
+            // Move camera to the first bus once map is ready
+            if (widget.buses.isNotEmpty) {
+              final b = widget.buses.first;
+              _mapController?.animateCamera(CameraUpdate.newLatLngZoom(
+                LatLng(b.currentLat, b.currentLng), 15,
+              ));
             }
           },
           mapType: _currentMapType == MapType.none ? MapType.normal : _currentMapType,
@@ -496,7 +590,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             child: ClipRRect(
               borderRadius: BorderRadius.circular(28),
               child: BackdropFilter(
-                filter: ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
@@ -652,7 +746,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(15),
         child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
           child: Container(
             width: 48, height: 48,
             decoration: BoxDecoration(

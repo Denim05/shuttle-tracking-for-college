@@ -258,20 +258,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
         builder: (context, isConnected, child) {
           return Stack(
             children: [
-              // Background Map or Gradient
-              _isOnline && _selectedRoute != null
+              // Background Map — always visible, centered on driver GPS
+              _selectedRoute != null
                   ? BusMap(
                       buses: [
                         Bus(
-                          id: _selectedBusId!,
+                          id: _selectedBusId ?? 'driver',
                           routeId: _selectedRoute!.id,
                           routeName: _selectedRoute!.name,
                           routeColor: _selectedRoute!.color,
-                          currentLat: _currentPosition?.latitude ?? 0.0,
-                          currentLng: _currentPosition?.longitude ?? 0.0,
+                          currentLat: _currentPosition?.latitude ?? 23.1270,
+                          currentLng: _currentPosition?.longitude ?? 77.3494,
                           heading: _currentPosition?.heading ?? 0.0,
                           speed: _speedKmH,
-                          status: 'On-time',
+                          status: _isOnline ? 'On-time' : 'Offline',
                           lastUpdated: DateTime.now(),
                         )
                       ],
