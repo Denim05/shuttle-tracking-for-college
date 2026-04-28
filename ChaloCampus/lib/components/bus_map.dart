@@ -258,6 +258,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           if (rotationDiff < -180) rotationDiff += 360;
           _animatedHeadings[busId] = startRotation + (rotationDiff * t);
         });
+
+        // Drive Mode: smoothly rotate & follow the bus with camera
+        if (_isFollowing) {
+          final bus = widget.buses.firstWhere((b) => b.id == busId, orElse: () => widget.buses.first);
+          final pos = _animatedPositions[busId]!;
+          _moveCameraToBus(bus, pos);
+        }
       }
     });
 
@@ -393,13 +400,54 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   void _toggleFollow() {
     setState(() {
       _isFollowing = !_isFollowing;
+      if (!_isFollowing) _isDriveMode = false;
       if (_isFollowing && widget.buses.isNotEmpty) {
         final bus = widget.buses.first;
-        _mapController?.animateCamera(
-          CameraUpdate.newLatLng(LatLng(bus.currentLat, bus.currentLng))
-        );
+        final pos = _animatedPositions[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
+        _moveCameraToBus(bus, pos);
       }
     });
+  }
+
+  void _toggleDriveMode() {
+    setState(() {
+      _isDriveMode = !_isDriveMode;
+      if (_isDriveMode) {
+        _isFollowing = true;
+        // Focus the first bus when entering drive mode
+        if (_focusedBus == null && widget.buses.isNotEmpty) {
+          _focusedBus = widget.buses.first;
+        }
+      } else {
+        // Exit drive mode — reset camera to top-down view
+        final bus = _focusedBus ?? (widget.buses.isNotEmpty ? widget.buses.first : null);
+        if (bus != null) {
+          final pos = _animatedPositions[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
+          _mapController?.animateCamera(CameraUpdate.newCameraPosition(
+            CameraPosition(target: pos, zoom: 16, tilt: 0, bearing: 0),
+          ));
+        }
+      }
+    });
+  }
+
+  void _moveCameraToBus(Bus bus, LatLng pos) {
+    if (_isDriveMode) {
+      // Drive Mode: tilt 45°, rotate map to match bus heading
+      final heading = _animatedHeadings[bus.id] ?? bus.heading;
+      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: pos,
+          zoom: 17.5,
+          tilt: 50,              // 3D perspective tilt
+          bearing: heading,      // Map rotates with bus
+        ),
+      ));
+    } else {
+      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(target: pos, zoom: 16, tilt: 0, bearing: 0),
+      ));
+    }
   }
 
   void _showPermissionDialog(bool isPermanent) {
