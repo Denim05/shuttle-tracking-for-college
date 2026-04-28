@@ -32,9 +32,10 @@ enum MapStyle { street, satellite, hybrid, terrain, dark }
 
 class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   GoogleMapController? _mapController;
-  LatLng _center = const LatLng(23.2599, 77.4126); // Default Center
+  LatLng _center = const LatLng(23.2599, 77.4126);
   Bus? _focusedBus;
   bool _isFollowing = false;
+  bool _isDriveMode = false; // Google Maps Drive Mode
   MapType _currentMapType = MapType.normal;
   bool _showLayerSelector = false;
   
@@ -76,124 +77,82 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     if (mounted) setState(() => (isFocused ? _focusedBusIcons : _busIcons)[busId] = icon);
   }
 
-  /// Draws a premium Google-Maps navigation-style marker:
-  /// - A large neon circle with a crisp bus icon (the "head")
-  /// - A sharp pointed teardrop arrow below it (the "pin")
-  /// - A soft glow/halo behind everything
-  /// - A pulsing LIVE green dot
+  /// Draws a compact Google Maps Drive Mode navigation chevron:
+  /// - A small sharp arrow/chevron pointing up (direction of travel)
+  /// - Clean neon fill with white border
+  /// - Subtle drop shadow below
   Future<BitmapDescriptor> _drawBusMarker(String label, {bool isFocused = false}) async {
-    // Canvas dimensions – tall enough to fit circle + arrow + glow bleed
-    const double size  = 120.0; // circle diameter
-    const double total = 170.0; // total canvas height
-    const double cx    = 85.0;  // horizontal centre
-    const double cy    = 65.0;  // vertical centre of the circle
-
-    final Color accent = isFocused ? const Color(0xFFFFFFFF) : const Color(0xFF3D7FFF);
-    final Color bg     = isFocused ? const Color(0xFF1A4CFF) : const Color(0xFF0A0E2C);
-    final Color glow   = isFocused ? const Color(0xFFFFFFFF) : const Color(0xFF3D7FFF);
+    const double w   = 80.0;
+    const double h   = 96.0;
+    final Color fill   = isFocused ? Colors.white         : const Color(0xFF1A6BFF);
+    final Color border = isFocused ? const Color(0xFF1A6BFF) : Colors.white;
+    final Color shadow = isFocused ? Colors.white : const Color(0xFF1A6BFF);
 
     final ui.PictureRecorder rec = ui.PictureRecorder();
-    final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, cx * 2, total));
+    final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, w, h));
 
-    // ── 1. Outer halo (soft glow) ───────────────────────────────────────────
+    // ── Drop shadow ────────────────────────────────────────────────────────
     canvas.drawCircle(
-      Offset(cx, cy),
-      size / 2 + 12,
+      Offset(w / 2, w / 2 + 4),
+      w / 2 - 4,
       Paint()
-        ..color = glow.withValues(alpha: 0.25)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 16),
+        ..color = shadow.withValues(alpha: 0.30)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
     );
 
-    // ── 2. Shadow ring ──────────────────────────────────────────────────────
+    // ── Main circle body ──────────────────────────────────────────────────
     canvas.drawCircle(
-      Offset(cx, cy + 4),
-      size / 2,
-      Paint()
-        ..color = Colors.black.withValues(alpha: 0.45)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
+      Offset(w / 2, w / 2),
+      w / 2 - 4,
+      Paint()..color = fill,
     );
 
-    // ── 3. Main filled circle (background) ─────────────────────────────────
-    canvas.drawCircle(Offset(cx, cy), size / 2, Paint()..color = bg);
-
-    // ── 4. Neon border ring ─────────────────────────────────────────────────
+    // ── White ring border ─────────────────────────────────────────────────
     canvas.drawCircle(
-      Offset(cx, cy),
-      size / 2,
+      Offset(w / 2, w / 2),
+      w / 2 - 4,
       Paint()
-        ..color = accent
+        ..color = border
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isFocused ? 5.0 : 3.5,
+        ..strokeWidth = 3.5,
     );
 
-    // ── 5. Bus icon (centred) ───────────────────────────────────────────────
-    final TextPainter iconTP = TextPainter(textDirection: TextDirection.ltr);
-    iconTP.text = TextSpan(
-      text: String.fromCharCode(Icons.directions_bus_rounded.codePoint),
-      style: TextStyle(
-        fontSize: 52.0,
-        fontFamily: Icons.directions_bus_rounded.fontFamily,
-        package: Icons.directions_bus_rounded.fontPackage,
-        color: accent,
-      ),
-    );
-    iconTP.layout();
-    iconTP.paint(canvas, Offset(cx - iconTP.width / 2, cy - iconTP.height / 2));
+    // ── Navigation chevron arrow (sharp upward arrow inside circle) ───────
+    final double cx = w / 2;
+    final double cy = w / 2;
+    final Paint arrowPaint = Paint()
+      ..color = isFocused ? const Color(0xFF1A6BFF) : Colors.white
+      ..style = PaintingStyle.fill;
 
-    // ── 6. Bus label above the circle ───────────────────────────────────────
-    final TextPainter labelTP = TextPainter(textDirection: TextDirection.ltr);
-    labelTP.text = TextSpan(
-      text: label,
-      style: TextStyle(
-        fontSize: 20,
-        fontWeight: FontWeight.w900,
-        color: Colors.white,
-        letterSpacing: 2.0,
-        shadows: [Shadow(color: bg, blurRadius: 6)],
-      ),
-    );
-    labelTP.layout();
-    labelTP.paint(canvas, Offset(cx - labelTP.width / 2, cy - size / 2 - labelTP.height - 4));
-
-    // ── 7. LIVE green dot (top-right of circle) ─────────────────────────────
-    canvas.drawCircle(
-      Offset(cx + size / 2 - 10, cy - size / 2 + 10),
-      9,
-      Paint()..color = const Color(0xFF00E676),
-    );
-    canvas.drawCircle(
-      Offset(cx + size / 2 - 10, cy - size / 2 + 10),
-      9,
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-
-    // ── 8. Teardrop arrow pointing DOWN (direction of travel) ───────────────
-    final double arrowTip  = cy + size / 2 + 28; // tip of arrow
-    final double arrowBase = cy + size / 2 - 2;  // base (flush with circle)
-    final Path arrow = Path()
-      ..moveTo(cx, arrowTip)                    // tip
-      ..lineTo(cx - 14, arrowBase)              // left shoulder
-      ..cubicTo(cx - 6, arrowBase + 4, cx + 6, arrowBase + 4, cx + 14, arrowBase) // curve at base
-      ..lineTo(cx, arrowTip)
+    // Draw chevron: two filled triangles forming a chevron shape
+    final Path chevron = Path()
+      ..moveTo(cx, cy - 22)              // tip (top)
+      ..lineTo(cx - 16, cy + 14)         // bottom-left
+      ..lineTo(cx, cy + 6)              // inner bottom-center
+      ..lineTo(cx + 16, cy + 14)         // bottom-right
       ..close();
+    canvas.drawPath(chevron, arrowPaint);
 
-    canvas.drawPath(arrow, Paint()..color = bg);
+    // ── Sharp teardrop pin tail ────────────────────────────────────────────
+    final Path tail = Path()
+      ..moveTo(cx, h - 2)                // tip of pin
+      ..lineTo(cx - 9, w - 2)           // left shoulder
+      ..lineTo(cx + 9, w - 2)           // right shoulder
+      ..close();
+    canvas.drawPath(tail, Paint()..color = fill);
     canvas.drawPath(
-      arrow,
+      tail,
       Paint()
-        ..color = accent
+        ..color = border
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0,
     );
 
-    final ui.Image img = await rec.endRecording()
-        .toImage((cx * 2).toInt(), total.toInt());
+    final ui.Image img = await rec.endRecording().toImage(w.toInt(), h.toInt());
     final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(bd!.buffer.asUint8List());
   }
+
 
   Future<void> _loadMapStyle() async {
     // Custom dark mode style for Google Maps
