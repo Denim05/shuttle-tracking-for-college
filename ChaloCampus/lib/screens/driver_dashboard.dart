@@ -276,6 +276,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         )
                       ],
                       selectedRoute: _selectedRoute,
+                      initialDriveMode: true,
                     )
                   : Container(
                       decoration: const BoxDecoration(

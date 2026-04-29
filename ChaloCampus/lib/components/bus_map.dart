@@ -1,5 +1,6 @@
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
@@ -14,14 +15,17 @@ import '../utils/map_math.dart';
 class BusMap extends StatefulWidget {
   final List<Bus> buses;
   final RouteModel? selectedRoute;
-  /// When set, the map will animate to this bus and open its detail card.
   final String? centerOnBusId;
+  final bool initialDriveMode;
+  final Function(bool)? onDriveModeChanged;
 
   const BusMap({
     super.key,
     required this.buses,
     this.selectedRoute,
     this.centerOnBusId,
+    this.initialDriveMode = false,
+    this.onDriveModeChanged,
   });
 
   @override
@@ -46,19 +50,50 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   final Map<String, LatLng> _animatedPositions = {};
   final Map<String, double> _animatedHeadings = {};
   
+  final Set<Circle> _circles = {};
+  
   final Map<String, BitmapDescriptor> _busIcons = {};
   final Map<String, BitmapDescriptor> _focusedBusIcons = {};
   
   static const int _maxTrailPoints = 20;
   static const LatLng _bhopal = LatLng(23.2599, 77.4126);
 
+  // -- Animation State for Flowing Route --
+  double _polylineOffset = 0.0;
+  late AnimationController _polylineFlowController;
+
   String? _darkMapStyle;
+  BitmapDescriptor? _stopIcon;
+  BitmapDescriptor? _lastStopIcon;
 
   @override
   void initState() {
     super.initState();
+    _isDriveMode = widget.initialDriveMode;
+    _isFollowing = widget.initialDriveMode;
     _loadMapStyle();
     _precacheAllBusIcons();
+    _loadStopIcons();
+    
+    // Controller for animated route flow
+    _polylineFlowController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
+    
+    _polylineFlowController.addListener(() {
+      if (mounted) {
+        setState(() {
+          _polylineOffset = _polylineFlowController.value * 20.0;
+        });
+      }
+    });
+  }
+
+  Future<void> _loadStopIcons() async {
+    _stopIcon = await _drawStopMarker(false);
+    _lastStopIcon = await _drawStopMarker(true);
+    if (mounted) setState(() {});
   }
 
   Future<void> _precacheAllBusIcons() async {
@@ -148,7 +183,63 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         ..strokeWidth = 2.0,
     );
 
+    // ── Bus Label Tag (Small label at the bottom) ──────────────────────────
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: label,
+        style: GoogleFonts.plusJakartaSans(
+          color: isFocused ? const Color(0xFF1A4CFF) : Colors.white,
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+
+    final double tx = (w - textPainter.width) / 2;
+    final double ty = w / 2 - textPainter.height / 2;
+    
+    // We'll replace the chevron with the label if it's too crowded, 
+    // or just put it inside the circle if focused.
+    // For now, let's put it inside the circle and move the chevron.
+    
+    // Actually, let's just draw the label below the circle in a small bubble
+    final labelBgPaint = Paint()..color = border;
+    final labelRect = Rect.fromCenter(center: Offset(w/2, h - 10), width: textPainter.width + 12, height: textPainter.height + 4);
+    canvas.drawRRect(RRect.fromRectAndRadius(labelRect, const Radius.circular(6)), labelBgPaint);
+    textPainter.paint(canvas, Offset(w/2 - textPainter.width/2, h - 10 - textPainter.height/2));
+
     final ui.Image img = await rec.endRecording().toImage(w.toInt(), h.toInt());
+    final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    return BitmapDescriptor.fromBytes(bd!.buffer.asUint8List());
+  }
+
+  Future<BitmapDescriptor> _drawStopMarker(bool isLast) async {
+    const double size = 40.0;
+    final ui.PictureRecorder rec = ui.PictureRecorder();
+    final Canvas canvas = Canvas(rec, const Rect.fromLTWH(0, 0, size, size));
+    
+    final Paint paint = Paint()
+      ..color = isLast ? Colors.redAccent : Colors.white
+      ..style = PaintingStyle.fill;
+      
+    canvas.drawCircle(const Offset(size/2, size/2), size/2 - 4, paint);
+    
+    final Paint borderPaint = Paint()
+      ..color = isLast ? Colors.white : const Color(0xFF1A4CFF)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3;
+      
+    canvas.drawCircle(const Offset(size/2, size/2), size/2 - 4, borderPaint);
+    
+    if (isLast) {
+      final Paint innerPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(const Offset(size/2, size/2), size/2 - 12, innerPaint);
+    }
+
+    final ui.Image img = await rec.endRecording().toImage(size.toInt(), size.toInt());
     final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
     return BitmapDescriptor.fromBytes(bd!.buffer.asUint8List());
   }
@@ -204,6 +295,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     for (var controller in _markerAnimations.values) {
       controller.dispose();
     }
+    _polylineFlowController.dispose();
     super.dispose();
   }
 
@@ -292,33 +384,40 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       newMarkers[bus.id] = Marker(
         markerId: MarkerId(bus.id),
         position: pos,
-        rotation: 0, // rotation is handled by camera bearing in drive mode
-        anchor: const Offset(0.5, 0.75), // pin tail anchor point
+        rotation: _isDriveMode ? 0 : heading, // rotation is handled by camera bearing in drive mode
+        anchor: const Offset(0.5, 0.5), // center anchor for rotation
         flat: true,
         consumeTapEvents: false,
         infoWindow: InfoWindow(
           title: 'Shuttle $label',
           snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}',
         ),
-        onTap: () => setState(() {
-          _focusedBus = bus;
-          _isDriveMode = true;
-          _isFollowing = true;
-        }),
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          setState(() {
+            _focusedBus = bus;
+            _isDriveMode = true;
+            _isFollowing = true;
+          });
+        },
         icon: icon,
         zIndex: isFocused ? 2.0 : 1.0,
       );
 
-      // Stop markers (only when bus is focused)
-      if (isFocused && widget.selectedRoute != null) {
-        for (var stop in widget.selectedRoute!.stops) {
+      // Stop markers (only when bus is focused or route selected)
+      if (widget.selectedRoute != null) {
+        for (var i = 0; i < widget.selectedRoute!.stops.length; i++) {
+          final stop = widget.selectedRoute!.stops[i];
           final stopId = 'stop_${stop['name']}';
+          final isLast = i == widget.selectedRoute!.stops.length - 1;
+          
           newMarkers[stopId] = Marker(
             markerId: MarkerId(stopId),
             position: LatLng(stop['lat'], stop['lng']),
-            icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-            alpha: 0.85,
-            infoWindow: InfoWindow(title: stop['name']),
+            anchor: const Offset(0.5, 0.5),
+            icon: isLast ? (_lastStopIcon ?? BitmapDescriptor.defaultMarker) : (_stopIcon ?? BitmapDescriptor.defaultMarker),
+            alpha: 0.9,
+            infoWindow: InfoWindow(title: stop['name'], snippet: 'Bus Stop'),
           );
         }
       }
@@ -363,6 +462,18 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         endCap: Cap.roundCap,
         startCap: Cap.roundCap,
       );
+
+      // Add a "flow" pattern to the route
+      newPolylines['selected_route_flow'] = Polyline(
+        polylineId: const PolylineId('selected_route_flow'),
+        points: routePoints,
+        width: 6,
+        color: Colors.white.withValues(alpha: 0.4),
+        patterns: [
+          PatternItem.dash(10),
+          PatternItem.gap(10 + _polylineOffset),
+        ],
+      );
     }
 
     // Bus Trails
@@ -382,6 +493,33 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       setState(() {
         _polylines.clear();
         _polylines.addAll(newPolylines);
+      });
+    }
+  }
+
+  void _updateCircles() {
+    final Set<Circle> newCircles = {};
+    if (_focusedBus != null) {
+      final pos = _animatedPositions[_focusedBus!.id] ?? LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng);
+      final pulse = (ui.window.viewConfiguration.devicePixelRatio > 0) ? (1.0 + 0.2 * ui.window.viewConfiguration.devicePixelRatio) : 1.0; // dummy math
+      
+      // Use the polyline flow offset for a pulsing effect
+      final radius = 15.0 + (_polylineOffset / 2); 
+
+      newCircles.add(Circle(
+        circleId: CircleId('pulse_${_focusedBus!.id}'),
+        center: pos,
+        radius: radius,
+        fillColor: const Color(0xFF1A4CFF).withValues(alpha: 0.1),
+        strokeColor: const Color(0xFF1A4CFF).withValues(alpha: 0.3),
+        strokeWidth: 2,
+      ));
+    }
+    
+    if (mounted) {
+      setState(() {
+        _circles.clear();
+        _circles.addAll(newCircles);
       });
     }
   }
@@ -432,6 +570,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           ));
         }
       }
+      widget.onDriveModeChanged?.call(_isDriveMode);
     });
   }
 
@@ -510,6 +649,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   Widget build(BuildContext context) {
     _updateMarkers();
     _updatePolylines();
+    _updateCircles();
 
     if (_isFollowing && widget.buses.isNotEmpty) {
       final activeBus = widget.buses.firstWhere(
@@ -547,12 +687,16 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           mapType: _currentMapType == MapType.none ? MapType.normal : _currentMapType,
           markers: Set<Marker>.of(_markers.values),
           polylines: Set<Polyline>.of(_polylines.values),
+          circles: _circles,
           myLocationEnabled: true,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
           compassEnabled: true,
           tiltGesturesEnabled: true,
+          buildingsEnabled: true,
+          trafficEnabled: true,
+          indoorEnabled: true,
           onTap: (_) => setState(() => _focusedBus = null),
         ),
         Positioned(
@@ -718,11 +862,19 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 24),
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
                           _buildPremiumStat(Icons.speed_rounded, '${_focusedBus!.speed.toInt()}', 'KM/H'),
                           _buildPremiumStat(Icons.people_alt_rounded, _focusedBus!.occupancy, 'LOAD'),
-                          _buildPremiumStat(Icons.timer_outlined, _focusedBus!.etas.isNotEmpty ? '${_focusedBus!.etas.first.minutes}' : '--', 'NEXT ETA'),
+                          _buildPremiumStat(Icons.timer_outlined, _focusedBus!.etas.isNotEmpty ? '${_focusedBus!.etas.first.minutes}' : '--', 'MIN ETA'),
+                          _buildPremiumStat(
+                            Icons.social_distance_rounded, 
+                            _calculateDistance(
+                              LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng),
+                              _center
+                            ), 
+                            'DIST'
+                          ),
                         ],
                       ),
                       if (_focusedBus!.etas.isNotEmpty) ...[
@@ -763,6 +915,15 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           ).animate().slideY(begin: 1, end: 0, duration: 600.ms, curve: Curves.easeOutQuart).fadeIn(),
       ],
     );
+  }
+
+  String _calculateDistance(LatLng p1, LatLng p2) {
+    double distance = Geolocator.distanceBetween(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+    if (distance < 1000) {
+      return '${distance.toInt()}M';
+    } else {
+      return '${(distance / 1000).toStringAsFixed(1)}KM';
+    }
   }
 
   Widget _buildLayerItem(MapType type, IconData icon) {
@@ -831,17 +992,20 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   Widget _buildPremiumStat(IconData icon, String value, String unit) {
-    return Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, color: const Color(0xFF1A4CFF), size: 20),
-        const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800)),
-            Text(unit, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
-          ],
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A4CFF).withValues(alpha: 0.1),
+            shape: BoxShape.circle,
+          ),
+          child: Icon(icon, color: const Color(0xFF1A4CFF), size: 18),
         ),
+        const SizedBox(height: 8),
+        Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
+        Text(unit, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
       ],
     );
   }
