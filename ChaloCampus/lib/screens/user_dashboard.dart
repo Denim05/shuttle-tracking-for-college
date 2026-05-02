@@ -503,42 +503,75 @@ class _UserDashboardState extends State<UserDashboard> {
                          child: Column(
                            crossAxisAlignment: CrossAxisAlignment.start,
                            children: [
-                             Text(_selectedRoute!.name, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white), overflow: TextOverflow.ellipsis),
-                             const SizedBox(height: 4),
+                             Text(_selectedRoute!.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white), overflow: TextOverflow.ellipsis),
+                             const SizedBox(height: 6),
                              Row(
                                children: [
-                                 Container(
-                                   width: 8, height: 8,
-                                   decoration: BoxDecoration(
-                                     color: _activeBus != null && _activeBus!.status != 'Offline' ? Colors.blueAccent : Colors.white10,
-                                     shape: BoxShape.circle,
-                                     boxShadow: _activeBus != null && _activeBus!.status != 'Offline' ? [const BoxShadow(color: Colors.blueAccent, blurRadius: 6)] : null,
-                                   ),
-                                 ).animate(onPlay: (c) => _activeBus != null && _activeBus!.status != 'Offline' ? c.repeat() : c.stop()).fadeOut(duration: 1.seconds),
-                                 const SizedBox(width: 10),
-                                 Text(
-                                   _activeBus != null && _activeBus!.status != 'Offline' ? 'Live' : 'Offline', 
-                                   style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: _activeBus != null && _activeBus!.status != 'Offline' ? Colors.blueAccent : Colors.white24, letterSpacing: 1.5)
-                                 ),
+                                 if (_activeBus != null && _activeBus!.status != 'Offline') ...[
+                                   Container(
+                                     width: 8, height: 8,
+                                     decoration: const BoxDecoration(
+                                       color: Color(0xFF00C853),
+                                       shape: BoxShape.circle,
+                                       boxShadow: [BoxShadow(color: Color(0xFF00C853), blurRadius: 8)],
+                                     ),
+                                   ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.4, 1.4)),
+                                   const SizedBox(width: 6),
+                                   const Text('LIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF00C853), letterSpacing: 2)),
+                                   const SizedBox(width: 10),
+                                   if (_activeBus!.speed > 0) ...[
+                                     const Icon(Icons.speed_rounded, color: Colors.blueAccent, size: 11),
+                                     const SizedBox(width: 3),
+                                     Text('${_activeBus!.speed.toInt()} KM/H', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.blueAccent, letterSpacing: 1)),
+                                   ],
+                                 ] else ...[
+                                   Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle)),
+                                   const SizedBox(width: 6),
+                                   const Text('OFFLINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)),
+                                 ],
                                ],
                              ),
                            ],
                          ),
                        ),
-                       Container(
-                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                         decoration: BoxDecoration(
-                           color: (_activeBus != null && _activeBus!.status != 'Offline' ? Colors.blueAccent : Colors.white).withValues(alpha: 0.1), 
-                           borderRadius: BorderRadius.circular(16),
-                           border: Border.all(color: (_activeBus != null && _activeBus!.status != 'Offline' ? Colors.blueAccent : Colors.white10).withValues(alpha: 0.2)),
-                         ),
-                         child: Text(
-                           _activeBus != null && _activeBus!.status != 'Offline' ? 'ON TIME' : 'STATIONARY', 
-                           style: TextStyle(color: _activeBus != null && _activeBus!.status != 'Offline' ? Colors.blueAccent : Colors.white38, fontSize: 10, fontWeight: FontWeight.w900)
-                         ),
+                       // Socket tracking status pill
+                       ValueListenableBuilder<DateTime?>(
+                         valueListenable: Provider.of<SocketService>(context, listen: false).lastDataReceived,
+                         builder: (context, lastPacket, _) {
+                           final isRecent = lastPacket != null && 
+                               DateTime.now().difference(lastPacket).inSeconds < 15;
+                           return AnimatedContainer(
+                             duration: const Duration(milliseconds: 400),
+                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                             decoration: BoxDecoration(
+                               color: isRecent ? const Color(0xFF00C853).withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.04),
+                               borderRadius: BorderRadius.circular(14),
+                               border: Border.all(color: isRecent ? const Color(0xFF00C853).withValues(alpha: 0.3) : Colors.white12),
+                             ),
+                             child: Row(
+                               mainAxisSize: MainAxisSize.min,
+                               children: [
+                                 Icon(
+                                   isRecent ? Icons.wifi_tethering_rounded : Icons.wifi_tethering_off_rounded,
+                                   color: isRecent ? const Color(0xFF00C853) : Colors.white24,
+                                   size: 11,
+                                 ),
+                                 const SizedBox(width: 4),
+                                 Text(
+                                   isRecent ? 'TRACKING' : 'WAITING',
+                                   style: TextStyle(
+                                     color: isRecent ? const Color(0xFF00C853) : Colors.white24,
+                                     fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1,
+                                   ),
+                                 ),
+                               ],
+                             ),
+                           );
+                         },
                        ),
                      ],
                    ),
+
                    const SizedBox(height: 35),
                    _buildStatGrid(),
                    const SizedBox(height: 35),

@@ -760,8 +760,10 @@ io.on('connection', (socket) => {
                 timestamp: new Date().toISOString()
             };
 
-            socket.broadcast.emit('busLocationUpdate', broadcastData);
-            console.log(`✅ [TRACKING SAVED] Bus ${bus.busNumber || bus.routeName || busId} | ${bus.status} | Speed: ${speed.toFixed(1)} KM/H | Route: ${bus.routeName || 'None'}`);
+            // io.emit broadcasts to ALL connected clients (including users watching the map)
+            // socket.broadcast would exclude the sender — we want everyone to see it
+            io.emit('busLocationUpdate', broadcastData);
+            console.log(`✅ [TRACKING SAVED] Bus ${bus.busNumber || bus.routeName || busId} | ${bus.status} | Speed: ${speed.toFixed(1)} KM/H | Route: ${bus.routeName || 'None'} | Broadcasting to all ${io.engine.clientsCount} clients`);
         } catch (err) {
             console.error('❌ [TRACKING ERROR] locationUpdate handler failed:', err.message);
         }

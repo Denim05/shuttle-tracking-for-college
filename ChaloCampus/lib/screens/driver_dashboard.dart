@@ -22,13 +22,15 @@ class DriverDashboard extends StatefulWidget {
 class _DriverDashboardState extends State<DriverDashboard> {
   bool _isOnline = false;
   Position? _currentPosition;
-  Position? _prevPosition; // for distance tracking
-  DateTime? _prevPositionTime; // for computed speed fallback
+  Position? _prevPosition;
+  DateTime? _prevPositionTime;
   StreamSubscription<Position>? _positionStream;
   double _speedKmH = 0.0;
+  double _smoothedSpeedKmH = 0.0; // EMA-smoothed speed for display
   double _sessionDistanceKm = 0.0;
   int _sessionStops = 0;
   final List<double> _recentSpeeds = List.filled(15, 0.0);
+  int _recentSpeedIndex = 0; // circular buffer index
   final ApiService _apiService = ApiService();
   List<dynamic> _buses = [];
   String? _selectedBusId;
@@ -36,6 +38,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
   bool _isSosActive = false;
   Timer? _heartbeatTimer;
   final ValueNotifier<DateTime?> _lastEmitTime = ValueNotifier<DateTime?>(null);
+
+  // ── Speed smoothing constants ──────────────────────────────────────────────
+  static const double _emaAlpha = 0.3; // Exponential Moving Average factor
+  static const double _speedThresholdMps = 0.5; // min GPS speed to trust (0.5 m/s ≈ 1.8 km/h)
 
   @override
   void initState() {
@@ -150,58 +156,89 @@ class _DriverDashboardState extends State<DriverDashboard> {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) return;
     }
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Location permission permanently denied. Please enable in settings.')),
+        );
+      }
+      return;
+    }
 
     setState(() => _isOnline = true);
     _positionStream = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.best,
-        // distanceFilter: 5m for stable GPS speed — no timeLimit (it kills the stream!)
-        distanceFilter: 5,
+      locationSettings: AndroidSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 0,          // Get EVERY update — no distance filter for real-time
+        intervalDuration: const Duration(seconds: 2), // at least every 2 seconds
+        foregroundNotificationConfig: const ForegroundNotificationConfig(
+          notificationTitle: 'ChaloCampus Tracking',
+          notificationText: 'Broadcasting your location to students',
+          enableWakeLock: true,
+        ),
       ),
     ).listen(
       (Position position) {
         if (!mounted) return;
         setState(() {
-          // ── Accumulate session distance ─────────────────────────────
+          // ── Session distance accumulation ─────────────────────────────────
           double distMeters = 0;
           if (_prevPosition != null) {
             distMeters = Geolocator.distanceBetween(
               _prevPosition!.latitude, _prevPosition!.longitude,
               position.latitude, position.longitude,
             );
-            _sessionDistanceKm += distMeters / 1000.0;
+            // Only count movement ≥ 2m to avoid GPS drift noise
+            if (distMeters >= 2.0) {
+              _sessionDistanceKm += distMeters / 1000.0;
+            }
           }
 
-          // ── Speed: prefer GPS chip value; fall back to computed ─────
-          double gpsSpeed = position.speed * 3.6; // m/s → km/h
-          if (gpsSpeed <= 0 && _prevPosition != null && _prevPositionTime != null) {
+          // ── Speed calculation with multi-source fallback ──────────────────
+          double rawSpeedKmH = 0.0;
+
+          // Source 1: GPS chip speed (most accurate when moving)
+          if (position.speed >= _speedThresholdMps) {
+            rawSpeedKmH = position.speed * 3.6; // m/s → km/h
+          }
+          // Source 2: Computed from distance/time delta (fallback)
+          else if (distMeters >= 2.0 && _prevPosition != null && _prevPositionTime != null) {
             final elapsedSec = DateTime.now()
                 .difference(_prevPositionTime!)
                 .inMilliseconds / 1000.0;
-            if (elapsedSec > 0) {
-              gpsSpeed = (distMeters / elapsedSec) * 3.6;
+            if (elapsedSec > 0.5) { // Need at least 0.5s gap to be meaningful
+              rawSpeedKmH = (distMeters / elapsedSec) * 3.6;
             }
           }
-          _speedKmH = gpsSpeed.clamp(0.0, 200.0);
+
+          // Clamp to realistic bus speeds (0 to 120 km/h)
+          rawSpeedKmH = rawSpeedKmH.clamp(0.0, 120.0);
+
+          // ── Exponential Moving Average smoothing ──────────────────────────
+          // Smooths out GPS jitter while staying responsive to speed changes
+          _smoothedSpeedKmH = (_emaAlpha * rawSpeedKmH) + ((1 - _emaAlpha) * _smoothedSpeedKmH);
+          _speedKmH = _smoothedSpeedKmH;
+
+          // ── Update circular speed history buffer ──────────────────────────
+          _recentSpeeds[_recentSpeedIndex % 15] = _speedKmH;
+          _recentSpeedIndex++;
 
           _prevPosition     = position;
           _prevPositionTime = DateTime.now();
           _currentPosition  = position;
-
-          _recentSpeeds.removeAt(0);
-          _recentSpeeds.add(_speedKmH);
         });
+
+        // Emit every GPS update for smooth real-time tracking
         _emitLocation();
       },
       onError: (dynamic err) {
-        // Stream error (e.g. GPS unavailable) — log and keep running
         debugPrint('⚠️ GPS stream error: $err');
       },
     );
 
-    // Heartbeat: keeps listeners alive even when stationary
-    _heartbeatTimer = Timer.periodic(const Duration(seconds: 10), (timer) {
-      if (_isOnline) _emitLocation();
+    // Heartbeat: keeps users' maps alive even if GPS doesn't fire
+    _heartbeatTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_isOnline && _currentPosition != null) _emitLocation();
     });
   }
 
@@ -210,11 +247,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _heartbeatTimer?.cancel();
     setState(() {
       _isOnline         = false;
-      _speedKmH         = 0;
-      _sessionDistanceKm = 0;
-      _sessionStops     = 0;
-      _prevPosition     = null;
-      _prevPositionTime = null; // reset computed-speed timestamp
+      _speedKmH            = 0;
+      _smoothedSpeedKmH    = 0;
+      _sessionDistanceKm   = 0;
+      _sessionStops        = 0;
+      _prevPosition        = null;
+      _prevPositionTime    = null;
+      _recentSpeedIndex    = 0;
       _recentSpeeds.fillRange(0, 15, 0.0);
     });
   }
@@ -238,13 +277,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
       'routeId': selectedBus != null ? selectedBus['routeId'] : null,
       'latitude': _currentPosition!.latitude,
       'longitude': _currentPosition!.longitude,
-      'heading': _currentPosition!.heading,
-      'speed': _speedKmH,
+      'heading': _currentPosition!.heading >= 0 ? _currentPosition!.heading : 0.0,
+      'speed': double.parse(_speedKmH.toStringAsFixed(1)), // Round to 1dp
       'status': 'On-time',
       'timestamp': DateTime.now().toIso8601String(),
     });
     
-    debugPrint('📡 Emitted Location: ${_currentPosition!.latitude}, ${_currentPosition!.longitude}');
+    debugPrint('📡 Emitted: Lat=${_currentPosition!.latitude.toStringAsFixed(5)}, Lng=${_currentPosition!.longitude.toStringAsFixed(5)}, Speed=${_speedKmH.toStringAsFixed(1)} KM/H');
   }
 
   @override
@@ -445,13 +484,36 @@ class _DriverDashboardState extends State<DriverDashboard> {
     ).animate().fadeIn().slideX();
   }
 
+  // Speed color based on km/h value
+  Color _speedColor(double speed) {
+    if (speed < 20) return Colors.blueAccent;
+    if (speed < 40) return const Color(0xFF00C853); // green
+    if (speed < 60) return Colors.orangeAccent;
+    if (speed < 80) return Colors.deepOrangeAccent;
+    return Colors.redAccent;
+  }
+
+  String _speedCategory(double speed) {
+    if (!_isOnline) return 'OFFLINE';
+    if (speed < 5) return 'STATIONARY';
+    if (speed < 25) return 'LOW SPEED';
+    if (speed < 50) return 'NORMAL';
+    if (speed < 70) return 'FAST';
+    return 'HIGH SPEED';
+  }
+
   Widget _buildTrackerCard() {
+    final sColor = _speedColor(_speedKmH);
+    final sortedSpeeds = List<double>.from(_recentSpeeds)..sort();
+    final maxRecentSpeed = sortedSpeeds.isNotEmpty ? sortedSpeeds.last : 1.0;
+
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
         color: const Color(0xFF161421),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: _isOnline ? sColor.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05)),
+        boxShadow: _isOnline ? [BoxShadow(color: sColor.withValues(alpha: 0.08), blurRadius: 20, spreadRadius: 2)] : null,
       ),
       child: Column(
         children: [
@@ -461,48 +523,111 @@ class _DriverDashboardState extends State<DriverDashboard> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Speedometer', style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-                  const SizedBox(height: 8),
+                  Text('SPEEDOMETER', style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 2)),
+                  const SizedBox(height: 6),
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(_speedKmH.toStringAsFixed(1), style: TextStyle(color: Colors.white, fontSize: 56, fontWeight: FontWeight.w900, letterSpacing: -2)),
+                      AnimatedDefaultTextStyle(
+                        duration: const Duration(milliseconds: 300),
+                        style: TextStyle(color: _isOnline ? sColor : Colors.white38, fontSize: 64, fontWeight: FontWeight.w900, letterSpacing: -2),
+                        child: Text(_speedKmH.toStringAsFixed(1)),
+                      ),
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12, left: 8),
-                        child: Text('KM/H', style: TextStyle(color: Colors.blueAccent, fontSize: 14, fontWeight: FontWeight.w900)),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('KM/H', style: TextStyle(color: sColor, fontSize: 13, fontWeight: FontWeight.w900)),
+                            const SizedBox(height: 2),
+                            AnimatedContainer(
+                              duration: const Duration(milliseconds: 400),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: sColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: sColor.withValues(alpha: 0.3)),
+                              ),
+                              child: Text(
+                                _speedCategory(_speedKmH),
+                                style: TextStyle(color: sColor, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 1),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
+                  if (_currentPosition != null) ...[
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Icon(Icons.my_location_rounded, color: Colors.white24, size: 10),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}',
+                          style: const TextStyle(color: Colors.white24, fontSize: 9, fontFamily: 'monospace'),
+                        ),
+                      ],
+                    ),
+                    if (_currentPosition!.accuracy > 0) ...[
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          Icon(Icons.gps_fixed_rounded, color: Colors.white24, size: 10),
+                          const SizedBox(width: 4),
+                          Text(
+                            'GPS ±${_currentPosition!.accuracy.toStringAsFixed(0)}m',
+                            style: TextStyle(
+                              color: _currentPosition!.accuracy < 10 ? const Color(0xFF00C853) : Colors.orangeAccent,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
                 ],
               ),
               _buildLiveIndicator(),
             ],
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            height: 60,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: _recentSpeeds.asMap().entries.map((e) {
-                final double h = (e.value * 1.5).clamp(4.0, 60.0);
-                final bool isHighest = e.value == _recentSpeeds.reduce((a, b) => a > b ? a : b) && e.value > 0;
-                return Container(
-                  width: 14,
-                  height: h,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.bottomCenter,
-                      end: Alignment.topCenter,
-                      colors: _isOnline 
-                        ? [Colors.deepPurpleAccent, isHighest ? Colors.redAccent : Colors.blueAccent]
-                        : [Colors.white10, Colors.white10],
-                    ),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                );
-              }).toList(),
-            ),
+          const SizedBox(height: 20),
+          // Speed history bars — fixed sorted order, most recent on right
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('SPEED HISTORY', style: TextStyle(color: Colors.white12, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+              const SizedBox(height: 8),
+              SizedBox(
+                height: 55,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: _recentSpeeds.map((speed) {
+                    final maxRef = maxRecentSpeed > 0 ? maxRecentSpeed : 1.0;
+                    final double h = ((speed / maxRef) * 52).clamp(3.0, 52.0);
+                    final barColor = _speedColor(speed);
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 500),
+                      width: 13,
+                      height: h,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.bottomCenter,
+                          end: Alignment.topCenter,
+                          colors: _isOnline
+                            ? [barColor.withValues(alpha: 0.4), barColor]
+                            : [Colors.white10, Colors.white10],
+                        ),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ],
           ),
         ],
       ),

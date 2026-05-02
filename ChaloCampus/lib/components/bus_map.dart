@@ -112,14 +112,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     if (mounted) setState(() => (isFocused ? _focusedBusIcons : _busIcons)[busId] = icon);
   }
 
-  /// Draws a compact Google Maps Drive Mode navigation chevron:
-  /// - A small sharp arrow/chevron pointing up (direction of travel)
-  /// - Clean neon fill with white border
-  /// - Subtle drop shadow below
   Future<BitmapDescriptor> _drawBusMarker(String label, {bool isFocused = false}) async {
-    const double w   = 80.0;
-    const double h   = 96.0;
-    final Color fill   = isFocused ? Colors.white         : const Color(0xFF1A6BFF);
+    const double w   = 60.0;
+    const double h   = 60.0;
+    final Color fill   = isFocused ? Colors.white : const Color(0xFF1A6BFF);
     final Color border = isFocused ? const Color(0xFF1A6BFF) : Colors.white;
     final Color shadow = isFocused ? Colors.white : const Color(0xFF1A6BFF);
 
@@ -128,28 +124,28 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     // ── Drop shadow ────────────────────────────────────────────────────────
     canvas.drawCircle(
-      Offset(w / 2, w / 2 + 4),
+      const Offset(w / 2, w / 2 + 4),
       w / 2 - 4,
       Paint()
-        ..color = shadow.withValues(alpha: 0.30)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+        ..color = shadow.withValues(alpha: 0.40)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
 
     // ── Main circle body ──────────────────────────────────────────────────
     canvas.drawCircle(
-      Offset(w / 2, w / 2),
+      const Offset(w / 2, w / 2),
       w / 2 - 4,
       Paint()..color = fill,
     );
 
     // ── White ring border ─────────────────────────────────────────────────
     canvas.drawCircle(
-      Offset(w / 2, w / 2),
+      const Offset(w / 2, w / 2),
       w / 2 - 4,
       Paint()
         ..color = border
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 3.5,
+        ..strokeWidth = 3.0,
     );
 
     // ── Navigation chevron arrow (sharp upward arrow inside circle) ───────
@@ -161,53 +157,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     // Draw chevron: two filled triangles forming a chevron shape
     final Path chevron = Path()
-      ..moveTo(cx, cy - 22)              // tip (top)
-      ..lineTo(cx - 16, cy + 14)         // bottom-left
-      ..lineTo(cx, cy + 6)              // inner bottom-center
-      ..lineTo(cx + 16, cy + 14)         // bottom-right
+      ..moveTo(cx, cy - 14)              // tip (top)
+      ..lineTo(cx - 10, cy + 10)         // bottom-left
+      ..lineTo(cx, cy + 4)               // inner bottom-center
+      ..lineTo(cx + 10, cy + 10)         // bottom-right
       ..close();
     canvas.drawPath(chevron, arrowPaint);
-
-    // ── Sharp teardrop pin tail ────────────────────────────────────────────
-    final Path tail = Path()
-      ..moveTo(cx, h - 2)                // tip of pin
-      ..lineTo(cx - 9, w - 2)           // left shoulder
-      ..lineTo(cx + 9, w - 2)           // right shoulder
-      ..close();
-    canvas.drawPath(tail, Paint()..color = fill);
-    canvas.drawPath(
-      tail,
-      Paint()
-        ..color = border
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0,
-    );
-
-    // ── Bus Label Tag (Small label at the bottom) ──────────────────────────
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: GoogleFonts.plusJakartaSans(
-          color: isFocused ? const Color(0xFF1A4CFF) : Colors.white,
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
-        ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
-
-    final double tx = (w - textPainter.width) / 2;
-    final double ty = w / 2 - textPainter.height / 2;
-    
-    // We'll replace the chevron with the label if it's too crowded, 
-    // or just put it inside the circle if focused.
-    // For now, let's put it inside the circle and move the chevron.
-    
-    // Actually, let's just draw the label below the circle in a small bubble
-    final labelBgPaint = Paint()..color = border;
-    final labelRect = Rect.fromCenter(center: Offset(w/2, h - 10), width: textPainter.width + 12, height: textPainter.height + 4);
-    canvas.drawRRect(RRect.fromRectAndRadius(labelRect, const Radius.circular(6)), labelBgPaint);
-    textPainter.paint(canvas, Offset(w/2 - textPainter.width/2, h - 10 - textPainter.height/2));
 
     final ui.Image img = await rec.endRecording().toImage(w.toInt(), h.toInt());
     final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
@@ -330,11 +285,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     _markerAnimations[busId]?.dispose();
 
     final controller = AnimationController(
-      duration: const Duration(milliseconds: 1000), // Glide over 1 second
+      duration: const Duration(milliseconds: 2000), // 2s glide matches GPS update frequency
       vsync: this,
     );
 
-    final animation = CurvedAnimation(parent: controller, curve: Curves.linear);
+    final animation = CurvedAnimation(parent: controller, curve: Curves.easeInOut);
 
     controller.addListener(() {
       if (mounted) {
@@ -344,18 +299,31 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           final lng = start.longitude + (end.longitude - start.longitude) * t;
           _animatedPositions[busId] = LatLng(lat, lng);
           
-          // Simple rotation interpolation
+          // Smooth rotation interpolation (handles 0/360 boundary)
           double rotationDiff = endRotation - startRotation;
           if (rotationDiff > 180) rotationDiff -= 360;
           if (rotationDiff < -180) rotationDiff += 360;
           _animatedHeadings[busId] = startRotation + (rotationDiff * t);
         });
 
-        // Drive Mode: smoothly rotate & follow the bus with camera
+        // Follow bus with camera during animation
         if (_isFollowing) {
-          final bus = widget.buses.firstWhere((b) => b.id == busId, orElse: () => widget.buses.first);
-          final pos = _animatedPositions[busId]!;
-          _moveCameraToBus(bus, pos);
+          final idx = widget.buses.indexWhere((b) => b.id == busId);
+          if (idx != -1) {
+            _moveCameraToBus(widget.buses[idx], _animatedPositions[busId]!);
+          }
+        }
+      }
+    });
+
+    controller.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        // Ensure final position is exactly the target
+        if (mounted) {
+          setState(() {
+            _animatedPositions[busId] = end;
+            _animatedHeadings[busId] = endRotation;
+          });
         }
       }
     });
@@ -404,22 +372,38 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         zIndex: isFocused ? 2.0 : 1.0,
       );
 
-      // Stop markers (only when bus is focused or route selected)
+      // Stop markers — only show when route is selected AND stop has valid coordinates
       if (widget.selectedRoute != null) {
-        for (var i = 0; i < widget.selectedRoute!.stops.length; i++) {
-          final stop = widget.selectedRoute!.stops[i];
-          final stopId = 'stop_${stop['name']}';
-          final isLast = i == widget.selectedRoute!.stops.length - 1;
-          
-          newMarkers[stopId] = Marker(
-            markerId: MarkerId(stopId),
-            position: LatLng(stop['lat'], stop['lng']),
-            anchor: const Offset(0.5, 0.5),
-            icon: isLast ? (_lastStopIcon ?? BitmapDescriptor.defaultMarker) : (_stopIcon ?? BitmapDescriptor.defaultMarker),
-            alpha: 0.9,
-            infoWindow: InfoWindow(title: stop['name'], snippet: 'Bus Stop'),
-          );
+        final stops = widget.selectedRoute!.stops;
+        // Check if any stop actually has coordinates
+        final hasCoords = stops.any((s) => 
+          s['lat'] != null && s['lng'] != null &&
+          (s['lat'] as num) != 0 && (s['lng'] as num) != 0
+        );
+        
+        if (hasCoords) {
+          for (var i = 0; i < stops.length; i++) {
+            final stop = stops[i];
+            // Skip stops without valid coordinates
+            if (stop['lat'] == null || stop['lng'] == null) continue;
+            final lat = (stop['lat'] as num).toDouble();
+            final lng = (stop['lng'] as num).toDouble();
+            if (lat == 0 && lng == 0) continue;
+            
+            final stopId = 'stop_${stop['name']}';
+            final isLast = i == stops.length - 1;
+            
+            newMarkers[stopId] = Marker(
+              markerId: MarkerId(stopId),
+              position: LatLng(lat, lng),
+              anchor: const Offset(0.5, 0.5),
+              icon: isLast ? (_lastStopIcon ?? BitmapDescriptor.defaultMarker) : (_stopIcon ?? BitmapDescriptor.defaultMarker),
+              alpha: 0.9,
+              infoWindow: InfoWindow(title: stop['name'], snippet: 'Bus Stop'),
+            );
+          }
         }
+        // If no coordinates, show bus position only (no stop markers)
       }
 
       // Update trail
@@ -650,17 +634,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     _updateMarkers();
     _updatePolylines();
     _updateCircles();
-
-    if (_isFollowing && widget.buses.isNotEmpty) {
-      final activeBus = widget.buses.firstWhere(
-        (b) => widget.selectedRoute != null ? b.routeId == widget.selectedRoute!.id : true,
-        orElse: () => widget.buses.first,
-      );
-      final pos = _animatedPositions[activeBus.id] ?? LatLng(activeBus.currentLat, activeBus.currentLng);
-      _mapController?.animateCamera(
-        CameraUpdate.newLatLng(pos)
-      );
-    }
 
     return Stack(
       children: [
