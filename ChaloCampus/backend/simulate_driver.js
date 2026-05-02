@@ -6,7 +6,7 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_use
 
 async function runSimulation() {
     await mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' });
-    const bus = await Bus.findOne({ busNumber: "MP-04-P-0001" });
+    const bus = await Bus.findOne();
     if (!bus) {
         console.error('Bus not found! Seed first.');
         process.exit(1);
