@@ -731,176 +731,88 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('locationUpdate', async (data) => {
-        // ── Immediate arrival log (always visible, even on DB error) ──
+                socket.on('locationUpdate', async (data) => {
         const incomingBusId = (data.busId || data.id || data._id || '').toString();
-        const incomingSpeed = (data.speed !== undefined ? Number(data.speed) : 0).toFixed(1);
-        console.log(`\n📍 [LOCATION RECEIVED] BusID: ${incomingBusId} | Driver: ${data.driverId || 'N/A'} | Lat: ${data.latitude} | Lng: ${data.longitude} | Speed: ${incomingSpeed} KM/H`);
-
+        
         try {
-            let busId = incomingBusId;
-            if (!busId) {
-                console.log('⚠️ [LOCATION] No busId in payload — ignoring.');
-                return;
-            }
+            if (!incomingBusId) return;
 
-            let bus = await Bus.findById(busId);
+            const Bus = require('./models/Bus');
+            const Route = require('./models/Route');
             
-            // FALLBACK Logic
-            if (!bus && data.driverId) {
-                bus = await Bus.findOne({ driverId: data.driverId });
-                if (bus) {
-                    busId = bus._id.toString();
-                    console.log(`🔄 Fallback: Matched Driver ${data.driverId} to Bus ${busId}`);
+            let bus = await Bus.findById(incomingBusId);
+            
+            // SECURITY BLOCK: If the ID is from an old simulation, reject it.
+            if (!bus) {
+                if (data.driverId) bus = await Bus.findOne({ driverId: data.driverId });
+                if (!bus) {
+                    process.stdout.write('?? [SIM-BLOCK] Rejected Old/Simulation BusID: ' + incomingBusId + '\r');
+                    return;
                 }
             }
 
-            if (!bus) {
-                // Last resort broadcast of raw data, ensuring IDs are strings
-                const rawBroadcast = {
-                    ...data,
-                    id: busId,
-                    latitude: data.latitude !== undefined ? data.latitude : (data.currentLat !== undefined ? data.currentLat : 0),
-                    longitude: data.longitude !== undefined ? data.longitude : (data.currentLng !== undefined ? data.currentLng : 0),
-                    status: data.status || 'On-time'
-                };
-                // io.emit so ALL clients (driver + users) receive it
-                io.emit('busLocationUpdate', rawBroadcast);
-                return;
-            }
-
-            const etas = [];
             const lat = data.latitude !== undefined ? Number(data.latitude) : (data.currentLat !== undefined ? Number(data.currentLat) : bus.currentLat);
             const lng = data.longitude !== undefined ? Number(data.longitude) : (data.currentLng !== undefined ? Number(data.currentLng) : bus.currentLng);
             const speed = data.speed !== undefined ? Number(data.speed) : (bus.speed || 0);
             const heading = data.heading !== undefined ? Number(data.heading) : (bus.heading || 0);
 
-            // Perform Geofencing & ETA calculation if route is known
+            console.log(`📍 [REAL-TIME] Bus: ${bus.busNumber} | Speed: ${speed.toFixed(1)} KM/H`);
+
+            // Update DB
+            bus.currentLat = lat;
+            bus.currentLng = lng;
+            bus.speed = speed;
+            bus.heading = heading;
+            bus.lastUpdated = new Date();
+            
+            // Calculate ETAs and Geofencing
+            const etas = [];
             if (bus.routeId) {
                 const route = await Route.findById(bus.routeId);
                 if (route && route.stops) {
                     for (const stop of route.stops) {
-                        // Skip stops without valid coordinates to prevent NaN errors
-                        if (!stop.lat || !stop.lng) {
-                            etas.push({ stopName: stop.name, minutes: 0 });
-                            continue;
-                        }
+                        if (stop.lat && stop.lng) {
+                            const minutes = calculateETA(lat, lng, stop.lat, stop.lng, speed);
+                            etas.push({ stopName: stop.name, minutes });
 
-                        const R = 6371; // km
-                        const dLat = (stop.lat - lat) * Math.PI / 180;
-                        const dLon = (stop.lng - lng) * Math.PI / 180;
-                        const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-                            Math.cos(lat * Math.PI / 180) * Math.cos(stop.lat * Math.PI / 180) *
-                            Math.sin(dLon / 2) * Math.sin(dLon / 2);
-                        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-                        const distanceKm = R * c;
+                            // GEOFENCE LOGIC
+                            const R = 6371;
+                            const dLat = (stop.lat - lat) * Math.PI / 180;
+                            const dLon = (stop.lng - lng) * Math.PI / 180;
+                            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                                Math.cos(lat * Math.PI / 180) * Math.cos(stop.lat * Math.PI / 180) *
+                                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                            const distanceKm = R * c;
 
-                        const minutes = calculateETA(lat, lng, stop.lat, stop.lng, speed);
-                        
-                        // Geofence Notification logic
-                        if (distanceKm <= GEOFENCE_RADIUS_KM) {
-                            if (!busGeofenceState[busId]) busGeofenceState[busId] = {};
-                            const now = Date.now();
-                            const lastNotified = busGeofenceState[busId][stop.name] || 0;
-                            
-                            if (now - lastNotified > COOLDOWN_MS) {
-                                busGeofenceState[busId][stop.name] = now;
-                                const alertMessage = `Pulse Alert: Your bus is arriving in ${minutes} minutes.`;
+                            if (distanceKm <= 1.5) { // 1.5km radius
                                 io.emit('busApproachingStop', {
-                                    busId: busId,
-                                    routeId: route._id.toString(),
-                                    routeName: route.name,
+                                    busId: bus._id.toString(),
                                     stopName: stop.name,
-                                    minutes: minutes,
-                                    message: alertMessage
+                                    minutes: minutes
                                 });
-                                console.log(`📍 Geofence Alert: ${alertMessage}`);
                             }
+                        } else {
+                            etas.push({ stopName: stop.name, minutes: 0 });
                         }
-                        etas.push({ stopName: stop.name, minutes: minutes });
                     }
                 }
             }
+            bus.etas = etas;
+            await bus.save();
 
-            // ── ATOMIC UPDATE: findByIdAndUpdate avoids Mongoose version conflicts ──
-            // bus.save() causes "No matching document found for id ... version XXX" errors
-            // when rapid concurrent updates (1/sec from driver) hit the DB simultaneously.
-            // findByIdAndUpdate is atomic — it never conflicts on __v versioning.
-            const updatedBus = await Bus.findByIdAndUpdate(
-                busId,
-                {
-                    $set: {
-                        currentLat: lat,
-                        currentLng: lng,
-                        speed: speed,
-                        heading: heading,
-                        status: data.status || 'On-time',
-                        etas: etas,
-                        lastUpdated: new Date(),
-                    }
-                },
-                { new: true }
-            );
+            // Broadcast real device data only
+            io.emit('busLocationUpdate', bus);
 
-            if (!updatedBus) {
-                console.log(`⚠️ [TRACKING] Bus ${busId} not found during update — skipping broadcast.`);
-                return;
-            }
-
-            // Build broadcast payload with BOTH naming conventions so any client version works
-            const broadcastData = {
-                id: updatedBus._id.toString(),
-                _id: updatedBus._id.toString(),
-                busNumber: updatedBus.busNumber,
-                name: updatedBus.name,
-                routeId: updatedBus.routeId ? updatedBus.routeId.toString() : null,
-                routeName: updatedBus.routeName,
-                routeColor: updatedBus.routeColor,
-                latitude: lat,
-                longitude: lng,
-                currentLat: lat,
-                currentLng: lng,
-                speed: speed,
-                heading: heading,
-                status: updatedBus.status,
-                occupancy: updatedBus.occupancy || 'Low',
-                etas: etas,
-                lastUpdated: updatedBus.lastUpdated.toISOString(),
-                timestamp: new Date().toISOString(),
-            };
-
-            // io.emit broadcasts to ALL connected clients (driver + users watching map)
-            io.emit('busLocationUpdate', broadcastData);
-            console.log(`✅ [LIVE] Bus ${updatedBus.busNumber || updatedBus.routeName || busId} | ${updatedBus.status} | ${speed.toFixed(1)} KM/H | ${io.engine.clientsCount} clients notified`);
         } catch (err) {
-            console.error('❌ [TRACKING ERROR] locationUpdate handler failed:', err.message);
-            socket.emit('trackingError', { message: err.message });
+            console.error('? [TRACKING ERROR]:', err.message);
         }
     });
-
-    // ── Manager Broadcast via socket ─────────────────────────────────────────
-    socket.on('managerBroadcast', async (data) => {
-        const message = data?.message || data?.toString() || '';
-        if (!message) return;
-        try {
-            const newNotification = new Notification({ message, type: data.type || 'info' });
-            await newNotification.save();
-            socket.broadcast.emit('notification', newNotification);
-            socket.broadcast.emit('systemAlert', { message, type: data.type || 'info', timestamp: new Date().toISOString() });
-            console.log(`📢 [Socket Broadcast] "${message}"`);
-        } catch (_e) {
-            socket.broadcast.emit('systemAlert', { message, type: 'info', timestamp: new Date().toISOString() });
-        }
-    });
-
-    // ── Latency ping/pong ────────────────────────────────────────────────────
     socket.on('ping', () => socket.emit('pong'));
-
-    socket.on('disconnect', () => {
-
-        console.log('Clients disconnected');
-    });
+    socket.on('disconnect', () => { console.log('Client disconnected'); });
 });
+
+
 
 // --- SEED DATABASE ROUTE ---
 app.post('/api/manager/seed', async (req, res) => {
@@ -1607,4 +1519,7 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
     console.log(`📡 Socket.io ready for connections`);
 });
+
+
+
 
