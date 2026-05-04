@@ -169,8 +169,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _positionStream = Geolocator.getPositionStream(
       locationSettings: AndroidSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 0,          // Get EVERY update — no distance filter for real-time
-        intervalDuration: const Duration(seconds: 2), // at least every 2 seconds
+        distanceFilter: 2,          // Only update if moved at least 2 meters
+        intervalDuration: const Duration(seconds: 3), // Update at most every 3 seconds
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'ChaloCampus Tracking',
           notificationText: 'Broadcasting your location to students',
@@ -364,8 +364,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Driver Dashboard',
-                            style: TextStyle(
+                            'DRIVER INTERFACE',
+                            style: GoogleFonts.plusJakartaSans(
                               color: Colors.white,
                               fontSize: 12,
                               fontWeight: FontWeight.w900,
@@ -378,11 +378,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
                               _buildSignalStrength(isConnected),
                               const SizedBox(width: 8),
                               Text(
-                                isConnected ? 'Connected' : 'SYNCHRONIZING...',
-                                style: TextStyle(
+                                isConnected ? 'Secured Connection' : 'SYNCHRONIZING...',
+                                style: GoogleFonts.plusJakartaSans(
                                   color: isConnected ? Colors.blueAccent : Colors.redAccent,
                                   fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 1,
                                 ),
                               ),
                             ],
@@ -476,8 +477,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Driver Status', style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
-            Text(user?.username.toUpperCase() ?? 'CAPTAIN', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
+            Text('Driver Status', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
+            Text(user?.username.toUpperCase() ?? 'CAPTAIN', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: -0.5)),
           ],
         ),
       ],
@@ -520,75 +521,80 @@ class _DriverDashboardState extends State<DriverDashboard> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('SPEEDOMETER', style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 2)),
-                  const SizedBox(height: 6),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      AnimatedDefaultTextStyle(
-                        duration: const Duration(milliseconds: 300),
-                        style: TextStyle(color: _isOnline ? sColor : Colors.white38, fontSize: 64, fontWeight: FontWeight.w900, letterSpacing: -2),
-                        child: Text(_speedKmH.toStringAsFixed(1)),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12, left: 8),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('KM/H', style: TextStyle(color: sColor, fontSize: 13, fontWeight: FontWeight.w900)),
-                            const SizedBox(height: 2),
-                            AnimatedContainer(
-                              duration: const Duration(milliseconds: 400),
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                              decoration: BoxDecoration(
-                                color: sColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: sColor.withValues(alpha: 0.3)),
-                              ),
-                              child: Text(
-                                _speedCategory(_speedKmH),
-                                style: TextStyle(color: sColor, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 1),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_currentPosition != null) ...[
-                    const SizedBox(height: 4),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('SPEEDOMETER', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 2)),
+                    const SizedBox(height: 6),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        Icon(Icons.my_location_rounded, color: Colors.white24, size: 10),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}',
-                          style: const TextStyle(color: Colors.white24, fontSize: 9, fontFamily: 'monospace'),
+                        AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 300),
+                          style: GoogleFonts.plusJakartaSans(color: _isOnline ? sColor : Colors.white38, fontSize: 64, fontWeight: FontWeight.w900, letterSpacing: -2),
+                          child: Text(_speedKmH.toStringAsFixed(1)),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 12, left: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('KM/H', style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 13, fontWeight: FontWeight.w900)),
+                              const SizedBox(height: 2),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 400),
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: sColor.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: sColor.withValues(alpha: 0.3)),
+                                ),
+                                child: Text(
+                                  _speedCategory(_speedKmH),
+                                  style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 1),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
-                    if (_currentPosition!.accuracy > 0) ...[
-                      const SizedBox(height: 2),
+                    if (_currentPosition != null) ...[
+                      const SizedBox(height: 4),
                       Row(
                         children: [
-                          Icon(Icons.gps_fixed_rounded, color: Colors.white24, size: 10),
+                          Icon(Icons.my_location_rounded, color: Colors.white24, size: 10),
                           const SizedBox(width: 4),
-                          Text(
-                            'GPS ±${_currentPosition!.accuracy.toStringAsFixed(0)}m',
-                            style: TextStyle(
-                              color: _currentPosition!.accuracy < 10 ? const Color(0xFF00C853) : Colors.orangeAccent,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
+                          Expanded(
+                            child: Text(
+                              '${_currentPosition!.latitude.toStringAsFixed(5)}, ${_currentPosition!.longitude.toStringAsFixed(5)}',
+                              style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
+                      if (_currentPosition!.accuracy > 0) ...[
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.gps_fixed_rounded, color: Colors.white24, size: 10),
+                            const SizedBox(width: 4),
+                            Text(
+                              'GPS ±${_currentPosition!.accuracy.toStringAsFixed(0)}m',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: _currentPosition!.accuracy < 10 ? const Color(0xFF00C853) : Colors.orangeAccent,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ],
-                ],
+                ),
               ),
               _buildLiveIndicator(),
             ],

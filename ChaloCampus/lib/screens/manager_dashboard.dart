@@ -12,6 +12,8 @@ import '../services/bus_store.dart';
 import '../components/bus_map.dart';
 import 'registration_manager_screen.dart';
 
+import 'package:url_launcher/url_launcher.dart';
+
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
 
@@ -65,6 +67,28 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       _busStore.seedNotifications(data as List);
     } catch (e) {
       debugPrint('Notification history load failed: $e');
+    }
+  }
+
+  Future<void> _downloadReport({String? busId}) async {
+    final uri = busId != null 
+        ? 'https://smart-shuttle-backend-2h13.onrender.com/api/manager/reports/bus-trip-report?busId=$busId'
+        : 'https://smart-shuttle-backend-2h13.onrender.com/api/manager/reports/bus-trip-report';
+        
+    final url = Uri.parse(uri);
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Downloading ${busId != null ? 'Bus' : 'Fleet'} Report...'), backgroundColor: Colors.blueAccent),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to open report download link'), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -237,6 +261,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           ),
                           Row(
                             children: [
+                              _buildAppBarAction(Icons.download_rounded, _downloadReport),
                               _buildAppBarAction(Icons.auto_awesome_rounded, _seedDatabase),
                               _buildAppBarAction(Icons.logout_rounded, () {
                                  Provider.of<AuthService>(context, listen: false).logout();
@@ -295,7 +320,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         ),
                                         child: Text(
                                           '${store.unreadCount > 9 ? '9+' : store.unreadCount}',
-                                          style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900),
+                                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900),
                                         ),
                                       ),
                                     ),
@@ -469,7 +494,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               ],
                             ),
                           ),
-                          _buildActionButton(Icons.tune_rounded, () => _showBusActionDialog(bus)),
+                          Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildActionButton(Icons.download_rounded, () => _downloadReport(busId: bus.id)),
+                              const SizedBox(height: 8),
+                              _buildActionButton(Icons.tune_rounded, () => _showBusActionDialog(bus)),
+                            ],
+                          ),
                         ],
                       ),
                     ).animate().fadeIn(delay: (index * 100).ms).slideY(begin: 0.2);

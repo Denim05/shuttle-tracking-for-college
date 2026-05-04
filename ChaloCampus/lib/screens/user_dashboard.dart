@@ -379,7 +379,7 @@ class _UserDashboardState extends State<UserDashboard> {
                 children: [
                   Text(
                     'Shuttle Tracker',
-                    style: TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontSize: 10,
                       fontWeight: FontWeight.w900,
@@ -409,7 +409,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       Flexible(
                         child: Text(
                           _selectedRoute?.name ?? 'Tap ⇄ to select route',
-                          style: TextStyle(
+                          style: GoogleFonts.plusJakartaSans(
                             color: _selectedRoute != null ? Colors.blueAccent : Colors.white30,
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -485,10 +485,10 @@ class _UserDashboardState extends State<UserDashboard> {
                 Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)))),
                 const SizedBox(height: 35),
                 if (_selectedRoute == null) ...[
-                   Text('Home', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
+                   Text('Home', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
                    const SizedBox(height: 8),
-                   Text('Ready for Departure', style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
-                   Text('Select a route to track your transit.', style: TextStyle(fontSize: 13, color: Colors.white38, height: 1.5)),
+                   Text('Ready for Departure', style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
+                   Text('Select a route to track your transit.', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.white38, height: 1.5)),
                    const SizedBox(height: 40),
                    _buildActionCard('Active Fleet Radar', 'View all shuttle locations', Icons.radar_rounded, () {
                      Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetRadarScreen()));
@@ -503,7 +503,7 @@ class _UserDashboardState extends State<UserDashboard> {
                          child: Column(
                            crossAxisAlignment: CrossAxisAlignment.start,
                            children: [
-                             Text(_selectedRoute!.name, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white), overflow: TextOverflow.ellipsis),
+                             Text(_selectedRoute!.name, style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white), overflow: TextOverflow.ellipsis),
                              const SizedBox(height: 6),
                              Row(
                                children: [
@@ -517,17 +517,17 @@ class _UserDashboardState extends State<UserDashboard> {
                                      ),
                                    ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.4, 1.4)),
                                    const SizedBox(width: 6),
-                                   const Text('LIVE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFF00C853), letterSpacing: 2)),
+                                   Text('LIVE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: const Color(0xFF00C853), letterSpacing: 2)),
                                    const SizedBox(width: 10),
                                    if (_activeBus!.speed > 0) ...[
                                      const Icon(Icons.speed_rounded, color: Colors.blueAccent, size: 11),
                                      const SizedBox(width: 3),
-                                     Text('${_activeBus!.speed.toInt()} KM/H', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.blueAccent, letterSpacing: 1)),
+                                     Text('${_activeBus!.speed.toInt()} KM/H', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.blueAccent, letterSpacing: 1)),
                                    ],
                                  ] else ...[
                                    Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle)),
                                    const SizedBox(width: 6),
-                                   const Text('OFFLINE', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)),
+                                   Text('OFFLINE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)),
                                  ],
                                ],
                              ),
@@ -559,7 +559,7 @@ class _UserDashboardState extends State<UserDashboard> {
                                  const SizedBox(width: 4),
                                  Text(
                                    isRecent ? 'TRACKING' : 'WAITING',
-                                   style: TextStyle(
+                                   style: GoogleFonts.plusJakartaSans(
                                      color: isRecent ? const Color(0xFF00C853) : Colors.white24,
                                      fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1,
                                    ),

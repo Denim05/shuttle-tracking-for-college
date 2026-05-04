@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/auth_service.dart';
@@ -109,7 +110,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         elevation: 0,
         title: Text(
           'Admin Panel', 
-          style: TextStyle(
+          style: GoogleFonts.plusJakartaSans(
             fontWeight: FontWeight.w900, 
             letterSpacing: 3, 
             color: Colors.white,
@@ -144,7 +145,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     child: Center(
                       child: Text(
                         '📡 Connecting...',
-                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                       ),
                     ),
                   ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -216,7 +217,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             children: [
               Text(
                 'CHALO CAMPUS',
-                style: TextStyle(
+                style: GoogleFonts.plusJakartaSans(
                   color: Colors.white,
                   fontSize: 12,
                   fontWeight: FontWeight.w900,
@@ -231,7 +232,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
                   ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
                   const SizedBox(width: 8),
-                  Text('SYSTEM ACTIVE', style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                  Text('SYSTEM ACTIVE', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
                 ],
               ),
             ],
@@ -311,7 +312,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   fit: BoxFit.scaleDown,
                   child: Text(
                     value, 
-                    style: TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       fontSize: 24, 
                       color: Colors.white, 
                       fontWeight: FontWeight.w900,
@@ -323,7 +324,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   label, 
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white38, 
                     fontSize: 7.5, 
                     fontWeight: FontWeight.w900, 
@@ -341,7 +342,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Widget _buildSectionHeader(String title) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 16, left: 4),
-      child: Text(title, style: TextStyle(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2.5)),
+      child: Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2.5)),
     );
   }
 
@@ -368,7 +369,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
             ),
             child: Icon(icon, color: color, size: 22),
           ),
-          title: Text(title.toUpperCase(), style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1)),
+          title: Text(title.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: 1)),
           trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white10, size: 16),
         ),
       ),
@@ -417,7 +418,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
               const SizedBox(width: 20),
               Text(
                 service.toUpperCase(), 
-                style: TextStyle(
+                style: GoogleFonts.plusJakartaSans(
                   color: Colors.white70, 
                   fontWeight: FontWeight.w900, 
                   fontSize: 13,
@@ -428,7 +429,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
           Text(
             isHealthy ? 'OK' : 'ISSUE', 
-            style: TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               color: color,
               fontSize: 10, 
               fontWeight: FontWeight.w900, 
@@ -440,4 +441,5 @@ class _AdminDashboardState extends State<AdminDashboard> {
     ).animate().fadeIn(delay: 400.ms).slideX(begin: 0.1);
   }
 }
+
 

@@ -148,7 +148,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ).animate().fadeIn(delay: 200.ms),
                   
                   Text(
-                    'SHUTTLE TRACKER',
+                    'Track Your Bus In Real Time',
                     style: GoogleFonts.plusJakartaSans(
                       fontSize: 12,
                       fontWeight: FontWeight.w800,
