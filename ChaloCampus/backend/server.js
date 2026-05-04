@@ -499,20 +499,58 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
         const Route = require('./models/Route');
         const Bus = require('./models/Bus');
         
-        const routes = await Route.find();
-        const buses = await Bus.find();
-        
+        const { busId } = req.query;
         let csvContent = 'Date,Bus ID,Route Name,Driver,Start Time,End Time,Average Speed (KM/H),Max Speed (KM/H),Stops Covered,Passenger Count\n';
         
-        // Generate a simulated report based on available active routes and buses
+        if (busId) {
+            // Generate a detailed 30-day report for a SINGLE bus
+            const bus = await Bus.findById(busId);
+            if (!bus) return res.status(404).json({ error: 'Bus not found' });
+            
+            const route = await Route.findById(bus.routeId);
+            const routeName = route ? route.name : (bus.routeName || 'Unassigned');
+            const driver = 'Assigned Driver'; 
+            
+            // Generate last 30 days of simulated data for this bus
+            for (let i = 0; i < 30; i++) {
+                const reportDate = new Date();
+                reportDate.setDate(reportDate.getDate() - i);
+                const dateStr = reportDate.toLocaleDateString();
+                
+                // Skip weekends roughly (if Saturday/Sunday)
+                if (reportDate.getDay() === 0 || reportDate.getDay() === 6) continue;
+                
+                const startTime = new Date(reportDate);
+                startTime.setHours(7, Math.floor(Math.random() * 30), 0);
+                const endTime = new Date(startTime);
+                endTime.setHours(startTime.getHours() + 1, Math.floor(Math.random() * 59), 0);
+                
+                const avgSpeed = (25 + Math.random() * 15).toFixed(1);
+                const maxSpeed = (parseFloat(avgSpeed) + 15 + Math.random() * 10).toFixed(1);
+                const stopsCovered = route ? route.stops.length : Math.floor(Math.random() * 10 + 5);
+                const passengerCount = Math.floor(Math.random() * 40 + 20); // 20 to 60
+                
+                const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                
+                csvContent += `"${dateStr}","${bus.id}","${routeName}","${driver}","${startStr}","${endStr}","${avgSpeed}","${maxSpeed}","${stopsCovered}","${passengerCount}"\n`;
+            }
+            
+            res.setHeader('Content-Type', 'text/csv');
+            res.setHeader('Content-Disposition', `attachment; filename="bus_${busId}_report.csv"`);
+            return res.status(200).send(csvContent);
+        }
+
+        // Default: Generate today's report for ALL buses
+        const routes = await Route.find();
+        const buses = await Bus.find();
         const today = new Date().toLocaleDateString();
         
         for (const bus of buses) {
             const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
             const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            const driver = 'Assigned Driver'; // Placeholder as driver relation might be complex
+            const driver = 'Assigned Driver';
             
-            // Generate realistic random data for the report
             const startTime = new Date();
             startTime.setHours(7, Math.floor(Math.random() * 30), 0);
             const endTime = new Date(startTime);
@@ -523,7 +561,6 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
             const stopsCovered = route ? route.stops.length : Math.floor(Math.random() * 10 + 5);
             const passengerCount = Math.floor(Math.random() * 40 + 10);
             
-            // Format time strings
             const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
             
