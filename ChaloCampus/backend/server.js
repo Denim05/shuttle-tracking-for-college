@@ -681,14 +681,16 @@ io.on('connection', (socket) => {
                     longitude: data.longitude !== undefined ? data.longitude : (data.currentLng !== undefined ? data.currentLng : 0),
                     status: data.status || 'On-time'
                 };
-                socket.broadcast.emit('busLocationUpdate', rawBroadcast);
+                // io.emit so ALL clients (driver + users) receive it
+                io.emit('busLocationUpdate', rawBroadcast);
                 return;
             }
 
             const etas = [];
-            const lat = data.latitude !== undefined ? data.latitude : (data.currentLat !== undefined ? data.currentLat : bus.currentLat);
-            const lng = data.longitude !== undefined ? data.longitude : (data.currentLng !== undefined ? data.currentLng : bus.currentLng);
-            const speed = data.speed !== undefined ? data.speed : bus.speed;
+            const lat = data.latitude !== undefined ? Number(data.latitude) : (data.currentLat !== undefined ? Number(data.currentLat) : bus.currentLat);
+            const lng = data.longitude !== undefined ? Number(data.longitude) : (data.currentLng !== undefined ? Number(data.currentLng) : bus.currentLng);
+            const speed = data.speed !== undefined ? Number(data.speed) : (bus.speed || 0);
+            const heading = data.heading !== undefined ? Number(data.heading) : (bus.heading || 0);
 
             // Perform Geofencing & ETA calculation if route is known
             if (bus.routeId) {
@@ -737,36 +739,59 @@ io.on('connection', (socket) => {
                 }
             }
 
-            // Update Database
-            bus.currentLat = lat;
-            bus.currentLng = lng;
-            bus.speed = speed;
-            bus.heading = data.heading !== undefined ? data.heading : bus.heading;
-            bus.status = data.status || "On-time";
-            bus.etas = etas;
-            bus.lastUpdated = new Date();
-            await bus.save();
+            // ── ATOMIC UPDATE: findByIdAndUpdate avoids Mongoose version conflicts ──
+            // bus.save() causes "No matching document found for id ... version XXX" errors
+            // when rapid concurrent updates (1/sec from driver) hit the DB simultaneously.
+            // findByIdAndUpdate is atomic — it never conflicts on __v versioning.
+            const updatedBus = await Bus.findByIdAndUpdate(
+                busId,
+                {
+                    $set: {
+                        currentLat: lat,
+                        currentLng: lng,
+                        speed: speed,
+                        heading: heading,
+                        status: data.status || 'On-time',
+                        etas: etas,
+                        lastUpdated: new Date(),
+                    }
+                },
+                { new: true }
+            );
 
-            // Broadcast standardized data (CRITICAL: Normalize IDs to Strings)
-            const busObj = bus.toObject();
+            if (!updatedBus) {
+                console.log(`⚠️ [TRACKING] Bus ${busId} not found during update — skipping broadcast.`);
+                return;
+            }
+
+            // Build broadcast payload with BOTH naming conventions so any client version works
             const broadcastData = {
-                ...busObj,
-                id: bus._id.toString(),
-                _id: bus._id.toString(),
-                routeId: bus.routeId ? bus.routeId.toString() : null,
-                latitude: bus.currentLat,
-                longitude: bus.currentLng,
-                status: bus.status,
-                timestamp: new Date().toISOString()
+                id: updatedBus._id.toString(),
+                _id: updatedBus._id.toString(),
+                busNumber: updatedBus.busNumber,
+                name: updatedBus.name,
+                routeId: updatedBus.routeId ? updatedBus.routeId.toString() : null,
+                routeName: updatedBus.routeName,
+                routeColor: updatedBus.routeColor,
+                latitude: lat,
+                longitude: lng,
+                currentLat: lat,
+                currentLng: lng,
+                speed: speed,
+                heading: heading,
+                status: updatedBus.status,
+                occupancy: updatedBus.occupancy || 'Low',
+                etas: etas,
+                lastUpdated: updatedBus.lastUpdated.toISOString(),
+                timestamp: new Date().toISOString(),
             };
 
-            // io.emit broadcasts to ALL connected clients (including users watching the map)
-            // socket.broadcast would exclude the sender — we want everyone to see it
+            // io.emit broadcasts to ALL connected clients (driver + users watching map)
             io.emit('busLocationUpdate', broadcastData);
-            console.log(`✅ [TRACKING SAVED] Bus ${bus.busNumber || bus.routeName || busId} | ${bus.status} | Speed: ${speed.toFixed(1)} KM/H | Route: ${bus.routeName || 'None'} | Broadcasting to all ${io.engine.clientsCount} clients`);
+            console.log(`✅ [LIVE] Bus ${updatedBus.busNumber || updatedBus.routeName || busId} | ${updatedBus.status} | ${speed.toFixed(1)} KM/H | ${io.engine.clientsCount} clients notified`);
         } catch (err) {
             console.error('❌ [TRACKING ERROR] locationUpdate handler failed:', err.message);
-            socket.emit('trackingError', { message: err.message, stack: err.stack });
+            socket.emit('trackingError', { message: err.message });
         }
     });
 
