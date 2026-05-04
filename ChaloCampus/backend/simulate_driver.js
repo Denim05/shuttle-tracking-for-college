@@ -23,6 +23,11 @@ async function runSimulation() {
         socket.on('busLocationUpdate', (data) => {
             console.log(`📥 Received broadcast from Render backend for Bus ${data.id}`);
         });
+
+        socket.on('trackingError', (err) => {
+            console.error('🚨 RENDER CRASHED:', err.message);
+            console.error(err.stack);
+        });
         
         let lat = 23.2333;
         let speed = 25;

@@ -766,6 +766,7 @@ io.on('connection', (socket) => {
             console.log(`✅ [TRACKING SAVED] Bus ${bus.busNumber || bus.routeName || busId} | ${bus.status} | Speed: ${speed.toFixed(1)} KM/H | Route: ${bus.routeName || 'None'} | Broadcasting to all ${io.engine.clientsCount} clients`);
         } catch (err) {
             console.error('❌ [TRACKING ERROR] locationUpdate handler failed:', err.message);
+            socket.emit('trackingError', { message: err.message, stack: err.stack });
         }
     });
 
