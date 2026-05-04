@@ -15,10 +15,14 @@ async function runSimulation() {
     console.log(`🔍 Found Bus ID: ${busId}`);
     await mongoose.disconnect();
 
-    const socket = io('http://localhost:5000');
+    const socket = io('https://smart-shuttle-backend-2h13.onrender.com');
 
     socket.on('connect', () => {
-        console.log('✅ Connected to server as simulation');
+        console.log('✅ Connected to production server as simulation');
+        
+        socket.on('busLocationUpdate', (data) => {
+            console.log(`📥 Received broadcast from Render backend for Bus ${data.id}`);
+        });
         
         let lat = 23.2333;
         let speed = 25;
@@ -38,13 +42,6 @@ async function runSimulation() {
                 status: 'On-time'
             });
         }, 2000);
-
-        setTimeout(() => {
-            clearInterval(interval);
-            console.log('🛑 Simulation finished');
-            socket.disconnect();
-            process.exit(0);
-        }, 12000);
     });
 
     socket.on('connect_error', (err) => {

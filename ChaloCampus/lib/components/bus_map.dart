@@ -485,8 +485,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     final Set<Circle> newCircles = {};
     if (_focusedBus != null) {
       final pos = _animatedPositions[_focusedBus!.id] ?? LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng);
-      final pulse = (ui.window.viewConfiguration.devicePixelRatio > 0) ? (1.0 + 0.2 * ui.window.viewConfiguration.devicePixelRatio) : 1.0; // dummy math
-      
       // Use the polyline flow offset for a pulsing effect
       final radius = 15.0 + (_polylineOffset / 2); 
 
@@ -669,7 +667,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           tiltGesturesEnabled: true,
           buildingsEnabled: true,
           trafficEnabled: true,
-          indoorEnabled: true,
           onTap: (_) => setState(() => _focusedBus = null),
         ),
         Positioned(
