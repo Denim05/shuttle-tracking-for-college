@@ -284,3 +284,4 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     );
   }
 }
+

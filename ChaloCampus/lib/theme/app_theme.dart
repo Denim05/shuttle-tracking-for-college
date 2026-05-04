@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 
 // ─── Color Tokens ────────────────────────────────────────────────────────────
@@ -168,7 +169,7 @@ class AppDecorations {
 class AppTextStyles {
   AppTextStyles._();
 
-  static TextStyle get displayLarge => TextStyle(
+  static TextStyle get displayLarge => GoogleFonts.plusJakartaSans(
     fontSize  : 40,
     fontWeight: FontWeight.w900,
     color     : AppColors.text,
@@ -176,53 +177,53 @@ class AppTextStyles {
     height    : 1.1,
   );
 
-  static TextStyle get displayMedium => TextStyle(
+  static TextStyle get displayMedium => GoogleFonts.plusJakartaSans(
     fontSize  : 30,
     fontWeight: FontWeight.w800,
     color     : AppColors.text,
     letterSpacing: -0.5,
   );
 
-  static TextStyle get headlineLarge => TextStyle(
+  static TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
     fontSize  : 22,
     fontWeight: FontWeight.w700,
     color     : AppColors.text,
   );
 
-  static TextStyle get headlineMedium => TextStyle(
+  static TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(
     fontSize  : 18,
     fontWeight: FontWeight.w700,
     color     : AppColors.text,
   );
 
-  static TextStyle get headlineSmall => TextStyle(
+  static TextStyle get headlineSmall => GoogleFonts.plusJakartaSans(
     fontSize  : 15,
     fontWeight: FontWeight.w600,
     color     : AppColors.text,
   );
 
-  static TextStyle get bodyLarge => TextStyle(
+  static TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
     fontSize  : 15,
     fontWeight: FontWeight.w400,
     color     : AppColors.textSecondary,
     height    : 1.6,
   );
 
-  static TextStyle get bodyMedium => TextStyle(
+  static TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
     fontSize  : 13,
     fontWeight: FontWeight.w400,
     color     : AppColors.textSecondary,
     height    : 1.5,
   );
 
-  static TextStyle get label => TextStyle(
+  static TextStyle get label => GoogleFonts.plusJakartaSans(
     fontSize  : 11,
     fontWeight: FontWeight.w700,
     color     : AppColors.textMuted,
     letterSpacing: 2.0,
   );
 
-  static TextStyle get caption => TextStyle(
+  static TextStyle get caption => GoogleFonts.plusJakartaSans(
     fontSize  : 10,
     fontWeight: FontWeight.w500,
     color     : AppColors.textMuted,
@@ -271,9 +272,9 @@ class AppTheme {
       ),
       filled   : true,
       fillColor: Colors.white.withValues(alpha: 0.03),
-      hintStyle: TextStyle(color: AppColors.textMuted),
-      labelStyle: TextStyle(color: AppColors.textSecondary),
-      errorStyle: TextStyle(color: AppColors.danger, fontSize: 11),
+      hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
+      labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary),
+      errorStyle: GoogleFonts.plusJakartaSans(color: AppColors.danger, fontSize: 11),
     ),
     elevatedButtonTheme: ElevatedButtonThemeData(
       style: ElevatedButton.styleFrom(
@@ -284,7 +285,7 @@ class AppTheme {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
-        textStyle: TextStyle(
+        textStyle: GoogleFonts.plusJakartaSans(
           fontSize  : 15,
           fontWeight: FontWeight.w700,
           letterSpacing: 0.5,
@@ -294,12 +295,12 @@ class AppTheme {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.primary,
-        textStyle: TextStyle(fontWeight: FontWeight.w600),
+        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surface,
-      contentTextStyle: TextStyle(color: AppColors.text),
+      contentTextStyle: GoogleFonts.plusJakartaSans(color: AppColors.text),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(AppRadius.sm),
         side: BorderSide(color: AppColors.border),
@@ -312,14 +313,14 @@ class AppTheme {
     ),
     chipTheme: ChipThemeData(
       backgroundColor: AppColors.surface,
-      labelStyle     : TextStyle(color: AppColors.text, fontSize: 12),
+      labelStyle     : GoogleFonts.plusJakartaSans(color: AppColors.text, fontSize: 12),
       side           : BorderSide(color: AppColors.border),
     ),
     appBarTheme: AppBarTheme(
       backgroundColor: Colors.transparent,
       elevation      : 0,
       centerTitle    : true,
-      titleTextStyle : TextStyle(
+      titleTextStyle : GoogleFonts.plusJakartaSans(
         color       : AppColors.text,
         fontSize    : 16,
         fontWeight  : FontWeight.w800,
@@ -337,3 +338,4 @@ class AppTheme {
     ),
   );
 }
+

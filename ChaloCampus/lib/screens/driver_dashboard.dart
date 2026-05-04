@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -76,7 +77,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   Expanded(
                     child: Text(
                       data['message'],
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13),
                     ),
                   ),
                 ],
@@ -101,10 +102,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
       final response = await _apiService.get('drivers/my-bus');
       if (!mounted) return;
       setState(() {
-        _buses = [response]; // Put in list for compat with existing UI if needed
         _selectedBusId = response['_id'];
         _fetchRouteDetails(response['routeId']);
       });
+      _fetchAllBuses();
     } catch (e) {
       if (!mounted) return;
       debugPrint('Error fetching my bus: $e');
@@ -169,8 +170,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _positionStream = Geolocator.getPositionStream(
       locationSettings: AndroidSettings(
         accuracy: LocationAccuracy.bestForNavigation,
-        distanceFilter: 2,          // Only update if moved at least 2 meters
-        intervalDuration: const Duration(seconds: 3), // Update at most every 3 seconds
+        distanceFilter: 0,
+        intervalDuration: const Duration(milliseconds: 800),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
           notificationTitle: 'ChaloCampus Tracking',
           notificationText: 'Broadcasting your location to students',
@@ -300,20 +301,23 @@ class _DriverDashboardState extends State<DriverDashboard> {
               // Background Map — always visible, centered on driver GPS
               _selectedRoute != null
                   ? BusMap(
-                      buses: [
-                        Bus(
-                          id: _selectedBusId ?? 'driver',
-                          routeId: _selectedRoute!.id,
-                          routeName: _selectedRoute!.name,
-                          routeColor: _selectedRoute!.color,
-                          currentLat: _currentPosition?.latitude ?? 23.1270,
-                          currentLng: _currentPosition?.longitude ?? 77.3494,
-                          heading: _currentPosition?.heading ?? 0.0,
-                          speed: _speedKmH,
-                          status: _isOnline ? 'On-time' : 'Offline',
-                          lastUpdated: DateTime.now(),
-                        )
-                      ],
+                      buses: _buses.map((b) {
+                        if (b['_id'] == _selectedBusId && _currentPosition != null) {
+                          return Bus(
+                            id: b['_id'],
+                            routeId: b['routeId'] ?? '',
+                            routeName: b['routeName'] ?? 'My Route',
+                            routeColor: b['color'] ?? '#6C63FF',
+                            currentLat: _currentPosition!.latitude,
+                            currentLng: _currentPosition!.longitude,
+                            heading: _currentPosition!.heading,
+                            speed: _speedKmH,
+                            status: _isOnline ? 'Active' : 'Offline',
+                            lastUpdated: DateTime.now(),
+                          );
+                        }
+                        return Bus.fromJson(b);
+                      }).toList(),
                       selectedRoute: _selectedRoute,
                       initialDriveMode: true,
                     )
@@ -338,7 +342,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     child: Center(
                       child: Text(
                         '📡 SYNCHRONIZING WITH COMMAND...',
-                        style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                       ),
                     ),
                   ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -532,7 +536,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       children: [
                         AnimatedDefaultTextStyle(
                           duration: const Duration(milliseconds: 300),
-                          style: GoogleFonts.plusJakartaSans(color: _isOnline ? sColor : Colors.white38, fontSize: 64, fontWeight: FontWeight.w900, letterSpacing: -2),
+                          style: GoogleFonts.plusJakartaSans(color: _isOnline ? sColor : Colors.white38, fontSize: 54, fontWeight: FontWeight.w900, letterSpacing: -2),
                           child: Text(_speedKmH.toStringAsFixed(1)),
                         ),
                         Padding(
@@ -540,7 +544,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('KM/H', style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 13, fontWeight: FontWeight.w900)),
+                              Text('KM/H', style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 11, fontWeight: FontWeight.w900)),
                               const SizedBox(height: 2),
                               AnimatedContainer(
                                 duration: const Duration(milliseconds: 400),
@@ -552,7 +556,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                 ),
                                 child: Text(
                                   _speedCategory(_speedKmH),
-                                  style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 1),
+                                  style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 6, fontWeight: FontWeight.w900, letterSpacing: 0.5),
                                 ),
                               ),
                             ],
@@ -604,7 +608,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('SPEED HISTORY', style: TextStyle(color: Colors.white12, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+              Text('SPEED HISTORY', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
               const SizedBox(height: 8),
               SizedBox(
                 height: 55,
@@ -682,7 +686,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 ).animate(onPlay: (c) => c.repeat()).scale(duration: 1.seconds, begin: const Offset(1,1), end: const Offset(1.5,1.5)).fadeOut(),
                 const SizedBox(width: 8),
               ],
-              Text(_isOnline ? 'ACTIVE' : 'OFFLINE', style: TextStyle(color: _isOnline ? Colors.blueAccent : Colors.white38, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
+              Text(_isOnline ? 'ACTIVE' : 'OFFLINE', style: GoogleFonts.plusJakartaSans(color: _isOnline ? Colors.blueAccent : Colors.white38, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1)),
             ],
           ),
         ),
@@ -704,10 +708,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
           dropdownColor: const Color(0xFF0D0B14),
           value: _selectedBusId,
           icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.blueAccent),
-          hint: Text('SELECT ASSIGNED BUS', style: TextStyle(color: Colors.white24, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          hint: Text('SELECT ASSIGNED BUS', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
           items: _buses.map((bus) => DropdownMenuItem<String>(
             value: bus['_id'],
-            child: Text(bus['routeName'] ?? 'Unknown Route', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(bus['routeName'] ?? 'Unknown Route', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
           )).toList(),
           onChanged: _isOnline ? null : (v) {
             setState(() => _selectedBusId = v);
@@ -749,7 +753,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
               const SizedBox(width: 12),
               Text(
                 _isOnline ? 'Go Offline' : 'Go Online',
-                style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16),
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16),
               ),
             ],
           ),
@@ -792,7 +796,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('SOS Alert Sent', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          content: Text('SOS Alert Sent', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, color: Colors.white)),
           backgroundColor: Colors.redAccent,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -827,7 +831,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   const SizedBox(width: 12),
                   Text(
                     'HOLD 2S FOR SOS',
-                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 2),
+                    style: GoogleFonts.plusJakartaSans(color: Colors.redAccent, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 2),
                   ),
                 ],
               ),
@@ -839,7 +843,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('SESSION OVERVIEW', style: TextStyle(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
+        Text('SESSION OVERVIEW', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -864,15 +868,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: TextStyle(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+            Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.baseline,
               textBaseline: TextBaseline.alphabetic,
               children: [
-                Text(value, style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
+                Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900)),
                 const SizedBox(width: 4),
-                Text(unit, style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.w900)),
+                Text(unit, style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 10, fontWeight: FontWeight.w900)),
               ],
             ),
           ],
@@ -898,3 +902,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 }
+
+
+
+
+

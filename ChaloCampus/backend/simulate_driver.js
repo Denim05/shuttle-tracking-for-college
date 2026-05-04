@@ -46,7 +46,7 @@ async function runSimulation() {
                 speed: speed,
                 status: 'On-time'
             });
-        }, 2000);
+        }, 800);
     });
 
     socket.on('connect_error', (err) => {

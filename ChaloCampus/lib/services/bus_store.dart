@@ -261,3 +261,4 @@ class BusApproachEvent {
     required this.routeId,
   }) : timestamp = DateTime.now();
 }
+

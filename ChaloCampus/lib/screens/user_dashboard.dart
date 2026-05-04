@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -143,7 +144,7 @@ class _UserDashboardState extends State<UserDashboard> {
               children: [
                 const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 18),
                 const SizedBox(width: 10),
-                Expanded(child: Text(msg, style: const TextStyle(color: Colors.white))),
+                Expanded(child: Text(msg, style: GoogleFonts.plusJakartaSans(color: Colors.white))),
               ],
             ),
             backgroundColor: Colors.redAccent,
@@ -256,7 +257,7 @@ class _UserDashboardState extends State<UserDashboard> {
                         child: Center(
                           child: Text(
                             '📡 SYNCHRONIZING Tracker...',
-                            style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                           ),
                         ),
                       ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -292,14 +293,14 @@ class _UserDashboardState extends State<UserDashboard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Debug Data', style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                Text('Debug Data', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
                 IconButton(icon: const Icon(Icons.close, color: Colors.white24, size: 16), onPressed: () => setState(() => _showDebugOverlay = false)),
               ],
             ),
             const Divider(color: Colors.white10),
             Expanded(
               child: buses.isEmpty 
-                ? const Center(child: Text('NO DATA RECEIVED YET', style: TextStyle(color: Colors.white24, fontSize: 10)))
+                ? const Center(child: Text('NO DATA RECEIVED YET', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10)))
                 : ListView.builder(
                     padding: EdgeInsets.zero,
                     itemCount: buses.length,
@@ -318,12 +319,12 @@ class _UserDashboardState extends State<UserDashboard> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text('ID: ${bus.id.substring(math.max(0, bus.id.length - 6))}', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                  Text('Route: ${bus.routeName}', style: const TextStyle(color: Colors.white38, fontSize: 8)),
+                                  Text('ID: ${bus.id.substring(math.max(0, bus.id.length - 6))}', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  Text('Route: ${bus.routeName}', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 8)),
                                 ],
                               ),
                             ),
-                            Text('${bus.speed.toInt()} KM/H', style: TextStyle(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900)),
+                            Text('${bus.speed.toInt()} KM/H', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900)),
                           ],
                         ),
                       );
@@ -640,7 +641,7 @@ class _UserDashboardState extends State<UserDashboard> {
           const SizedBox(height: 12),
           Text(
             'MY STOP: ${auth.currentUser!.pickupPoint!.toUpperCase()}',
-            style: TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               color: Colors.blueAccent.withValues(alpha: 0.6),
               fontSize: 9,
               fontWeight: FontWeight.w900,
@@ -715,7 +716,7 @@ class _UserDashboardState extends State<UserDashboard> {
             const SizedBox(height: 6),
             Text(
               label,
-              style: TextStyle(
+              style: GoogleFonts.plusJakartaSans(
                 color: disabled ? Colors.white24 : color,
                 fontSize: 8,
                 fontWeight: FontWeight.w900,
@@ -741,8 +742,8 @@ class _UserDashboardState extends State<UserDashboard> {
         children: [
           Icon(icon, color: const Color(0xFF2D5BFF), size: 20),
           const SizedBox(height: 12),
-          Text(val, style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
-          Text(label, style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
+          Text(val, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+          Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
         ],
       ),
     );
@@ -766,8 +767,8 @@ class _UserDashboardState extends State<UserDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                  Text(sub, style: TextStyle(color: Colors.white38, fontSize: 12)),
+                  Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                  Text(sub, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12)),
                 ],
               ),
             ),
@@ -797,7 +798,7 @@ class _UserDashboardState extends State<UserDashboard> {
                 title: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('NOTIFICATIONS', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16)),
+                    Text('NOTIFICATIONS', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16)),
                     if (allAlerts.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       Container(
@@ -807,7 +808,7 @@ class _UserDashboardState extends State<UserDashboard> {
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(color: const Color(0xFF2D5BFF).withValues(alpha: 0.3)),
                         ),
-                        child: Text('${allAlerts.length}', style: TextStyle(color: const Color(0xFF2D5BFF), fontSize: 11, fontWeight: FontWeight.w900)),
+                        child: Text('${allAlerts.length}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF2D5BFF), fontSize: 11, fontWeight: FontWeight.w900)),
                       ),
                     ],
                   ],
@@ -825,9 +826,9 @@ class _UserDashboardState extends State<UserDashboard> {
                         children: [
                           const Icon(Icons.notifications_none_rounded, color: Colors.white24, size: 60),
                           const SizedBox(height: 16),
-                          Text('NO ALERTS YET', style: TextStyle(color: Colors.white24, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                          Text('NO ALERTS YET', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2)),
                           const SizedBox(height: 8),
-                          Text('Manager broadcasts will appear here in real-time', style: TextStyle(color: Colors.white12, fontSize: 11)),
+                          Text('Manager broadcasts will appear here in real-time', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 11)),
                         ],
                       ),
                     ),
@@ -887,11 +888,11 @@ class _UserDashboardState extends State<UserDashboard> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(isCritical ? 'CRITICAL ALERT' : 'SYSTEM DIRECTIVE', 
-                  style: TextStyle(color: accentColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                  style: GoogleFonts.plusJakartaSans(color: accentColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
                 const SizedBox(height: 4),
-                Text(alert['message'] ?? '', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
+                Text(alert['message'] ?? '', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
                 const SizedBox(height: 8),
-                Text(_formatAlertTime(alert['timestamp']), style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold)),
+                Text(_formatAlertTime(alert['timestamp']), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -918,13 +919,13 @@ class _UserDashboardState extends State<UserDashboard> {
                 child: Center(
                   child: Text(
                     (user?.username ?? 'G')[0].toUpperCase(),
-                    style: TextStyle(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900),
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900),
                   ),
                 ),
               ),
               const SizedBox(height: 20),
-              Text(user?.username ?? 'Guest User', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
-              Text((user?.role ?? 'explorer').toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
+              Text(user?.username ?? 'Guest User', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
+              Text((user?.role ?? 'explorer').toUpperCase(), style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
               if (user?.userId != null) ...[
                 const SizedBox(height: 6),
                 Container(
@@ -936,7 +937,7 @@ class _UserDashboardState extends State<UserDashboard> {
                   ),
                   child: Text(
                     'Enrollment: ${user!.userId}',
-                    style: TextStyle(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                    style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5),
                   ),
                 ),
               ],
@@ -951,7 +952,7 @@ class _UserDashboardState extends State<UserDashboard> {
               if (latestNotifs.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(20),
-                  child: Center(child: Text('NO RECENT ACTIVITY', style: TextStyle(color: Colors.white12, fontSize: 10, fontWeight: FontWeight.bold))),
+                  child: Center(child: Text('NO RECENT ACTIVITY', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 10, fontWeight: FontWeight.bold))),
                 )
               else
                 ...latestNotifs.map((n) => ListTile(
@@ -961,15 +962,15 @@ class _UserDashboardState extends State<UserDashboard> {
                     color: n.type == 'critical' ? Colors.redAccent : Colors.blueAccent,
                     size: 16,
                   ),
-                  title: Text(n.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                  subtitle: Text(_formatAlertTime(n.timestamp.toIso8601String()), style: const TextStyle(color: Colors.white24, fontSize: 9)),
+                  title: Text(n.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                  subtitle: Text(_formatAlertTime(n.timestamp.toIso8601String()), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9)),
                   onTap: () => setState(() => _currentIndex = 1),
                 )),
               if (latestNotifs.isNotEmpty)
                 Center(
                   child: TextButton(
                     onPressed: () => setState(() => _currentIndex = 1),
-                    child: Text('VIEW ALL HISTORY', style: TextStyle(color: const Color(0xFF2D5BFF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                    child: Text('VIEW ALL HISTORY', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF2D5BFF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
                   ),
                 ),
             ]);
@@ -998,8 +999,8 @@ class _UserDashboardState extends State<UserDashboard> {
               ),
               child: const Icon(Icons.lock_outline_rounded, color: Colors.deepPurpleAccent, size: 18),
             ),
-            title: Text('Change Password', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-            subtitle: Text('Update your login password', style: TextStyle(color: Colors.white38, fontSize: 11)),
+            title: Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+            subtitle: Text('Update your login password', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
             trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
             onTap: () => _showChangePasswordSheet(auth),
           ),
@@ -1014,7 +1015,7 @@ class _UserDashboardState extends State<UserDashboard> {
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             elevation: 0,
           ),
-          child: Text('TERMINATE SESSION', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+          child: Text('TERMINATE SESSION', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
         ),
       ],
     ).animate().fadeIn();
@@ -1094,9 +1095,9 @@ class _UserDashboardState extends State<UserDashboard> {
                 children: [
                   Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
                   const SizedBox(height: 20),
-                  Text('Change Password', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+                  Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 4),
-                  Text('Enter your current password, then set a new one.', style: TextStyle(color: Colors.white38, fontSize: 13)),
+                  Text('Enter your current password, then set a new one.', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 13)),
                   const SizedBox(height: 24),
                   _pwField(ctx, 'Current Password', currentCtrl, showCurrent, () => setSheetState(() => showCurrent = !showCurrent)),
                   const SizedBox(height: 14),
@@ -1116,7 +1117,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       ),
                       child: saving
                           ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text('UPDATE PASSWORD', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                          : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 1)),
                     ),
                   ),
                 ],
@@ -1138,10 +1139,10 @@ class _UserDashboardState extends State<UserDashboard> {
       child: TextField(
         controller: ctrl,
         obscureText: !visible,
-        style: TextStyle(color: Colors.white, fontSize: 15),
+        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.white24, fontSize: 13),
+          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
           suffixIcon: onToggle != null
@@ -1161,7 +1162,7 @@ class _UserDashboardState extends State<UserDashboard> {
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 12, bottom: 12),
-          child: Text(title, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)),
+          child: Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)),
         ),
         Container(
           decoration: BoxDecoration(
@@ -1178,15 +1179,15 @@ class _UserDashboardState extends State<UserDashboard> {
   Widget _buildProfileTile(String label, String val, IconData icon) {
     return ListTile(
       leading: Icon(icon, color: Colors.white24, size: 20),
-      title: Text(label, style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
-      trailing: Text(val, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+      title: Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+      trailing: Text(val, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
     );
   }
 
   Widget _buildToggleTile(String title, String sub, bool val, Function(bool) onChanged) {
     return ListTile(
-      title: Text(title, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-      subtitle: Text(sub, style: TextStyle(color: Colors.white24, fontSize: 10)),
+      title: Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+      subtitle: Text(sub, style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10)),
       trailing: Switch(
         value: val,
         onChanged: onChanged,
@@ -1246,7 +1247,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       ),
                       child: Text(
                         badge > 9 ? '9+' : '$badge',
-                        style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900),
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900),
                       ),
                     ),
                   ),
@@ -1254,7 +1255,7 @@ class _UserDashboardState extends State<UserDashboard> {
             ),
             if (isSel) ...[
               const SizedBox(width: 8),
-              Text(label, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
+              Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
             ]
           ],
         ),
@@ -1324,8 +1325,8 @@ class _UserDashboardState extends State<UserDashboard> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Available Routes', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16, letterSpacing: 1)),
-                        Text('Select a route to track', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                        Text('Available Routes', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 16, letterSpacing: 1)),
+                        Text('Select a route to track', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10)),
                       ],
                     ),
                     if (_selectedRoute != null)
@@ -1337,7 +1338,7 @@ class _UserDashboardState extends State<UserDashboard> {
                           });
                           Navigator.pop(context);
                         },
-                        child: Text('CLEAR', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                        child: Text('CLEAR', style: GoogleFonts.plusJakartaSans(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
                       ),
                   ],
                 ),
@@ -1355,10 +1356,10 @@ class _UserDashboardState extends State<UserDashboard> {
                   ),
                   child: TextField(
                     onChanged: (v) => setModalState(() => searchQuery = v),
-                    style: TextStyle(color: Colors.white, fontSize: 13),
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
                     decoration: InputDecoration(
                       hintText: 'Filter routes...',
-                      hintStyle: TextStyle(color: Colors.white24, fontSize: 13),
+                      hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13),
                       border: InputBorder.none,
                       icon: const Icon(Icons.search_rounded, color: Colors.white24, size: 18),
                     ),
@@ -1399,8 +1400,8 @@ class _UserDashboardState extends State<UserDashboard> {
                           ),
                           child: Icon(Icons.alt_route_rounded, color: isSel ? const Color(0xFF2D5BFF) : Colors.white38, size: 20),
                         ),
-                        title: Text(route.name, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-                        subtitle: Text('${route.stops.length} stops', style: TextStyle(color: Colors.white24, fontSize: 10)),
+                        title: Text(route.name, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
+                        subtitle: Text('${route.stops.length} stops', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10)),
                         trailing: isSel 
                           ? const Icon(Icons.check_circle_rounded, color: Colors.blueAccent, size: 20)
                           : const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white10, size: 14),
@@ -1422,9 +1423,9 @@ class _UserDashboardState extends State<UserDashboard> {
       children: [
         Row(
           children: [
-            Text('Route Details', style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
+            Text('Route Details', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
             const Spacer(),
-            Text('${_selectedRoute!.stops.length} STOPS', style: TextStyle(color: Colors.blueAccent, fontSize: 9, fontWeight: FontWeight.w900)),
+            Text('${_selectedRoute!.stops.length} STOPS', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 9, fontWeight: FontWeight.w900)),
           ],
         ),
         const SizedBox(height: 24),
@@ -1461,7 +1462,7 @@ class _UserDashboardState extends State<UserDashboard> {
                     children: [
                       Text(
                         stop['name'],
-                        style: TextStyle(
+                        style: GoogleFonts.plusJakartaSans(
                           color: Colors.white,
                           fontSize: 14,
                           fontWeight: FontWeight.w700,
@@ -1470,7 +1471,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       const SizedBox(height: 4),
                       Text(
                         'LAT: ${stop['lat'].toStringAsFixed(4)} | LNG: ${stop['lng'].toStringAsFixed(4)}',
-                        style: TextStyle(color: Colors.white10, fontSize: 9, fontWeight: FontWeight.bold),
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white10, fontSize: 9, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 20),
                     ],
@@ -1492,3 +1493,5 @@ class _UserDashboardState extends State<UserDashboard> {
     );
   }
 }
+
+

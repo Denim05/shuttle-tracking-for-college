@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
@@ -55,7 +56,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('System Logs', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
+        title: Text('System Logs', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
         actions: [
           IconButton(icon: const Icon(Icons.refresh, color: Colors.blueAccent), onPressed: _fetchLogs),
         ],
@@ -90,24 +91,24 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                           ),
                           child: Text(
                             log['level'] ?? 'INFO',
-                            style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold),
+                            style: GoogleFonts.plusJakartaSans(color: color, fontSize: 10, fontWeight: FontWeight.bold),
                           ),
                         ),
                         Text(
                           _formatTime(log['timestamp']),
-                          style: TextStyle(color: Colors.white38, fontSize: 10),
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
                     Text(
                       log['message'] ?? '',
-                      style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, height: 1.4),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       'SOURCE: ${log['source'] ?? 'UNKNOWN'}',
-                      style: TextStyle(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
                     ),
                   ],
                 ),
@@ -132,3 +133,4 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
     return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}:${date.second.toString().padLeft(2, '0')}';
   }
 }
+

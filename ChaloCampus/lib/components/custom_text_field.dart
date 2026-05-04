@@ -198,3 +198,4 @@ class _AppTextFieldState extends State<AppTextField> {
 
 @Deprecated('Use AppTextField instead')
 typedef CustomTextField = AppTextField;
+

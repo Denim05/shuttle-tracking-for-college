@@ -474,3 +474,4 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     ),
   );
 }
+

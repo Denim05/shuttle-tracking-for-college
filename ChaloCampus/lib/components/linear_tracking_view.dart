@@ -220,3 +220,4 @@ class LinearTrackingView extends StatelessWidget {
     );
   }
 }
+

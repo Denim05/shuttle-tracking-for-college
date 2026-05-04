@@ -582,17 +582,17 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF0F1528),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Colors.white10)),
-        title: const Text('Location Consent', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: Text('Location Consent', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
         content: Text(
           isPermanent 
             ? 'Location tracking is disabled in your settings. Please enable it to see your position on the map.'
             : 'We need your location to show where you are relative to the bus. Please grant permission to continue.',
-          style: const GoogleFonts.plusJakartaSans(color: Colors.white70),
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('Maybe Later', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+            child: Text('Maybe Later', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -736,7 +736,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                     const SizedBox(width: 8),
                     Text(
                       'DRIVE MODE  •  ${(_animatedHeadings[_focusedBus!.id] ?? 0).toInt()}°  •  Tap to exit',
-                      style: const GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1),
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1),
                     ),
                   ],
                 ),
@@ -955,7 +955,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         children: [
           Icon(icon, size: 10, color: const Color(0xFF1A4CFF)),
           const SizedBox(width: 4),
-          Text(label, style: const GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 10)),
+          Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 10)),
         ],
       ),
     );
@@ -980,4 +980,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     );
   }
 }
+
+
 

@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
 import 'package:provider/provider.dart';
@@ -185,7 +186,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
               Expanded(
                 child: Text(
                   'Fleet Tracker',
-                  style: TextStyle(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white, fontWeight: FontWeight.w900,
                     fontSize: 16, letterSpacing: 3,
                   ),
@@ -211,7 +212,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                     ),
                     child: Text(
                       '${ping}ms',
-                      style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800),
+                      style: GoogleFonts.plusJakartaSans(color: color, fontSize: 10, fontWeight: FontWeight.w800),
                     ),
                   );
                 },
@@ -261,7 +262,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                 const SizedBox(width: 8),
                 Text(
                   'Connecting to server...',
-                  style: TextStyle(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white, fontSize: 10,
                     fontWeight: FontWeight.w900, letterSpacing: 1.5,
                   ),
@@ -304,11 +305,11 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('🚨 Emergency Alert', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
+                    Text('🚨 Emergency Alert', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
                     const SizedBox(height: 2),
                     Text(
                       sos['name']?.toString() ?? sos['routeName']?.toString() ?? 'Alert received',
-                      style: TextStyle(color: Colors.white70, fontSize: 11),
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11),
                     ),
                   ],
                 ),
@@ -366,7 +367,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                   const Spacer(),
                   Text(
                     '${context.read<BusStore>().allBuses.length} BUSES',
-                    style: TextStyle(
+                    style: GoogleFonts.plusJakartaSans(
                       color: AppColors.textMuted, fontSize: 10,
                       fontWeight: FontWeight.w800, letterSpacing: 1.5,
                     ),
@@ -406,7 +407,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Text(
                 '${filtered.length} BUS${filtered.length == 1 ? '' : 'ES'} IN VIEW',
-                style: TextStyle(
+                style: GoogleFonts.plusJakartaSans(
                   color: AppColors.textMuted, fontSize: 9,
                   fontWeight: FontWeight.w900, letterSpacing: 2,
                 ),
@@ -452,7 +453,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           const SizedBox(width: 6),
           Text(
             '$count $label',
-            style: TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               color: color, fontSize: 9,
               fontWeight: FontWeight.w900, letterSpacing: 1,
             ),
@@ -480,7 +481,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
         ),
         child: Text(
           label,
-          style: TextStyle(
+          style: GoogleFonts.plusJakartaSans(
             color: selected ? Colors.white : AppColors.textSecondary,
             fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5,
           ),
@@ -582,7 +583,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                           Expanded(
                             child: Text(
                               bus.routeName,
-                              style: TextStyle(
+                              style: GoogleFonts.plusJakartaSans(
                                 color: AppColors.text, fontWeight: FontWeight.w700,
                                 fontSize: 13,
                               ),
@@ -599,7 +600,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                               ),
                               child: Text(
                                 '${bus.speed.toInt()} km/h',
-                                style: TextStyle(
+                                style: GoogleFonts.plusJakartaSans(
                                   color: AppColors.primary, fontSize: 9,
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -614,7 +615,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                           const SizedBox(width: 4),
                           Text(
                             bus.status.toUpperCase(),
-                            style: TextStyle(
+                            style: GoogleFonts.plusJakartaSans(
                               color: statusColor, fontSize: 9,
                               fontWeight: FontWeight.w900, letterSpacing: 1,
                             ),
@@ -624,7 +625,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                           const SizedBox(width: 8),
                           Text(
                             timeAgo,
-                            style: TextStyle(
+                            style: GoogleFonts.plusJakartaSans(
                               color: AppColors.textMuted, fontSize: 9,
                               fontWeight: FontWeight.w600,
                             ),
@@ -635,7 +636,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                         const SizedBox(height: 6),
                         Text(
                           'Next: ${bus.etas.first.stopName} in ${bus.etas.first.minutes}m',
-                          style: TextStyle(
+                          style: GoogleFonts.plusJakartaSans(
                             color: AppColors.textSecondary, fontSize: 9,
                           ),
                           overflow: TextOverflow.ellipsis,
@@ -674,7 +675,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           const SizedBox(height: 12),
           Text(
             'NO BUSES IN THIS FILTER',
-            style: TextStyle(
+            style: GoogleFonts.plusJakartaSans(
               color: AppColors.textMuted, fontSize: 11,
               fontWeight: FontWeight.w800, letterSpacing: 2,
             ),
@@ -702,7 +703,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
             const SizedBox(height: 16),
             Text(
               'Loading...',
-              style: TextStyle(
+              style: GoogleFonts.plusJakartaSans(
                 color: AppColors.textMuted, fontSize: 11,
                 fontWeight: FontWeight.w900, letterSpacing: 3,
               ),
@@ -713,3 +714,4 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
     );
   }
 }
+

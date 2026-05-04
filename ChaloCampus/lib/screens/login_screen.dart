@@ -305,7 +305,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               const TextSpan(text: 'Not a Registered User? '),
                               TextSpan(
                                 text: 'Continue as Guest',
-                                style: TextStyle(
+                                style: GoogleFonts.plusJakartaSans(
                                   color: const Color(0xFF2D5BFF).withValues(alpha: 0.8),
                                   fontWeight: FontWeight.w800,
                                 ),
@@ -351,3 +351,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+

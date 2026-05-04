@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
@@ -53,7 +54,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('Fleet Maintenance', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
+        title: Text('Fleet Maintenance', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
       ),
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
@@ -88,11 +89,11 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                         children: [
                           Text(
                             bus['id'] ?? 'N/A',
-                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
                           ),
                           Text(
                             bus['routeName'] ?? 'Unknown Route',
-                            style: TextStyle(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
                           ),
                         ],
                       ),
@@ -102,7 +103,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                       children: [
                         Text(
                           bus['status'].toUpperCase(),
-                          style: TextStyle(color: statusColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                          style: GoogleFonts.plusJakartaSans(color: statusColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
                         ),
                         const SizedBox(height: 4),
                         Container(
@@ -143,3 +144,4 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
     }
   }
 }
+
