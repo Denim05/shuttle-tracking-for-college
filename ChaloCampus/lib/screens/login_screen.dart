@@ -58,6 +58,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
     setState(() => _isLoginLoading = true);
 
+    if (_selectedRole == 'driver') {
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Location permission is required for Drivers'), backgroundColor: Colors.redAccent),
+          );
+        }
+        setState(() => _isLoginLoading = false);
+        return;
+      }
+    }
+
     try {
       await Provider.of<AuthService>(context, listen: false)
           .login(_usernameController.text, _passwordController.text, _selectedRole);
