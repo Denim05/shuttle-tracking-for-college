@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ChaloCampus - Finalized Connectivity Architecture</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #050810;
+            --system-bg: rgba(255, 255, 255, 0.02);
+            --border-color: rgba(255, 255, 255, 0.1);
+            --accent-glow: #3b82f6;
+            --driver-glow: #10b981;
+            --admin-glow: #f59e0b;
+            --text-color: #ffffff;
+            --node-bg: rgba(255, 255, 255, 0.03);
+            --node-border: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-color);
+            background-image: 
+                radial-gradient(circle at 0% 0%, rgba(59, 130, 246, 0.08) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(16, 185, 129, 0.08) 0%, transparent 50%);
+            color: var(--text-color);
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        .main-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            max-width: 1600px;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .header h1 {
+            font-weight: 800;
+            letter-spacing: -1px;
+            font-size: 3rem;
+            margin: 0;
+            background: linear-gradient(135deg, #fff 0%, #3b82f6 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header p {
+            color: rgba(255, 255, 255, 0.4);
+            margin-top: 5px;
+            font-size: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .container {
+            position: relative;
+            display: flex;
+            align-items: flex-start;
+            gap: 40px;
+            padding: 20px;
+            width: 100%;
+        }
+
+        /* Actors */
+        .actors-column {
+            display: flex;
+            flex-direction: column;
+            gap: 60px;
+            z-index: 10;
+        }
+
+        .actor {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            width: 130px;
+            transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+            cursor: pointer;
+            padding: 15px;
+            border-radius: 24px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid transparent;
+        }
+
+        .actor-icon {
+            width: 64px;
+            height: 64px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 18px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .actor-icon svg {
+            width: 32px;
+            height: 32px;
+            stroke: rgba(255, 255, 255, 0.6);
+            stroke-width: 1.5;
+            fill: none;
+            transition: all 0.3s ease;
+        }
+
+        .actor-name {
+            font-weight: 700;
+            font-size: 0.85rem;
+            color: rgba(255, 255, 255, 0.5);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+        }
+
+        /* Active States for Actors */
+        .actor:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.1);
+            transform: translateY(-5px);
+        }
+
+        #actor-student:hover { border-color: var(--accent-glow); }
+        #actor-driver:hover { border-color: var(--driver-glow); }
+        #actor-admin:hover { border-color: var(--admin-glow); }
+
+        .actor:hover .actor-icon svg { stroke: #fff; }
+        .actor:hover .actor-name { color: #fff; }
+
+        /* System Boundary */
+        .system_boundary {
+            position: relative;
+            border: 1px solid var(--border-color);
+            padding: 60px 40px;
+            flex: 1;
+            min-height: 900px;
+            background: var(--system-bg);
+            -webkit-backdrop-filter: blur(20px);
+            backdrop-filter: blur(20px);
+            border-radius: 40px;
+            display: flex;
+            justify-content: space-between;
+            box-shadow: 0 40px 100px rgba(0,0,0,0.6);
+        }
+
+        .system-title {
+            position: absolute;
+            top: 25px;
+            left: 40px;
+            font-weight: 800;
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            color: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Use Case Groups */
+        .use-case-group {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            width: 46%;
+            justify-content: center;
+        }
+
+        .use-case {
+            background: var(--node-bg);
+            border: 1px solid var(--node-border);
+            padding: 16px 20px;
+            border-radius: 16px;
+            font-size: 0.85rem;
+            transition: all 0.3s ease;
+            color: rgba(255, 255, 255, 0.6);
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-weight: 600;
+        }
+
+        .use-case svg {
+            width: 18px;
+            height: 18px;
+            stroke: currentColor;
+            stroke-width: 2;
+            fill: none;
+            opacity: 0.5;
+        }
+
+        .use-case:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.3);
+            color: #fff;
+            transform: scale(1.02);
+        }
+
+        /* Connection SVG Layer */
+        #connections-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 1;
+        }
+
+        .connection-line {
+            stroke: rgba(255, 255, 255, 0.05);
+            stroke-width: 1.5;
+            fill: none;
+            transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .connection-line.active {
+            stroke-width: 2.5;
+            stroke-opacity: 1;
+            filter: drop-shadow(0 0 8px currentColor);
+        }
+
+        /* Actor-Specific Colors for Lines */
+        .line-student { stroke: var(--accent-glow); }
+        .line-driver { stroke: var(--driver-glow); }
+        .line-manager { stroke: #8b5cf6; }
+        .line-admin { stroke: var(--admin-glow); }
+
+    </style>
+</head>
+<body>
+
+    <div class="main-wrapper">
+        <div class="header">
+            <h1>CHALO CAMPUS</h1>
+            <p>Full Connectivity Architecture</p>
+        </div>
+
+        <div class="container" id="diagram-container">
+            <!-- Left Side: Users -->
+            <div class="actors-column">
+                <div class="actor" id="actor-student" data-targets="uc-radar,uc-track,uc-schedule,uc-complaint,uc-alerts,uc-registration,uc-sos">
+                    <div class="actor-icon">
+                        <svg viewBox="0 0 24 24"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c3 3 9 3 12 0v-5"/></svg>
+                    </div>
+                    <div class="actor-name">Student / User</div>
+                </div>
+                <div class="actor" id="actor-guest" data-targets="uc-radar,uc-schedule,uc-registration">
+                    <div class="actor-icon">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></svg>
+                    </div>
+                    <div class="actor-name">Guest Access</div>
+                </div>
+            </div>
+
+            <!-- System Boundary -->
+            <div class="system_boundary">
+                <div class="system-title">ChaloCampus Integrated Ecosystem</div>
+                
+                <!-- Use Case Column 1 -->
+                <div class="use-case-group">
+                    <div class="use-case" id="uc-radar"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 12L19 12"/><path d="M12 12L12 5"/></svg>Fleet Radar View</div>
+                    <div class="use-case" id="uc-track"><svg viewBox="0 0 24 24"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>Active Trip Tracking</div>
+                    <div class="use-case" id="uc-schedule"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>Bus Schedules</div>
+                    <div class="use-case" id="uc-complaint"><svg viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Complaint Management</div>
+                    <div class="use-case" id="uc-alerts"><svg viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Notification Engine</div>
+                    <div class="use-case" id="uc-registration"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>Registration Portal</div>
+                    <div class="use-case" id="uc-sos" style="color: #ef4444; border-color: rgba(239, 68, 68, 0.2);"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Emergency SOS</div>
+                </div>
+
+                <!-- Use Case Column 2 -->
+                <div class="use-case-group">
+                    <div class="use-case" id="uc-broadcast"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M7.76 7.76a6 6 0 0 0 0 8.49"/><path d="M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>GPS Data Broadcast</div>
+                    <div class="use-case" id="uc-status"><svg viewBox="0 0 24 24"><path d="M20 14.66V20a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h5.34"/><polygon points="18 2 22 6 12 16 8 16 8 12 18 2"/></svg>Vehicle Status Update</div>
+                    <div class="use-case" id="uc-reports"><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Fleet Report Export</div>
+                    <div class="use-case" id="uc-reg-manager"><svg viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>Registration Review</div>
+                    <div class="use-case" id="uc-logs"><svg viewBox="0 0 24 24"><polyline points="4 17 10 11 14 15 20 9"/><polyline points="14 9 20 9 20 15"/></svg>Audit Log Review</div>
+                    <div class="use-case" id="uc-maintenance"><svg viewBox="0 0 24 24"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>Fleet Maintenance</div>
+                    <div class="use-case" id="uc-users"><svg viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>User Account Mgmt</div>
+                    <div class="use-case" id="uc-health"><svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>Service Health Audit</div>
+                </div>
+            </div>
+
+            <!-- Right Side: Staff -->
+            <div class="actors-column">
+                <div class="actor" id="actor-driver" data-targets="uc-broadcast,uc-status,uc-radar,uc-sos">
+                    <div class="actor-icon">
+                        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/></svg>
+                    </div>
+                    <div class="actor-name">Bus Driver</div>
+                </div>
+                <div class="actor" id="actor-manager" data-targets="uc-radar,uc-reports,uc-reg-manager,uc-alerts,uc-complaint,uc-users">
+                    <div class="actor-icon">
+                        <svg viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
+                    </div>
+                    <div class="actor-name">Fleet Manager</div>
+                </div>
+                <div class="actor" id="actor-admin" data-targets="uc-logs,uc-maintenance,uc-users,uc-health,uc-radar,uc-complaint">
+                    <div class="actor-icon">
+                        <svg viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                    </div>
+                    <div class="actor-name">System Admin</div>
+                </div>
+            </div>
+
+            <svg id="connections-layer"></svg>
+        </div>
+    </div>
+
+    <script>
+        function drawConnections() {
+            const svg = document.getElementById('connections-layer');
+            const container = document.getElementById('diagram-container');
+            const containerRect = container.getBoundingClientRect();
+            svg.innerHTML = '';
+
+            const actors = document.querySelectorAll('.actor');
+            actors.forEach(actor => {
+                const targets = actor.getAttribute('data-targets').split(',');
+                const actorRect = actor.getBoundingClientRect();
+                
+                const isLeftActor = actor.id.includes('student') || actor.id.includes('guest');
+                const startX = isLeftActor ? (actorRect.right - containerRect.left - 10) : (actorRect.left - containerRect.left + 10);
+                const startY = (actorRect.top + actorRect.height / 2) - containerRect.top;
+
+                targets.forEach(targetId => {
+                    const targetEl = document.getElementById(targetId);
+                    if (!targetEl) return;
+                    
+                    const targetRect = targetEl.getBoundingClientRect();
+                    const endX = isLeftActor ? (targetRect.left - containerRect.left) : (targetRect.right - containerRect.left);
+                    const endY = (targetRect.top + targetRect.height / 2) - containerRect.top;
+
+                    const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+                    const cp1x = startX + (endX - startX) * 0.4;
+                    const d = `M ${startX} ${startY} C ${cp1x} ${startY}, ${cp1x} ${endY}, ${endX} ${endY}`;
+                    
+                    line.setAttribute('d', d);
+                    line.setAttribute('class', `connection-line line-${actor.id.split('-')[1]}`);
+                    line.setAttribute('data-actor', actor.id);
+                    svg.appendChild(line);
+                });
+            });
+        }
+
+        window.addEventListener('load', drawConnections);
+        window.addEventListener('resize', drawConnections);
+
+        document.querySelectorAll('.actor').forEach(actor => {
+            actor.addEventListener('mouseenter', () => {
+                document.querySelectorAll(`.connection-line[data-actor="${actor.id}"]`).forEach(l => l.classList.add('active'));
+            });
+            actor.addEventListener('mouseleave', () => {
+                document.querySelectorAll(`.connection-line[data-actor="${actor.id}"]`).forEach(l => l.classList.remove('active'));
+            });
+        });
+    </script>
+</body>
+</html>

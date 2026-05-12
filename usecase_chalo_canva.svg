@@ -1,0 +1,157 @@
+<svg width="1200" height="800" viewBox="0 0 1200 800" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background (Optional, remove for transparency in Canva) -->
+  <rect width="1200" height="800" fill="#050810"/>
+  
+  <!-- Definitions for Glows/Gradients -->
+  <defs>
+    <filter id="glow-blue" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <filter id="glow-orange" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <linearGradient id="grad-blue" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#3b82f6;stop-opacity:0.2" />
+      <stop offset="100%" style="stop-color:#3b82f6;stop-opacity:0.05" />
+    </linearGradient>
+  </defs>
+
+  <!-- System Boundary -->
+  <rect x="250" y="80" width="700" height="640" rx="30" stroke="rgba(255,255,255,0.1)" stroke-width="2" fill="rgba(255,255,255,0.02)"/>
+  <text x="270" y="110" font-family="Arial, sans-serif" font-size="12" font-weight="800" fill="rgba(255,255,255,0.3)" letter-spacing="3">CHALOCAMPUS ECOSYSTEM</text>
+
+  <!-- LEFT ACTORS -->
+  <!-- Student -->
+  <g transform="translate(50, 150)">
+    <rect width="100" height="120" rx="20" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+    <circle cx="50" cy="45" r="20" stroke="#3b82f6" stroke-width="2" fill="none" filter="url(#glow-blue)"/>
+    <path d="M30 85C30 75 40 70 50 70C60 70 70 75 70 85" stroke="#3b82f6" stroke-width="2" fill="none" filter="url(#glow-blue)"/>
+    <text x="50" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">STUDENT</text>
+  </g>
+  <!-- Guest -->
+  <g transform="translate(50, 450)">
+    <rect width="100" height="100" rx="20" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+    <circle cx="50" cy="40" r="18" stroke="rgba(255,255,255,0.4)" stroke-width="2" fill="none"/>
+    <text x="50" y="80" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="rgba(255,255,255,0.6)">GUEST</text>
+  </g>
+
+  <!-- RIGHT ACTORS -->
+  <!-- Driver -->
+  <g transform="translate(1050, 150)">
+    <rect width="100" height="120" rx="20" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+    <circle cx="50" cy="45" r="20" stroke="#10b981" stroke-width="2" fill="none" filter="url(#glow-green)"/>
+    <path d="M40 45L60 45M50 35L50 55" stroke="#10b981" stroke-width="2" fill="none"/>
+    <text x="50" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">DRIVER</text>
+  </g>
+  <!-- Manager -->
+  <g transform="translate(1050, 350)">
+    <rect width="100" height="120" rx="20" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+    <circle cx="50" cy="45" r="20" stroke="#8b5cf6" stroke-width="2" fill="none"/>
+    <text x="50" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">MANAGER</text>
+  </g>
+  <!-- Admin -->
+  <g transform="translate(1050, 550)">
+    <rect width="100" height="120" rx="20" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.1)"/>
+    <circle cx="50" cy="45" r="20" stroke="#f59e0b" stroke-width="2" fill="none" filter="url(#glow-orange)"/>
+    <text x="50" y="105" text-anchor="middle" font-family="Arial, sans-serif" font-size="12" font-weight="bold" fill="white">ADMIN</text>
+  </g>
+
+  <!-- USE CASES (LEFT SIDE) -->
+  <g transform="translate(300, 150)">
+    <rect id="uc-radar" width="220" height="45" rx="12" fill="rgba(59,130,246,0.1)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Fleet Radar View</text>
+  </g>
+  <g transform="translate(300, 210)">
+    <rect id="uc-track" width="220" height="45" rx="12" fill="rgba(59,130,246,0.1)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Active Trip Tracking</text>
+  </g>
+  <g transform="translate(300, 270)">
+    <rect id="uc-schedule" width="220" height="45" rx="12" fill="rgba(59,130,246,0.1)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Bus Schedules</text>
+  </g>
+  <g transform="translate(300, 330)">
+    <rect id="uc-complaint" width="220" height="45" rx="12" fill="rgba(59,130,246,0.1)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Complaint Management</text>
+  </g>
+  <g transform="translate(300, 390)">
+    <rect id="uc-alerts" width="220" height="45" rx="12" fill="rgba(59,130,246,0.1)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Notification Engine</text>
+  </g>
+  <g transform="translate(300, 450)">
+    <rect id="uc-registration" width="220" height="45" rx="12" fill="rgba(59,130,246,0.1)" stroke="rgba(59,130,246,0.4)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Registration Portal</text>
+  </g>
+  <g transform="translate(300, 510)">
+    <rect id="uc-sos" width="220" height="45" rx="12" fill="rgba(239,68,68,0.1)" stroke="rgba(239,68,68,0.6)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="#ef4444" font-weight="bold">Emergency SOS</text>
+  </g>
+
+  <!-- USE CASES (RIGHT SIDE) -->
+  <g transform="translate(680, 150)">
+    <rect id="uc-broadcast" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">GPS Data Broadcast</text>
+  </g>
+  <g transform="translate(680, 210)">
+    <rect id="uc-status" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Vehicle Status Update</text>
+  </g>
+  <g transform="translate(680, 270)">
+    <rect id="uc-reports" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Fleet Report Export</text>
+  </g>
+  <g transform="translate(680, 330)">
+    <rect id="uc-reg-manager" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Registration Review</text>
+  </g>
+  <g transform="translate(680, 390)">
+    <rect id="uc-logs" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Audit Log Review</text>
+  </g>
+  <g transform="translate(680, 450)">
+    <rect id="uc-maintenance" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Fleet Maintenance</text>
+  </g>
+  <g transform="translate(680, 510)">
+    <rect id="uc-users" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">User Account Mgmt</text>
+  </g>
+  <g transform="translate(680, 570)">
+    <rect id="uc-health" width="220" height="45" rx="12" fill="rgba(255,255,255,0.05)" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+    <text x="110" y="28" text-anchor="middle" font-family="Arial, sans-serif" font-size="14" fill="white">Service Health Audit</text>
+  </g>
+
+  <!-- CONNECTIONS (Simplistic for Canva Import) -->
+  <g stroke="rgba(255,255,255,0.1)" stroke-width="1" fill="none">
+    <!-- Student Connections -->
+    <path d="M150 210 Q225 210, 300 172" stroke="#3b82f6"/>
+    <path d="M150 210 Q225 210, 300 232" stroke="#3b82f6"/>
+    <path d="M150 210 Q225 210, 300 292" stroke="#3b82f6"/>
+    <path d="M150 210 Q225 210, 300 352" stroke="#3b82f6"/>
+    <path d="M150 210 Q225 210, 300 412" stroke="#3b82f6"/>
+    <path d="M150 210 Q225 210, 300 532" stroke="#3b82f6" stroke-dasharray="4"/>
+    
+    <!-- Driver Connections -->
+    <path d="M1050 210 Q975 210, 900 172" stroke="#10b981"/>
+    <path d="M1050 210 Q975 210, 900 232" stroke="#10b981"/>
+    <path d="M1050 210 Q975 210, 300 172" stroke="#10b981" stroke-opacity="0.3"/>
+    
+    <!-- Manager Connections -->
+    <path d="M1050 410 Q975 410, 900 292" stroke="#8b5cf6"/>
+    <path d="M1050 410 Q975 410, 900 352" stroke="#8b5cf6"/>
+    <path d="M1050 410 Q975 410, 520 412" stroke="#8b5cf6"/>
+    <path d="M1050 410 Q975 410, 900 532" stroke="#8b5cf6"/>
+    
+    <!-- Admin Connections -->
+    <path d="M1050 610 Q975 610, 900 412" stroke="#f59e0b"/>
+    <path d="M1050 610 Q975 610, 900 472" stroke="#f59e0b"/>
+    <path d="M1050 610 Q975 610, 900 532" stroke="#f59e0b"/>
+    <path d="M1050 610 Q975 610, 900 592" stroke="#f59e0b"/>
+  </g>
+
+</svg>
