@@ -141,7 +141,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                   left: 0, right: 0,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    color: Colors.redAccent.withValues(alpha: 0.8),
+                    color: Colors.redAccent.withOpacity(0.8),
                     child: Center(
                       child: Text(
                         '📡 Connecting...',
@@ -240,9 +240,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [Colors.deepPurpleAccent.withValues(alpha: 0.1), Colors.blueAccent.withValues(alpha: 0.05)]),
+              gradient: LinearGradient(colors: [Colors.deepPurpleAccent.withOpacity(0.1), Colors.blueAccent.withOpacity(0.05)]),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
+              border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
             ),
             child: const Icon(Icons.terminal_rounded, color: Colors.blueAccent, size: 20),
           ),
@@ -277,9 +277,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(28),
         color: Color(0xFF1E1E1E),
-        border: Border.all(color: color.withValues(alpha: 0.1)),
+        border: Border.all(color: color.withOpacity(0.1)),
         boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.02), blurRadius: 20, spreadRadius: 2),
+          BoxShadow(color: color.withOpacity(0.02), blurRadius: 20, spreadRadius: 2),
         ],
       ),
       child: Padding(
@@ -294,14 +294,14 @@ class _AdminDashboardState extends State<AdminDashboard> {
                 Container(
                   padding: const EdgeInsets.all(6),
                   decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.1),
+                    color: color.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(10),
                   ),
                   child: Icon(icon, color: color, size: 16),
                 ),
                 Container(
                   width: 4, height: 4,
-                  decoration: BoxDecoration(color: color.withValues(alpha: 0.5), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: color.withOpacity(0.5), shape: BoxShape.circle),
                 ),
               ],
             ),
@@ -350,9 +350,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Color(0xFF1E1E1E).withValues(alpha: 0.6),
+        color: Color(0xFF1E1E1E).withOpacity(0.6),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: Material(
         color: Colors.transparent,
@@ -363,9 +363,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
           leading: Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              gradient: LinearGradient(colors: [color.withValues(alpha: 0.2), color.withValues(alpha: 0.05)]),
+              gradient: LinearGradient(colors: [color.withOpacity(0.2), color.withOpacity(0.05)]),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: color.withValues(alpha: 0.2)),
+              border: Border.all(color: color.withOpacity(0.2)),
             ),
             child: Icon(icon, color: color, size: 22),
           ),
@@ -382,9 +382,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Color(0xFF1E1E1E).withValues(alpha: 0.4),
+        color: Color(0xFF1E1E1E).withOpacity(0.4),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color.withValues(alpha: 0.1)),
+        border: Border.all(color: color.withOpacity(0.1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -398,7 +398,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     width: 12,
                     height: 12,
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.2),
+                      color: color.withOpacity(0.2),
                       shape: BoxShape.circle,
                     ),
                   ).animate(onPlay: (controller) => controller.repeat())
@@ -410,7 +410,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     decoration: BoxDecoration(
                       color: color, 
                       shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: color.withValues(alpha: 0.5), blurRadius: 10)]
+                      boxShadow: [BoxShadow(color: color.withOpacity(0.5), blurRadius: 10)]
                     ),
                   ),
                 ],

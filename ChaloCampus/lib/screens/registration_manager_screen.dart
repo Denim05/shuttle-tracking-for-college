@@ -166,9 +166,9 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF2D5BFF).withValues(alpha: 0.08),
+        color: const Color(0xFF2D5BFF).withOpacity(0.08),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2D5BFF).withValues(alpha: 0.2)),
+        border: Border.all(color: const Color(0xFF2D5BFF).withOpacity(0.2)),
       ),
       child: Row(children: [
         Text('$label: ', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w700)),
@@ -220,7 +220,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           decoration: BoxDecoration(
             color: Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
@@ -241,9 +241,9 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
             Container(
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.03),
+                color: Colors.white.withOpacity(0.03),
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                border: Border.all(color: Colors.white.withOpacity(0.06)),
               ),
               child: Row(children: [
                 const Icon(Icons.link_rounded, color: Color(0xFF2D5BFF), size: 18),
@@ -286,9 +286,9 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
             margin: const EdgeInsets.only(bottom: 8),
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
             decoration: BoxDecoration(
-              color: sel ? const Color(0xFF2D5BFF).withValues(alpha: 0.1) : Color(0xFF1E1E1E),
+              color: sel ? const Color(0xFF2D5BFF).withOpacity(0.1) : Color(0xFF1E1E1E),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: sel ? const Color(0xFF2D5BFF).withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.04)),
+              border: Border.all(color: sel ? const Color(0xFF2D5BFF).withOpacity(0.35) : Colors.white.withOpacity(0.04)),
             ),
             child: Row(children: [
               Icon(Icons.alt_route_rounded, color: sel ? const Color(0xFF2D5BFF) : Colors.white24, size: 18),
@@ -337,9 +337,9 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                 margin: const EdgeInsets.only(right: 8),
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
-                  color: _filterStatus == f ? _statusColor(f).withValues(alpha: 0.15) : Color(0xFF1E1E1E),
+                  color: _filterStatus == f ? _statusColor(f).withOpacity(0.15) : Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _filterStatus == f ? _statusColor(f).withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.05)),
+                  border: Border.all(color: _filterStatus == f ? _statusColor(f).withOpacity(0.4) : Colors.white.withOpacity(0.05)),
                 ),
                 child: Text(f.toUpperCase(),
                   style: GoogleFonts.plusJakartaSans(color: _filterStatus == f ? _statusColor(f) : Colors.white38, fontSize: 10, fontWeight: FontWeight.w900)),
@@ -381,13 +381,13 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       decoration: BoxDecoration(
         color: Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
+        border: Border.all(color: color.withOpacity(0.15)),
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
             child: Icon(Icons.person_rounded, color: color, size: 18),
           ),
           const SizedBox(width: 12),
@@ -398,7 +398,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           ])),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withValues(alpha: 0.25))),
+            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.25))),
             child: Text(status.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: color, fontSize: 8, fontWeight: FontWeight.w900)),
           ),
         ]),
@@ -414,9 +414,9 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
-              color: Colors.blueAccent.withValues(alpha: 0.05),
+              color: Colors.blueAccent.withOpacity(0.05),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.15)),
+              border: Border.all(color: Colors.blueAccent.withOpacity(0.15)),
             ),
             child: Row(children: [
               const Icon(Icons.key_rounded, color: Colors.blueAccent, size: 14),
@@ -456,7 +456,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   );
 
   Widget _inputField(String hint, TextEditingController ctrl, {int maxLines = 1}) => Container(
-    decoration: BoxDecoration(color: Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withValues(alpha: 0.05))),
+    decoration: BoxDecoration(color: Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
     child: TextField(
       controller: ctrl,
       maxLines: maxLines,
@@ -469,7 +469,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withValues(alpha: 0.3))),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withOpacity(0.3))),
       child: Center(child: Text(label, style: GoogleFonts.plusJakartaSans(color: color, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.8))),
     ),
   );

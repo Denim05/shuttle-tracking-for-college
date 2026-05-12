@@ -12,6 +12,7 @@ import '../models/user_model.dart';
 import '../models/bus_model.dart';
 import '../models/route_model.dart';
 import '../components/bus_map.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -68,8 +69,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
               decoration: BoxDecoration(
                 color: const Color(0xFF161421),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
-                boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 16)],
+                border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
+                boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 16)],
               ),
               child: Row(
                 children: [
@@ -98,11 +99,73 @@ class _DriverDashboardState extends State<DriverDashboard> {
     super.dispose();
   }
 
-    Future<void> _checkPermissions() async {
+  Future<void> _checkPermissions() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) _showServiceDisabledAlert();
+      return;
+    }
+
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) _showPermissionAlert();
+    }
+  }
+
+  void _showServiceDisabledAlert() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161421),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('GPS DISABLED', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900)),
+        content: Text(
+          'Location services are disabled on your device. Please turn on GPS to start tracking.',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await Geolocator.openLocationSettings();
+              _checkPermissions(); // Re-check after returning
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: Text('ENABLE GPS', style: GoogleFonts.plusJakartaSans(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPermissionAlert() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF161421),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('GPS REQUIRED', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900)),
+        content: Text(
+          'This app requires GPS to track the bus location in real-time. Please enable location permissions in settings.',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('OK', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent)),
+          ),
+          ElevatedButton(
+            onPressed: () => Geolocator.openAppSettings(),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+            child: Text('SETTINGS', style: GoogleFonts.plusJakartaSans(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchMyBus() async {
@@ -160,6 +223,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Future<void> _startTracking() async {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) _showServiceDisabledAlert();
+      return;
+    }
+
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
@@ -167,9 +236,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
     if (permission == LocationPermission.deniedForever) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Location permission permanently denied. Please enable in settings.')),
-        );
+        _showPermissionAlert();
       }
       return;
     }
@@ -328,6 +395,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       }).toList(),
                       selectedRoute: _selectedRoute,
                       initialDriveMode: true,
+                      showMyLocation: false,
+                      showMapControls: false,
+                      initialMapType: MapType.none,
                     )
                   : Container(
                       decoration: const BoxDecoration(
@@ -346,7 +416,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   left: 0, right: 0,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    color: Colors.redAccent.withValues(alpha: 0.8),
+                    color: Colors.redAccent.withOpacity(0.8),
                     child: Center(
                       child: Text(
                         '📡 SYNCHRONIZING WITH COMMAND...',
@@ -356,64 +426,65 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
                 ),
 
-              // Header
-              Positioned(
-                top: isConnected ? 0 : 25,
-                left: 0, right: 0,
-                child: Container(
-                  padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 10, 20, 30),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
+              // Header - Hidden when online to maximize map space
+              if (!_isOnline)
+                Positioned(
+                  top: 0,
+                  left: 0, right: 0,
+                  child: Container(
+                    padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + 10, 20, 30),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'DRIVER INTERFACE',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 4,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                _buildSignalStrength(isConnected),
+                                const SizedBox(width: 8),
+                                Text(
+                                  isConnected ? 'Secured Connection' : 'SYNCHRONIZING...',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: isConnected ? Colors.blueAccent : Colors.redAccent,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 1,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
+                          onPressed: () => Provider.of<AuthService>(context, listen: false).logout(),
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.white.withOpacity(0.05),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'DRIVER INTERFACE',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w900,
-                              letterSpacing: 4,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Row(
-                            children: [
-                              _buildSignalStrength(isConnected),
-                              const SizedBox(width: 8),
-                              Text(
-                                isConnected ? 'Secured Connection' : 'SYNCHRONIZING...',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: isConnected ? Colors.blueAccent : Colors.redAccent,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
-                        onPressed: () => Provider.of<AuthService>(context, listen: false).logout(),
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.white.withValues(alpha: 0.05),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                      ),
-                    ],
-                  ),
                 ),
-              ),
 
               // Main Content with Draggable Sheet
               DraggableScrollableSheet(
@@ -426,9 +497,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       color: const Color(0xFF0D0B14),
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withValues(alpha: 0.8), blurRadius: 40, spreadRadius: 10),
+                        BoxShadow(color: Colors.black.withOpacity(0.8), blurRadius: 40, spreadRadius: 10),
                       ],
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
                     ),
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
@@ -481,7 +552,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: const LinearGradient(colors: [Colors.deepPurpleAccent, Colors.blueAccent]),
-            boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)],
+            boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 20, spreadRadius: 2)],
           ),
           child: const Center(child: Icon(Icons.person_rounded, color: Colors.white, size: 32)),
         ),
@@ -525,8 +596,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       decoration: BoxDecoration(
         color: const Color(0xFF161421),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: _isOnline ? sColor.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05)),
-        boxShadow: _isOnline ? [BoxShadow(color: sColor.withValues(alpha: 0.08), blurRadius: 20, spreadRadius: 2)] : null,
+        border: Border.all(color: _isOnline ? sColor.withOpacity(0.15) : Colors.white.withOpacity(0.05)),
+        boxShadow: _isOnline ? [BoxShadow(color: sColor.withOpacity(0.08), blurRadius: 20, spreadRadius: 2)] : null,
       ),
       child: Column(
         children: [
@@ -539,38 +610,49 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   children: [
                     Text('SPEEDOMETER', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 2)),
                     const SizedBox(height: 6),
-                    FittedBox(fit: BoxFit.scaleDown, alignment: Alignment.centerLeft, child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                        AnimatedDefaultTextStyle(
-                          duration: const Duration(milliseconds: 300),
-                          style: GoogleFonts.plusJakartaSans(color: _isOnline ? sColor : Colors.white38, fontSize: 48, fontWeight: FontWeight.w900, letterSpacing: -2),
-                          child: FittedBox(fit: BoxFit.scaleDown, child: Text(_speedKmH.toStringAsFixed(1))),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(bottom: 12, left: 8),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text('KM/H', style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 9, fontWeight: FontWeight.w900)),
-                              const SizedBox(height: 2),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 400),
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: sColor.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: sColor.withValues(alpha: 0.3)),
-                                ),
-                                child: Text(
-                                  _speedCategory(_speedKmH),
-                                  style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 6, fontWeight: FontWeight.w900, letterSpacing: 0.5),
-                                ),
-                              ),
-                            ],
+                    FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 300),
+                            style: GoogleFonts.plusJakartaSans(
+                              color: _isOnline ? sColor : Colors.white38,
+                              fontSize: 42,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: -2,
+                            ),
+                            child: Text(_speedKmH.toStringAsFixed(1)),
                           ),
-                        ),
-                      ],
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8, left: 6),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('KM/H', style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 8, fontWeight: FontWeight.w900)),
+                                const SizedBox(height: 2),
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 400),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: sColor.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: sColor.withOpacity(0.3)),
+                                  ),
+                                  child: Text(
+                                    _speedCategory(_speedKmH),
+                                    style: GoogleFonts.plusJakartaSans(color: sColor, fontSize: 6, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    ), if (_currentPosition != null) ...[
+                    if (_currentPosition != null) ...[
                       const SizedBox(height: 4),
                       Row(
                         children: [
@@ -634,7 +716,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                           colors: _isOnline
-                            ? [barColor.withValues(alpha: 0.4), barColor]
+                            ? [barColor.withOpacity(0.4), barColor]
                             : [Colors.white10, Colors.white10],
                         ),
                         borderRadius: BorderRadius.circular(5),
@@ -654,19 +736,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.end,
       children: [
-        IconButton(
-          icon: const Icon(Icons.refresh_rounded, color: Colors.white24, size: 20),
-          onPressed: () => Provider.of<SocketService>(context, listen: false).reconnect(),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-        ),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: (_isOnline ? Colors.blueAccent : Colors.white10).withValues(alpha: 0.1),
+            color: (_isOnline ? Colors.blueAccent : Colors.white10).withOpacity(0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: (_isOnline ? Colors.blueAccent : Colors.white24).withValues(alpha: 0.2)),
+            border: Border.all(color: (_isOnline ? Colors.blueAccent : Colors.white24).withOpacity(0.2)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -701,12 +777,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildBusSelector() {
+    if (_isOnline) return const SizedBox.shrink(); 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
       decoration: BoxDecoration(
         color: const Color(0xFF161421),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -714,12 +791,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
           dropdownColor: const Color(0xFF0D0B14),
           value: _selectedBusId,
           icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.blueAccent),
-          hint: Text('SELECT ASSIGNED BUS', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 1)),
+          hint: Text('SELECT ASSIGNED BUS', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1)),
           items: _buses.map((bus) => DropdownMenuItem<String>(
             value: bus['_id'],
-            child: Text(bus['routeName'] ?? 'Unknown Route', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+            child: Text(bus['routeName'] ?? 'Unknown Route', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
           )).toList(),
-          onChanged: _isOnline ? null : (v) {
+          onChanged: (v) {
             setState(() => _selectedBusId = v);
             final bus = _buses.firstWhere((b) => b['_id'] == v, orElse: () => null);
             if (bus != null) _fetchRouteDetails(bus['routeId']);
@@ -734,20 +811,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
       onTap: _toggleOnlineStatus,
       child: AnimatedContainer(
         duration: 400.ms,
-        height: 72,
+        height: 64,
         width: double.infinity,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             colors: _isOnline 
               ? [Colors.redAccent, const Color(0xFFE94560)] 
-              : [Colors.deepPurpleAccent, const Color(0xFF3F37C9)]
+              : [Colors.blueAccent, const Color(0xFF3F37C9)]
           ),
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: (_isOnline ? Colors.redAccent : Colors.deepPurpleAccent).withValues(alpha: 0.4), 
-              blurRadius: 25, 
-              offset: const Offset(0, 10)
+              color: (_isOnline ? Colors.redAccent : Colors.blueAccent).withOpacity(0.3), 
+              blurRadius: 20, 
+              offset: const Offset(0, 8)
             )
           ],
         ),
@@ -755,16 +832,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(_isOnline ? Icons.stop_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 28),
+              Icon(_isOnline ? Icons.location_off_rounded : Icons.location_on_rounded, color: Colors.white, size: 24),
               const SizedBox(width: 12),
               Text(
-                _isOnline ? 'Go Offline' : 'Go Online',
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16),
+                _isOnline ? 'STOP LIVE TRACKING' : 'START LIVE TRACKING',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 14),
               ),
             ],
           ),
         ),
       ),
+    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(
+      duration: 3.seconds,
+      color: Colors.white.withOpacity(0.1),
     );
   }
 
@@ -824,9 +904,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
         height: 70,
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.redAccent.withValues(alpha: 0.1),
+          color: Colors.redAccent.withOpacity(0.1),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2), width: 2),
+          border: Border.all(color: Colors.redAccent.withOpacity(0.2), width: 2),
         ),
         child: _isSosActive 
             ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
@@ -842,7 +922,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 ],
               ),
       ),
-    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(color: Colors.redAccent.withValues(alpha: 0.2), duration: 2.seconds);
+    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(color: Colors.redAccent.withOpacity(0.2), duration: 2.seconds);
   }
 
   Widget _buildTripStats() {
@@ -865,25 +945,29 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Widget _buildSmallStat(String label, String value, String unit, Color accent) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: const Color(0xFF161421),
-          borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: accent.withValues(alpha: 0.1)),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accent.withOpacity(0.1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                FittedBox(fit: BoxFit.scaleDown, child: FittedBox(fit: BoxFit.scaleDown, child: Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))),
-                const SizedBox(width: 4),
-                Text(unit, style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 10, fontWeight: FontWeight.w900)),
-              ],
+            const SizedBox(height: 4),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.baseline,
+                textBaseline: TextBaseline.alphabetic,
+                children: [
+                  Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900)),
+                  const SizedBox(width: 4),
+                  Text(unit, style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 10, fontWeight: FontWeight.w900)),
+                ],
+              ),
             ),
           ],
         ),

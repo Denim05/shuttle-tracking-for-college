@@ -176,7 +176,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               : isLast
                   ? Colors.redAccent
                   : Colors.white)
-              .withValues(alpha: 0.07),
+              .withOpacity(0.07),
         ),
       ),
       child: Column(
@@ -203,7 +203,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                 : isLast
                                     ? Colors.redAccent
                                     : const Color(0xFF2D5BFF))
-                            .withValues(alpha: 0.5),
+                            .withOpacity(0.5),
                         blurRadius: 8,
                       ),
                     ],
@@ -251,9 +251,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.08),
+          color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withValues(alpha: 0.2)),
+          border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Text(
           time,
@@ -271,9 +271,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.25)),
+        border: Border.all(color: color.withOpacity(0.25)),
       ),
       child: Text(
         label,

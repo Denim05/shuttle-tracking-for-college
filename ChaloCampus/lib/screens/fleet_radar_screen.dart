@@ -175,9 +175,9 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                 child: Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(
-                    color: Colors.black.withValues(alpha: 0.5),
+                    color: Colors.black.withOpacity(0.5),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
                   ),
                   child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
                 ),
@@ -206,9 +206,9 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
+                      color: color.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: color.withValues(alpha: 0.3)),
+                      border: Border.all(color: color.withOpacity(0.3)),
                     ),
                     child: Text(
                       '${ping}ms',
@@ -227,7 +227,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                     decoration: BoxDecoration(
                       color: color,
                       shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: color.withValues(alpha: 0.6), blurRadius: 8)],
+                      boxShadow: [BoxShadow(color: color.withOpacity(0.6), blurRadius: 8)],
                     ),
                   ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.5.seconds);
                 },
@@ -252,7 +252,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             decoration: BoxDecoration(
-              color: AppColors.danger.withValues(alpha: 0.9),
+              color: AppColors.danger.withOpacity(0.9),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Row(
@@ -288,14 +288,14 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           decoration: BoxDecoration(
             color: AppColors.danger,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: AppColors.danger.withValues(alpha: 0.5), blurRadius: 30, spreadRadius: 4)],
+            boxShadow: [BoxShadow(color: AppColors.danger.withOpacity(0.5), blurRadius: 30, spreadRadius: 4)],
           ),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.emergency_rounded, color: Colors.white, size: 24),
@@ -331,10 +331,10 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.bg.withValues(alpha: 0.95),
+        color: AppColors.bg.withOpacity(0.95),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
-        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 40, spreadRadius: 10)],
+        border: Border.all(color: Colors.white.withOpacity(0.07)),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40, spreadRadius: 10)],
       ),
       child: CustomScrollView(
         controller: scrollController,
@@ -346,7 +346,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                 width: 40, height: 4,
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.15),
+                  color: Colors.white.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -439,9 +439,9 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
+        color: color.withOpacity(0.08),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -476,7 +476,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           color: selected ? AppColors.primary : AppColors.surface,
           borderRadius: BorderRadius.circular(10),
           border: Border.all(
-            color: selected ? AppColors.primary : Colors.white.withValues(alpha: 0.08),
+            color: selected ? AppColors.primary : Colors.white.withOpacity(0.08),
           ),
         ),
         child: Text(
@@ -532,17 +532,17 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected
-              ? routeColor.withValues(alpha: 0.08)
-              : AppColors.surface.withValues(alpha: 0.6),
+              ? routeColor.withOpacity(0.08)
+              : AppColors.surface.withOpacity(0.6),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
-                ? routeColor.withValues(alpha: 0.4)
-                : Colors.white.withValues(alpha: 0.05),
+                ? routeColor.withOpacity(0.4)
+                : Colors.white.withOpacity(0.05),
             width: isSelected ? 1.5 : 1.0,
           ),
           boxShadow: isSelected
-              ? [BoxShadow(color: routeColor.withValues(alpha: 0.15), blurRadius: 20)]
+              ? [BoxShadow(color: routeColor.withOpacity(0.15), blurRadius: 20)]
               : null,
         ),
         child: IntrinsicHeight(
@@ -562,9 +562,9 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
               Container(
                 width: 42, height: 42,
                 decoration: BoxDecoration(
-                  color: routeColor.withValues(alpha: 0.12),
+                  color: routeColor.withOpacity(0.12),
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: routeColor.withValues(alpha: 0.25)),
+                  border: Border.all(color: routeColor.withOpacity(0.25)),
                 ),
                 child: Icon(Icons.directions_bus_rounded, color: routeColor, size: 22),
               ),
@@ -595,7 +595,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.1),
+                                color: AppColors.primary.withOpacity(0.1),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(

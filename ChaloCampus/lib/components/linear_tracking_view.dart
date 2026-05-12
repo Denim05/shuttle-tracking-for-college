@@ -23,9 +23,9 @@ class LinearTrackingView extends StatelessWidget {
       decoration: BoxDecoration(
         color: const Color(0xFF0F1219),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 20, offset: const Offset(0, 10)),
+          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10)),
         ],
       ),
       child: Column(
@@ -37,9 +37,9 @@ class LinearTrackingView extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: routeColor.withValues(alpha: 0.1),
+                  color: routeColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: routeColor.withValues(alpha: 0.2)),
+                  border: Border.all(color: routeColor.withOpacity(0.2)),
                 ),
                 child: Icon(Icons.directions_bus_filled_rounded, color: routeColor, size: 24),
               ),
@@ -107,7 +107,7 @@ class LinearTrackingView extends StatelessWidget {
                     child: Container(
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
+                        color: Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -122,9 +122,9 @@ class LinearTrackingView extends StatelessWidget {
                       width: stopWidth * (route.stops.length - 1) * progress,
                       height: 4,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [routeColor, routeColor.withValues(alpha: 0.5)]),
+                        gradient: LinearGradient(colors: [routeColor, routeColor.withOpacity(0.5)]),
                         borderRadius: BorderRadius.circular(2),
-                        boxShadow: [BoxShadow(color: routeColor.withValues(alpha: 0.3), blurRadius: 10)],
+                        boxShadow: [BoxShadow(color: routeColor.withOpacity(0.3), blurRadius: 10)],
                       ),
                     ),
                   ),
@@ -146,7 +146,7 @@ class LinearTrackingView extends StatelessWidget {
                                 shape: BoxShape.circle,
                                 color: isVisited ? routeColor : const Color(0xFF0F1219),
                                 border: Border.all(
-                                  color: isVisited ? routeColor.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1), 
+                                  color: isVisited ? routeColor.withOpacity(0.5) : Colors.white.withOpacity(0.1), 
                                   width: 3
                                 ),
                               ),
@@ -185,7 +185,7 @@ class LinearTrackingView extends StatelessWidget {
                             color: Colors.blueAccent,
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: [BoxShadow(color: Colors.blueAccent.withValues(alpha: 0.5), blurRadius: 15)],
+                            boxShadow: [BoxShadow(color: Colors.blueAccent.withOpacity(0.5), blurRadius: 15)],
                           ),
                           child: const Icon(Icons.directions_bus_filled_rounded, color: Colors.black, size: 14),
                         ),

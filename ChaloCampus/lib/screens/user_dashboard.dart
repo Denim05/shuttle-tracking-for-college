@@ -253,7 +253,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       left: 0, right: 0,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 4),
-                        color: Colors.redAccent.withValues(alpha: 0.8),
+                        color: Colors.redAccent.withOpacity(0.8),
                         child: Center(
                           child: Text(
                             '📡 SYNCHRONIZING Tracker...',
@@ -284,9 +284,9 @@ class _UserDashboardState extends State<UserDashboard> {
         height: 250,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.95),
+          color: Colors.black.withOpacity(0.95),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
+          border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
         ),
         child: Column(
           children: [
@@ -300,7 +300,7 @@ class _UserDashboardState extends State<UserDashboard> {
             const Divider(color: Colors.white10),
             Expanded(
               child: buses.isEmpty 
-                ? const Center(child: Text('NO DATA RECEIVED YET', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10)))
+                ? Center(child: Text('NO DATA RECEIVED YET', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10)))
                 : ListView.builder(
                     padding: EdgeInsets.zero,
                     itemCount: buses.length,
@@ -310,7 +310,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
                         child: Row(
                           children: [
                             Container(width: 8, height: 8, decoration: BoxDecoration(color: isFresh ? Colors.green : Colors.red, shape: BoxShape.circle)),
@@ -343,13 +343,13 @@ class _UserDashboardState extends State<UserDashboard> {
     return Positioned(
       top: topPadding + 10, left: 16, right: 16,
       child: Container(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 0),
+        constraints: const BoxConstraints(minHeight: 56),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: Color(0xFF1E1E1E).withValues(alpha: 0.96),
+          color: const Color(0xFF1E1E1E).withOpacity(0.96),
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-          boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 16, offset: const Offset(0, 4))],
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 16, offset: const Offset(0, 4))],
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
@@ -366,7 +366,7 @@ class _UserDashboardState extends State<UserDashboard> {
               child: Container(
                 width: 34, height: 34,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF2D5BFF).withValues(alpha: 0.12),
+                  color: const Color(0xFF2D5BFF).withOpacity(0.12),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.directions_bus_filled_rounded, color: Color(0xFF2D5BFF), size: 17),
@@ -377,6 +377,7 @@ class _UserDashboardState extends State<UserDashboard> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
                     'Shuttle Tracker',
@@ -430,7 +431,7 @@ class _UserDashboardState extends State<UserDashboard> {
               child: Container(
                 width: 34, height: 34,
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
+                  color: Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.swap_horiz_rounded, color: Colors.white60, size: 18),
@@ -474,10 +475,10 @@ class _UserDashboardState extends State<UserDashboard> {
           snap: true,
           builder: (context, scrollController) => Container(
             decoration: BoxDecoration(
-              color: Color(0xFF1E1E1E).withValues(alpha: 0.98),
+              color: Color(0xFF1E1E1E).withOpacity(0.98),
               borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.7), blurRadius: 40)],
+              border: Border.all(color: Colors.white.withOpacity(0.05)),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.7), blurRadius: 40)],
             ),
             child: ListView(
               controller: scrollController,
@@ -545,9 +546,9 @@ class _UserDashboardState extends State<UserDashboard> {
                              duration: const Duration(milliseconds: 400),
                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                              decoration: BoxDecoration(
-                               color: isRecent ? const Color(0xFF00C853).withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.04),
+                               color: isRecent ? const Color(0xFF00C853).withOpacity(0.1) : Colors.white.withOpacity(0.04),
                                borderRadius: BorderRadius.circular(14),
-                               border: Border.all(color: isRecent ? const Color(0xFF00C853).withValues(alpha: 0.3) : Colors.white12),
+                               border: Border.all(color: isRecent ? const Color(0xFF00C853).withOpacity(0.3) : Colors.white12),
                              ),
                              child: Row(
                                mainAxisSize: MainAxisSize.min,
@@ -625,7 +626,7 @@ class _UserDashboardState extends State<UserDashboard> {
                         top: 10, right: 10,
                         child: Icon(
                           Icons.refresh_rounded,
-                          color: const Color(0xFF2D5BFF).withValues(alpha: 0.5),
+                          color: const Color(0xFF2D5BFF).withOpacity(0.5),
                           size: 14,
                         ),
                       ),
@@ -642,7 +643,7 @@ class _UserDashboardState extends State<UserDashboard> {
           Text(
             'MY STOP: ${auth.currentUser!.pickupPoint!.toUpperCase()}',
             style: GoogleFonts.plusJakartaSans(
-              color: Colors.blueAccent.withValues(alpha: 0.6),
+              color: Colors.blueAccent.withOpacity(0.6),
               fontSize: 9,
               fontWeight: FontWeight.w900,
               letterSpacing: 1.5,
@@ -650,39 +651,52 @@ class _UserDashboardState extends State<UserDashboard> {
           ),
         ],
         const SizedBox(height: 20),
-        // Quick Actions Row
-        Row(
-          children: [
-            Expanded(child: _buildQuickAction(
-              icon: Icons.schedule_rounded,
-              label: 'SCHEDULE',
-              color: Colors.blueAccent,
-              onTap: _selectedRoute != null
-                  ? () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => ScheduleScreen(route: _selectedRoute!)))
-                  : null,
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: _buildQuickAction(
-              icon: _delaySubscribed
-                  ? Icons.notifications_active_rounded
-                  : Icons.notifications_none_rounded,
-              label: _delaySubscribed ? 'NOTIFYING' : 'NOTIFY LATE',
-              color: _delaySubscribed ? const Color(0xFF38EF7D) : const Color(0xFFFFB347),
-              onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
-            )),
-            const SizedBox(width: 12),
-            Expanded(child: _buildQuickAction(
-              icon: Icons.report_gmailerrorred_rounded,
-              label: 'REPORT',
-              color: Colors.redAccent,
-              onTap: () => Navigator.push(context, MaterialPageRoute(
-                    builder: (_) => ComplaintScreen(
-                      selectedRoute: _selectedRoute,
-                      activeBus: _activeBus,
-                    ))),
-            )),
-          ],
+        // Quick Actions Row - Scrollable for responsiveness
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          physics: const BouncingScrollPhysics(),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 110,
+                child: _buildQuickAction(
+                  icon: Icons.schedule_rounded,
+                  label: 'SCHEDULE',
+                  color: Colors.blueAccent,
+                  onTap: _selectedRoute != null
+                      ? () => Navigator.push(context, MaterialPageRoute(
+                            builder: (_) => ScheduleScreen(route: _selectedRoute!)))
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 110,
+                child: _buildQuickAction(
+                  icon: _delaySubscribed
+                      ? Icons.notifications_active_rounded
+                      : Icons.notifications_none_rounded,
+                  label: _delaySubscribed ? 'NOTIFYING' : 'NOTIFY LATE',
+                  color: _delaySubscribed ? const Color(0xFF38EF7D) : const Color(0xFFFFB347),
+                  onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                width: 110,
+                child: _buildQuickAction(
+                  icon: Icons.report_gmailerrorred_rounded,
+                  label: 'REPORT',
+                  color: Colors.redAccent,
+                  onTap: () => Navigator.push(context, MaterialPageRoute(
+                        builder: (_) => ComplaintScreen(
+                          selectedRoute: _selectedRoute,
+                          activeBus: _activeBus,
+                        ))),
+                ),
+              ),
+            ],
+          ),
         ),
       ],
     );
@@ -701,13 +715,13 @@ class _UserDashboardState extends State<UserDashboard> {
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
           color: disabled
-              ? Colors.white.withValues(alpha: 0.02)
-              : color.withValues(alpha: 0.08),
+              ? Colors.white.withOpacity(0.02)
+              : color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: disabled
-                ? Colors.white.withValues(alpha: 0.03)
-                : color.withValues(alpha: 0.2),
+                ? Colors.white.withOpacity(0.03)
+                : color.withOpacity(0.2),
           ),
         ),
         child: Column(
@@ -733,16 +747,19 @@ class _UserDashboardState extends State<UserDashboard> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Color(0xFF1E1E1E),
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
+        border: Border.all(color: Colors.white.withOpacity(0.03)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(icon, color: const Color(0xFF2D5BFF), size: 20),
           const SizedBox(height: 12),
-          Text(val, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(val, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))
+          ),
           Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1)),
         ],
       ),
@@ -755,9 +772,9 @@ class _UserDashboardState extends State<UserDashboard> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: const Color(0xFF2D5BFF).withValues(alpha: 0.05),
+          color: const Color(0xFF2D5BFF).withOpacity(0.05),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: const Color(0xFF2D5BFF).withValues(alpha: 0.1)),
+          border: Border.all(color: const Color(0xFF2D5BFF).withOpacity(0.1)),
         ),
         child: Row(
           children: [
@@ -804,9 +821,9 @@ class _UserDashboardState extends State<UserDashboard> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2D5BFF).withValues(alpha: 0.2),
+                          color: const Color(0xFF2D5BFF).withOpacity(0.2),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF2D5BFF).withValues(alpha: 0.3)),
+                          border: Border.all(color: const Color(0xFF2D5BFF).withOpacity(0.3)),
                         ),
                         child: Text('${allAlerts.length}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF2D5BFF), fontSize: 11, fontWeight: FontWeight.w900)),
                       ),
@@ -872,14 +889,14 @@ class _UserDashboardState extends State<UserDashboard> {
       decoration: BoxDecoration(
         color: Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: accentColor.withValues(alpha: 0.1)),
+        border: Border.all(color: accentColor.withOpacity(0.1)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: accentColor.withValues(alpha: 0.1), shape: BoxShape.circle),
+            decoration: BoxDecoration(color: accentColor.withOpacity(0.1), shape: BoxShape.circle),
             child: Icon(isCritical ? Icons.warning_rounded : Icons.bolt_rounded, color: accentColor, size: 18),
           ),
           const SizedBox(width: 16),
@@ -914,7 +931,7 @@ class _UserDashboardState extends State<UserDashboard> {
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(colors: [Color(0xFF2D5BFF), Colors.blueAccent]),
                   borderRadius: BorderRadius.circular(35),
-                  boxShadow: [BoxShadow(color: const Color(0xFF2D5BFF).withValues(alpha: 0.2), blurRadius: 30)],
+                  boxShadow: [BoxShadow(color: const Color(0xFF2D5BFF).withOpacity(0.2), blurRadius: 30)],
                 ),
                 child: Center(
                   child: Text(
@@ -931,9 +948,9 @@ class _UserDashboardState extends State<UserDashboard> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.06),
+                    color: Colors.blueAccent.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.15)),
+                    border: Border.all(color: Colors.blueAccent.withOpacity(0.15)),
                   ),
                   child: Text(
                     'Enrollment: ${user!.userId}',
@@ -950,8 +967,8 @@ class _UserDashboardState extends State<UserDashboard> {
             final latestNotifs = busStore.notifications.take(3).toList();
             return _buildProfileSection('NOTIFICATION FEED', [
               if (latestNotifs.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.all(20),
+                Padding(
+                  padding: const EdgeInsets.all(20),
                   child: Center(child: Text('NO RECENT ACTIVITY', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 10, fontWeight: FontWeight.bold))),
                 )
               else
@@ -994,7 +1011,7 @@ class _UserDashboardState extends State<UserDashboard> {
             leading: Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
+                color: Colors.deepPurpleAccent.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
               child: const Icon(Icons.lock_outline_rounded, color: Colors.deepPurpleAccent, size: 18),
@@ -1009,7 +1026,7 @@ class _UserDashboardState extends State<UserDashboard> {
         ElevatedButton(
           onPressed: () => auth.logout(),
           style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.redAccent.withValues(alpha: 0.1),
+            backgroundColor: Colors.redAccent.withOpacity(0.1),
             foregroundColor: Colors.redAccent,
             padding: const EdgeInsets.all(20),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1132,9 +1149,9 @@ class _UserDashboardState extends State<UserDashboard> {
   Widget _pwField(BuildContext ctx, String hint, TextEditingController ctrl, bool visible, VoidCallback? onToggle) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.03),
+        color: Colors.white.withOpacity(0.03),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
+        border: Border.all(color: Colors.white.withOpacity(0.07)),
       ),
       child: TextField(
         controller: ctrl,
@@ -1168,7 +1185,7 @@ class _UserDashboardState extends State<UserDashboard> {
           decoration: BoxDecoration(
             color: Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
+            border: Border.all(color: Colors.white.withOpacity(0.03)),
           ),
           child: Column(children: children),
         ),
@@ -1180,7 +1197,15 @@ class _UserDashboardState extends State<UserDashboard> {
     return ListTile(
       leading: Icon(icon, color: Colors.white24, size: 20),
       title: Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
-      trailing: Text(val, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14)),
+      trailing: Container(
+        constraints: const BoxConstraints(maxWidth: 150),
+        child: Text(
+          val, 
+          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
+          textAlign: TextAlign.right,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
     );
   }
 
@@ -1204,7 +1229,7 @@ class _UserDashboardState extends State<UserDashboard> {
           padding: EdgeInsets.fromLTRB(20, 10, 20, bottomPadding > 0 ? bottomPadding : 20),
           decoration: BoxDecoration(
             color: const Color(0xFF121212),
-            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+            border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1227,7 +1252,7 @@ class _UserDashboardState extends State<UserDashboard> {
         duration: 300.ms,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSel ? const Color(0xFF2D5BFF).withValues(alpha: 0.1) : Colors.transparent,
+          color: isSel ? const Color(0xFF2D5BFF).withOpacity(0.1) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -1307,10 +1332,10 @@ class _UserDashboardState extends State<UserDashboard> {
         builder: (context, setModalState) => Container(
           height: MediaQuery.of(context).size.height * 0.7,
           decoration: BoxDecoration(
-            color: Color(0xFF1E1E1E).withValues(alpha: 0.98),
+            color: Color(0xFF1E1E1E).withOpacity(0.98),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.5), blurRadius: 40)],
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40)],
           ),
           child: Column(
             children: [
@@ -1350,9 +1375,9 @@ class _UserDashboardState extends State<UserDashboard> {
                   padding: const EdgeInsets.symmetric(horizontal: 16),
                   height: 48,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.03),
+                    color: Colors.white.withOpacity(0.03),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                    border: Border.all(color: Colors.white.withOpacity(0.05)),
                   ),
                   child: TextField(
                     onChanged: (v) => setModalState(() => searchQuery = v),
@@ -1378,9 +1403,9 @@ class _UserDashboardState extends State<UserDashboard> {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: isSel ? const Color(0xFF2D5BFF).withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.03),
+                        color: isSel ? const Color(0xFF2D5BFF).withOpacity(0.1) : Colors.white.withOpacity(0.03),
                         borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: isSel ? const Color(0xFF2D5BFF).withValues(alpha: 0.3) : Colors.transparent),
+                        border: Border.all(color: isSel ? const Color(0xFF2D5BFF).withOpacity(0.3) : Colors.transparent),
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
@@ -1395,7 +1420,7 @@ class _UserDashboardState extends State<UserDashboard> {
                         leading: Container(
                           padding: const EdgeInsets.all(10),
                           decoration: BoxDecoration(
-                            color: (isSel ? const Color(0xFF2D5BFF) : Colors.white24).withValues(alpha: 0.1),
+                            color: (isSel ? const Color(0xFF2D5BFF) : Colors.white24).withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(Icons.alt_route_rounded, color: isSel ? const Color(0xFF2D5BFF) : Colors.white38, size: 20),
@@ -1460,12 +1485,15 @@ class _UserDashboardState extends State<UserDashboard> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        stop['name'],
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
+                      Flexible(
+                        child: Text(
+                          stop['name'],
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                       const SizedBox(height: 4),
@@ -1487,8 +1515,8 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildShimmerLoader() {
     return Shimmer.fromColors(
-      baseColor: Colors.white.withValues(alpha: 0.05),
-      highlightColor: Colors.white.withValues(alpha: 0.1),
+      baseColor: Colors.white.withOpacity(0.05),
+      highlightColor: Colors.white.withOpacity(0.1),
       child: Column(children: List.generate(4, (i) => Container(height: 100, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))))),
     );
   }

@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log
+.env
+.git
+.gitignore
+README.md
+tests
+scratch_*.js
+seed_*.js
+*.json.log

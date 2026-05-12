@@ -39,9 +39,9 @@ class AppColors {
   static const Color statusPending  = Color(0xFFF59E0B);
 
   // Borders / Dividers
-  static Color get border      => Colors.white.withValues(alpha: 0.08);
-  static Color get borderFocus => primary.withValues(alpha: 0.6);
-  static Color get divider     => Colors.white.withValues(alpha: 0.05);
+  static Color get border      => Colors.white.withOpacity(0.08);
+  static Color get borderFocus => primary.withOpacity(0.6);
+  static Color get divider     => Colors.white.withOpacity(0.05);
 }
 
 // ─── Spacing Tokens ──────────────────────────────────────────────────────────
@@ -77,7 +77,7 @@ class AppShadows {
 
   static List<BoxShadow> get card => [
     BoxShadow(
-      color     : Colors.black.withValues(alpha: 0.3),
+      color     : Colors.black.withOpacity(0.3),
       blurRadius: 24,
       offset    : const Offset(0, 8),
     ),
@@ -85,7 +85,7 @@ class AppShadows {
 
   static List<BoxShadow> get primary => [
     BoxShadow(
-      color     : AppColors.primary.withValues(alpha: 0.3),
+      color     : AppColors.primary.withOpacity(0.3),
       blurRadius: 20,
       offset    : const Offset(0, 8),
     ),
@@ -93,7 +93,7 @@ class AppShadows {
 
   static List<BoxShadow> get accent => [
     BoxShadow(
-      color     : AppColors.accent.withValues(alpha: 0.2),
+      color     : AppColors.accent.withOpacity(0.2),
       blurRadius: 20,
       offset    : const Offset(0, 8),
     ),
@@ -101,7 +101,7 @@ class AppShadows {
 
   static List<BoxShadow> get danger => [
     BoxShadow(
-      color     : AppColors.danger.withValues(alpha: 0.3),
+      color     : AppColors.danger.withOpacity(0.3),
       blurRadius: 20,
       offset    : const Offset(0, 4),
     ),
@@ -114,19 +114,19 @@ class AppDecorations {
   AppDecorations._();
 
   static BoxDecoration get glassCard => BoxDecoration(
-    color        : AppColors.surface.withValues(alpha: 0.7),
+    color        : AppColors.surface.withOpacity(0.7),
     borderRadius : BorderRadius.circular(AppRadius.lg),
     border       : Border.all(color: AppColors.border),
     boxShadow    : AppShadows.card,
   );
 
   static BoxDecoration glassCardWithAccent(Color accent) => BoxDecoration(
-    color        : AppColors.surface.withValues(alpha: 0.7),
+    color        : AppColors.surface.withOpacity(0.7),
     borderRadius : BorderRadius.circular(AppRadius.lg),
-    border       : Border.all(color: accent.withValues(alpha: 0.15)),
+    border       : Border.all(color: accent.withOpacity(0.15)),
     boxShadow    : [
       BoxShadow(
-        color      : accent.withValues(alpha: 0.08),
+        color      : accent.withOpacity(0.08),
         blurRadius : 20,
         spreadRadius: 2,
       ),
@@ -143,13 +143,13 @@ class AppDecorations {
 
   static BoxDecoration inputField({bool focused = false, String? error}) {
     final borderColor = error != null
-        ? AppColors.danger.withValues(alpha: 0.6)
+        ? AppColors.danger.withOpacity(0.6)
         : focused
-            ? AppColors.primary.withValues(alpha: 0.7)
-            : Colors.white.withValues(alpha: 0.08);
+            ? AppColors.primary.withOpacity(0.7)
+            : Colors.white.withOpacity(0.08);
     final bgColor = focused
-        ? Colors.white.withValues(alpha: 0.06)
-        : Colors.white.withValues(alpha: 0.03);
+        ? Colors.white.withOpacity(0.06)
+        : Colors.white.withOpacity(0.03);
     return BoxDecoration(
       color       : bgColor,
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -158,9 +158,9 @@ class AppDecorations {
   }
 
   static BoxDecoration statusChip(Color color) => BoxDecoration(
-    color       : color.withValues(alpha: 0.1),
+    color       : color.withOpacity(0.1),
     borderRadius: BorderRadius.circular(AppRadius.full),
-    border      : Border.all(color: color.withValues(alpha: 0.25)),
+    border      : Border.all(color: color.withOpacity(0.25)),
   );
 }
 
@@ -271,7 +271,7 @@ class AppTheme {
         borderSide  : const BorderSide(color: AppColors.danger),
       ),
       filled   : true,
-      fillColor: Colors.white.withValues(alpha: 0.03),
+      fillColor: Colors.white.withOpacity(0.03),
       hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
       labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary),
       errorStyle: GoogleFonts.plusJakartaSans(color: AppColors.danger, fontSize: 11),

@@ -75,7 +75,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                 decoration: BoxDecoration(
                   color: Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: color.withValues(alpha: 0.1)),
+                  border: Border.all(color: color.withOpacity(0.1)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -86,7 +86,7 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: color.withValues(alpha: 0.1),
+                            color: color.withOpacity(0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(

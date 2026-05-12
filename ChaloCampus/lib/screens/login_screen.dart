@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import '../services/auth_service.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:geolocator/geolocator.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -120,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
               height: 300,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF2D5BFF).withValues(alpha: 0.1),
+                color: const Color(0xFF2D5BFF).withOpacity(0.1),
               ),
             ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1,1), end: const Offset(1.2,1.2), duration: 5.seconds),
           ),
@@ -136,11 +137,11 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 100,
                     height: 100,
                     decoration: BoxDecoration(
-                      color: Color(0xFF1E1E1E),
+                      color: const Color(0xFF1E1E1E),
                       borderRadius: BorderRadius.circular(30),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF2D5BFF).withValues(alpha: 0.2),
+                          color: const Color(0xFF2D5BFF).withOpacity(0.2),
                           blurRadius: 40,
                           offset: const Offset(0, 10),
                         ),
@@ -179,9 +180,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Color(0xFF1E1E1E),
+                      color: const Color(0xFF1E1E1E),
                       borderRadius: BorderRadius.circular(36),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                      border: Border.all(color: Colors.white.withOpacity(0.05)),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,15 +217,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                   margin: const EdgeInsets.symmetric(horizontal: 4),
                                   height: 85,
                                   decoration: BoxDecoration(
-                                    color: isSelected ? const Color(0xFF2D5BFF) : Color(0xFF1E1E1E).withValues(alpha: 0.5),
+                                    color: isSelected ? const Color(0xFF2D5BFF) : const Color(0xFF1E1E1E).withOpacity(0.5),
                                     borderRadius: BorderRadius.circular(20),
                                     border: Border.all(
-                                      color: isSelected ? Colors.white24 : Colors.white.withValues(alpha: 0.05),
+                                      color: isSelected ? Colors.white24 : Colors.white.withOpacity(0.05),
                                       width: 1,
                                     ),
                                     boxShadow: isSelected ? [
                                       BoxShadow(
-                                        color: const Color(0xFF2D5BFF).withValues(alpha: 0.4),
+                                        color: const Color(0xFF2D5BFF).withOpacity(0.4),
                                         blurRadius: 25,
                                         offset: const Offset(0, 8),
                                       )
@@ -322,7 +323,7 @@ class _LoginScreenState extends State<LoginScreen> {
                               TextSpan(
                                 text: 'Continue as Guest',
                                 style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF2D5BFF).withValues(alpha: 0.8),
+                                  color: const Color(0xFF2D5BFF).withOpacity(0.8),
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -348,9 +349,9 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Color(0xFF1E1E1E),
+        color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: TextField(
         controller: controller,

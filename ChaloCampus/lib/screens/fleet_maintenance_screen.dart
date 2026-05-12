@@ -70,14 +70,14 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                 decoration: BoxDecoration(
                   color: Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: statusColor.withValues(alpha: 0.1)),
+                  border: Border.all(color: statusColor.withOpacity(0.1)),
                 ),
                 child: Row(
                   children: [
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: 0.1),
+                        color: statusColor.withOpacity(0.1),
                         borderRadius: BorderRadius.circular(16),
                       ),
                       child: Icon(Icons.directions_bus_filled_rounded, color: statusColor, size: 28),
@@ -120,7 +120,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                               decoration: BoxDecoration(
                                 color: statusColor,
                                 borderRadius: BorderRadius.circular(2),
-                                boxShadow: [BoxShadow(color: statusColor.withValues(alpha: 0.5), blurRadius: 4)],
+                                boxShadow: [BoxShadow(color: statusColor.withOpacity(0.5), blurRadius: 4)],
                               ),
                             ),
                           ),

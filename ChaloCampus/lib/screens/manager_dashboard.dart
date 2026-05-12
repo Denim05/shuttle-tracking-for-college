@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -24,7 +24,7 @@ class ManagerDashboard extends StatefulWidget {
 class _ManagerDashboardState extends State<ManagerDashboard> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
-  // _buses removed — fleet data now comes from BusStore (Consumer<BusStore>)
+  // _buses removed â€” fleet data now comes from BusStore (Consumer<BusStore>)
   List<RouteModel> _routes = [];
   List<dynamic> _users = [];
   List<dynamic> _drivers = [];
@@ -44,7 +44,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   void _initSocket() {
-    // ⚠️ Do NOT call listenToBusUpdates here — that would overwrite BusStore's
+    // âš ï¸ Do NOT call listenToBusUpdates here â€” that would overwrite BusStore's
     // listener and break real-time updates across all dashboards.
     // The fleet tab reads from BusStore via Consumer<BusStore> instead.
 
@@ -191,7 +191,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Widget build(BuildContext context) {
     final socketService = Provider.of<SocketService>(context);
     return DefaultTabController(
-      length: 6,
+      length: 7,
       child: Scaffold(
         backgroundColor: const Color(0xFF121212),
         body: ValueListenableBuilder<bool>(
@@ -216,10 +216,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     left: 0, right: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      color: Colors.redAccent.withValues(alpha: 0.8),
+                      color: Colors.redAccent.withOpacity(0.8),
                       child: Center(
                         child: Text(
-                          '📡 Connecting...',
+                          'ðŸ“¡ Connecting...',
                           style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                         ),
                       ),
@@ -279,18 +279,20 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E1E1E),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.1)),
+                        border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.1)),
                       ),
                       child: TabBar(
+                        isScrollable: true,
+                        tabAlignment: TabAlignment.start,
                         indicator: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              Colors.deepPurpleAccent.withValues(alpha: 0.2),
-                              Colors.blueAccent.withValues(alpha: 0.1),
+                              Colors.deepPurpleAccent.withOpacity(0.2),
+                              Colors.blueAccent.withOpacity(0.1),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
+                          border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
                         ),
                         dividerColor: Colors.transparent,
                         indicatorSize: TabBarIndicatorSize.tab,
@@ -303,6 +305,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           const Tab(icon: Icon(Icons.badge_rounded, size: 20), text: 'Drivers'),
                           const Tab(icon: Icon(Icons.people_alt_rounded, size: 20), text: 'Users'),
                           const Tab(icon: Icon(Icons.assignment_ind_rounded, size: 20), text: 'Register'),
+                          const Tab(icon: Icon(Icons.route_rounded, size: 20), text: 'Routes'),
                           Tab(
                             icon: Consumer<BusStore>(
                               builder: (_, store, __) => Stack(
@@ -343,6 +346,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               _buildDriverTab(),
                               _buildUserTab(),
                               RegistrationManagerScreen(routes: _routes),
+                              _buildRoutesTab(),
                               _buildAlertTab(),
                             ],
                           ),
@@ -361,9 +365,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       margin: const EdgeInsets.only(left: 8),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: Colors.white.withOpacity(0.05),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: IconButton(
         icon: Icon(icon, color: Colors.white, size: 20),
@@ -377,8 +381,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       padding: const EdgeInsets.all(20),
       itemCount: 5,
       itemBuilder: (context, index) => Shimmer.fromColors(
-        baseColor: Colors.white.withValues(alpha: 0.05),
-        highlightColor: Colors.white.withValues(alpha: 0.1),
+        baseColor: Colors.white.withOpacity(0.05),
+        highlightColor: Colors.white.withOpacity(0.1),
         child: Container(
           height: 100,
           margin: const EdgeInsets.only(bottom: 16),
@@ -463,14 +467,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         ),
                                       ),
                                     ),
-                                    // ── Live speed badge ───────────────────────────
+                                    // â”€â”€ Live speed badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                                     if (bus.status != 'Offline')
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
-                                          color: Colors.blueAccent.withValues(alpha: 0.1),
+                                          color: Colors.blueAccent.withOpacity(0.1),
                                           borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                                          border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
                                         ),
                                         child: Text(
                                           '${bus.speed.toStringAsFixed(1)} KM/H',
@@ -497,7 +501,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              _buildActionButton(Icons.download_rounded, () => _downloadReport(busId: bus.id)),
+                              _buildActionButton(Icons.bar_chart_rounded, () => _showBusReportSheet(bus)),
                               const SizedBox(height: 8),
                               _buildActionButton(Icons.tune_rounded, () => _showBusActionDialog(bus)),
                             ],
@@ -521,10 +525,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color.withValues(alpha: 0.15)),
+        border: Border.all(color: color.withOpacity(0.15)),
         boxShadow: [
           BoxShadow(
-            color: color.withValues(alpha: 0.05),
+            color: color.withOpacity(0.05),
             blurRadius: 10,
             spreadRadius: 2
           )
@@ -536,7 +540,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1),
+              color: color.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -547,7 +551,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 1)),
-              Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))
+              ),
             ],
           ),
         ],
@@ -575,12 +582,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [
-                        (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withValues(alpha: 0.2),
-                        (isActive ? Colors.blueAccent : Colors.redAccent).withValues(alpha: 0.05),
+                        (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withOpacity(0.2),
+                        (isActive ? Colors.blueAccent : Colors.redAccent).withOpacity(0.05),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withValues(alpha: 0.3)),
+                    border: Border.all(color: (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withOpacity(0.3)),
                   ),
                   child: Icon(Icons.shield_rounded, color: isActive ? Colors.blueAccent : Colors.redAccent),
                 ),
@@ -646,9 +653,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
+                    color: Colors.deepPurpleAccent.withOpacity(0.1),
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
+                    border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
                   ),
                   child: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent, size: 20),
                 ),
@@ -690,7 +697,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
           children: [
-            // ── Broadcast Composer ─────────────────────────────────────
+            // â”€â”€ Broadcast Composer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Text('Broadcast Message', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1)),
             const SizedBox(height: 8),
             Text('Send notifications to all app users.', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w500)),
@@ -700,9 +707,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               decoration: BoxDecoration(
                 color: const Color(0xFF1E1E1E),
                 borderRadius: BorderRadius.circular(32),
-                border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
+                border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
                 boxShadow: [
-                  BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.05), blurRadius: 20),
+                  BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.05), blurRadius: 20),
                 ]
               ),
               child: Column(
@@ -749,12 +756,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: _isSending
-                            ? [Colors.deepPurpleAccent.withValues(alpha: 0.4), Colors.blueAccent.withValues(alpha: 0.4)]
+                            ? [Colors.deepPurpleAccent.withOpacity(0.4), Colors.blueAccent.withOpacity(0.4)]
                             : [Colors.deepPurpleAccent, Colors.blueAccent],
                         ),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
-                          BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8)),
+                          BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8)),
                         ],
                       ),
                       child: Center(
@@ -768,7 +775,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ),
             ),
 
-            // ── Live Notification Feed ──────────────────────────────────
+            // â”€â”€ Live Notification Feed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             const SizedBox(height: 32),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -777,9 +784,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withValues(alpha: 0.1),
+                    color: Colors.blueAccent.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
+                    border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
                   ),
                   child: Row(
                     children: [
@@ -801,7 +808,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                  border: Border.all(color: Colors.white.withOpacity(0.05)),
                 ),
                 child: Center(
                   child: Column(
@@ -825,7 +832,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: accent.withValues(alpha: 0.15)),
+                    border: Border.all(color: accent.withOpacity(0.15)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -833,7 +840,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: accent.withValues(alpha: 0.1),
+                          color: accent.withOpacity(0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(isInfo ? Icons.bolt_rounded : Icons.warning_rounded, color: accent, size: 16),
@@ -889,11 +896,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         content: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E).withValues(alpha: 0.95),
+            color: const Color(0xFF1E1E1E).withOpacity(0.95),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
+            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
             boxShadow: [
-              BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)
+              BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 20, spreadRadius: 2)
             ],
           ),
           child: Row(
@@ -901,7 +908,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                  color: Colors.deepPurpleAccent.withOpacity(0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.bolt_rounded, color: Colors.blueAccent, size: 20),
@@ -944,7 +951,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 borderRadius: BorderRadius.circular(30),
                 border: Border.all(color: Colors.redAccent, width: 3),
                 boxShadow: [
-                  BoxShadow(color: Colors.redAccent.withValues(alpha: 0.4), blurRadius: 40, spreadRadius: 5),
+                  BoxShadow(color: Colors.redAccent.withOpacity(0.4), blurRadius: 40, spreadRadius: 5),
                 ],
               ),
               child: Column(
@@ -953,7 +960,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withValues(alpha: 0.1),
+                      color: Colors.redAccent.withOpacity(0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 72),
@@ -1030,9 +1037,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E).withValues(alpha: 0.4),
+        color: const Color(0xFF1E1E1E).withOpacity(0.4),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.05)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
@@ -1052,7 +1059,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: (isGood ? Colors.blueAccent : Colors.redAccent).withValues(alpha: 0.4),
+            color: (isGood ? Colors.blueAccent : Colors.redAccent).withOpacity(0.4),
             blurRadius: 10,
           )
         ],
@@ -1064,9 +1071,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Text(
         text.toUpperCase(),
@@ -1080,9 +1087,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.1),
+        color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withValues(alpha: 0.2)),
+        border: Border.all(color: color.withOpacity(0.2)),
       ),
       child: Text(label, style: GoogleFonts.plusJakartaSans(color: color, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
     );
@@ -1103,10 +1110,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           Container(
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: Colors.deepPurpleAccent.withValues(alpha: 0.05),
+              color: Colors.deepPurpleAccent.withOpacity(0.05),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 80, color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
+            child: Icon(icon, size: 80, color: Colors.deepPurpleAccent.withOpacity(0.5)),
           ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack),
           const SizedBox(height: 24),
           Text(
@@ -1154,7 +1161,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
           ),
           child: Column(
             children: [
@@ -1204,7 +1211,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1251,9 +1258,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       leading: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1), 
+          color: color.withOpacity(0.1), 
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withValues(alpha: 0.2))
+          border: Border.all(color: color.withOpacity(0.2))
         ),
         child: Icon(icon, color: color, size: 20),
       ),
@@ -1276,6 +1283,777 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Update failed: $e')));
     }
   }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ROUTES TAB
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Widget _buildRoutesTab() {
+    if (_routes.isEmpty) return _buildEmptyState('No routes configured', Icons.route_rounded);
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      backgroundColor: const Color(0xFF0D0B14),
+      color: Colors.deepPurpleAccent,
+      child: ListView.builder(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        itemCount: _routes.length,
+        itemBuilder: (context, index) {
+          final route = _routes[index];
+          Color routeColor;
+          try {
+            routeColor = Color(int.parse(route.color.replaceAll('#', '0xFF')));
+          } catch (_) {
+            routeColor = Colors.deepPurpleAccent;
+          }
+          return _buildGlassCard(
+            index: index,
+            child: Row(
+              children: [
+                Container(
+                  height: 48, width: 6,
+                  decoration: BoxDecoration(
+                    color: routeColor,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [BoxShadow(color: routeColor.withOpacity(0.5), blurRadius: 8)],
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        route.name,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${route.stops.length} stops',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ],
+                  ),
+                ),
+                _buildActionButton(Icons.edit_rounded, () => _showRouteEditSheet(route)),
+              ],
+            ),
+          ).animate().fadeIn(delay: (index * 80).ms).slideY(begin: 0.2);
+        },
+      ),
+    );
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ROUTE EDIT BOTTOM SHEET
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  void _showRouteEditSheet(RouteModel route) {
+    final nameCtrl = TextEditingController(text: route.name);
+    // Mutable stops list â€“ copies the current stops
+    final stops = route.stops
+        .map((s) => {'name': s['name'] as String, 'lat': s['lat'].toString(), 'lng': s['lng'].toString()})
+        .toList();
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => ClipRRect(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
+          child: Container(
+            height: MediaQuery.of(context).size.height * 0.88,
+            decoration: const BoxDecoration(
+              color: Color(0xFF0D0B14),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 12),
+                Container(width: 40, height: 4,
+                    decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+                const SizedBox(height: 20),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('EDIT ROUTE', style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurpleAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                        ),
+                        child: Text('${stops.length} STOPS',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900)),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    children: [
+                      // Route Name Field
+                      Text('ROUTE NAME', style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                      const SizedBox(height: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF1E1E1E),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.white.withOpacity(0.07)),
+                        ),
+                        child: TextField(
+                          controller: nameCtrl,
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w700),
+                          decoration: InputDecoration(
+                            border: InputBorder.none,
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            hintText: 'e.g. Gandinagar Route',
+                            hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      // Stops Section
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('STOPS', style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                          GestureDetector(
+                            onTap: () {
+                              setSheetState(() => stops.add({'name': '', 'lat': '0', 'lng': '0'}));
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                              ),
+                              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                                const Icon(Icons.add_rounded, color: Colors.blueAccent, size: 14),
+                                const SizedBox(width: 4),
+                                Text('ADD STOP', style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.blueAccent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                              ]),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      ...stops.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        final stop = entry.value;
+                        final ctrl = TextEditingController(text: stop['name']);
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E1E1E),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withOpacity(0.06)),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 28, height: 28,
+                                decoration: BoxDecoration(
+                                  color: Colors.deepPurpleAccent.withOpacity(0.1),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                                ),
+                                child: Center(
+                                  child: Text('${i + 1}', style: GoogleFonts.plusJakartaSans(
+                                      color: Colors.deepPurpleAccent, fontSize: 11, fontWeight: FontWeight.w900)),
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: TextField(
+                                  controller: ctrl,
+                                  onChanged: (v) => stops[i]['name'] = v,
+                                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                                  decoration: InputDecoration(
+                                    border: InputBorder.none,
+                                    hintText: 'Stop nameâ€¦',
+                                    hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12),
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.zero,
+                                  ),
+                                ),
+                              ),
+                              GestureDetector(
+                                onTap: () => setSheetState(() => stops.removeAt(i)),
+                                child: const Icon(Icons.remove_circle_outline_rounded, color: Colors.redAccent, size: 20),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
+                ),
+                // Save Button
+                Padding(
+                  padding: EdgeInsets.fromLTRB(24, 12, 24, MediaQuery.of(context).padding.bottom + 16),
+                  child: GestureDetector(
+                    onTap: isSaving ? null : () async {
+                      setSheetState(() => isSaving = true);
+                      try {
+                        await _apiService.put(
+                          'manager/routes/${route.id}',
+                          {
+                            'name': nameCtrl.text.trim(),
+                            'stops': stops
+                                .where((s) => s['name']!.isNotEmpty)
+                                .map((s) => {
+                                      'name': s['name'],
+                                      'lat': double.tryParse(s['lat']!) ?? 0.0,
+                                      'lng': double.tryParse(s['lng']!) ?? 0.0,
+                                    })
+                                .toList(),
+                          },
+                        );
+                        if (!mounted) return;
+                        Navigator.pop(ctx);
+                        _loadData();
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Route updated!',
+                              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900)),
+                          backgroundColor: Colors.blueAccent,
+                          behavior: SnackBarBehavior.floating,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ));
+                      } catch (e) {
+                        setSheetState(() => isSaving = false);
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text('Save failed: $e'),
+                          backgroundColor: Colors.redAccent,
+                        ));
+                      }
+                    },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      height: 60,
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isSaving
+                              ? [Colors.deepPurpleAccent.withOpacity(0.4), Colors.blueAccent.withOpacity(0.4)]
+                              : [Colors.deepPurpleAccent, Colors.blueAccent],
+                        ),
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8)),
+                        ],
+                      ),
+                      child: Center(
+                        child: isSaving
+                            ? const SizedBox(width: 24, height: 24,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text('SAVE CHANGES', style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white, fontWeight: FontWeight.w900, fontSize: 14, letterSpacing: 2)),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // IN-APP BUS REPORT BOTTOM SHEET
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  void _showBusReportSheet(Bus bus) async {
+    // Show loading sheet immediately
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) => _BusReportSheet(bus: bus, apiService: _apiService, onDownload: () => _downloadReport(busId: bus.id)),
+    );
+  }
 }
 
 
+// ---------------------------------------------------------------------------
+// SEPARATE STATEFUL WIDGET: In-App Bus Daily Report Sheet
+// ---------------------------------------------------------------------------
+class _BusReportSheet extends StatefulWidget {
+  final Bus bus;
+  final ApiService apiService;
+  final VoidCallback onDownload;
+
+  const _BusReportSheet({required this.bus, required this.apiService, required this.onDownload});
+
+  @override
+  State<_BusReportSheet> createState() => _BusReportSheetState();
+}
+
+class _BusReportSheetState extends State<_BusReportSheet> {
+  bool _loading = true;
+  Map<String, dynamic>? _report;
+  String? _error;
+  final Set<int> _expandedDays = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchReport();
+  }
+
+  Future<void> _fetchReport() async {
+    try {
+      final data = await widget.apiService.get('manager/reports/bus/${widget.bus.id}/summary');
+      if (mounted) setState(() { _report = data; _loading = false; });
+    } catch (e) {
+      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
+      child: Container(
+        height: MediaQuery.of(context).size.height * 0.92,
+        decoration: const BoxDecoration(
+          color: Color(0xFF0D0B14),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(36)),
+        ),
+        child: Column(
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40, height: 4,
+              decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2)),
+            ),
+            const SizedBox(height: 16),
+            // Header
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Row(children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('BUS OPERATIONS LOG',
+                        style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                    Text(widget.bus.routeName,
+                        style: GoogleFonts.plusJakartaSans(
+                            color: Colors.deepPurpleAccent, fontSize: 11, fontWeight: FontWeight.w800)),
+                  ]),
+                ),
+                GestureDetector(
+                  onTap: () { Navigator.pop(context); widget.onDownload(); },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                    ),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      const Icon(Icons.download_rounded, color: Colors.blueAccent, size: 16),
+                      const SizedBox(width: 6),
+                      Text('CSV',
+                          style: GoogleFonts.plusJakartaSans(
+                              color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w900)),
+                    ]),
+                  ),
+                ),
+              ]),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent, strokeWidth: 2))
+                  : _error != null
+                      ? Center(
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            const Icon(Icons.error_outline_rounded, color: Colors.redAccent, size: 40),
+                            const SizedBox(height: 12),
+                            Text('Failed to load report',
+                                style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.redAccent, fontWeight: FontWeight.w700)),
+                          ]),
+                        )
+                      : _buildReportContent(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportContent() {
+    final busInfo      = _report!['bus']           as Map<String, dynamic>;
+    final routeInfo    = _report!['route']         as Map<String, dynamic>?;
+    final summary      = _report!['summary']       as Map<String, dynamic>;
+    final dailyRecords = (_report!['dailyRecords'] as List<dynamic>?) ?? [];
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
+      children: [
+        // Bus Identity Card
+        Container(
+          padding: const EdgeInsets.all(20),
+          margin: const EdgeInsets.only(bottom: 20),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+          ),
+          child: Column(children: [
+            _infoRow(Icons.directions_bus_rounded, 'Bus Number',
+                busInfo['busNumber']?.toString() ?? 'N/A', Colors.blueAccent),
+            const Divider(color: Colors.white10, height: 20),
+            _infoRow(Icons.person_rounded, 'Driver',
+                busInfo['driverName']?.toString() ?? 'N/A', Colors.deepPurpleAccent),
+            const Divider(color: Colors.white10, height: 20),
+            _infoRow(Icons.alt_route_rounded, 'Route',
+                busInfo['routeName']?.toString() ?? 'N/A', Colors.orangeAccent),
+            if (routeInfo != null) ...[
+              const Divider(color: Colors.white10, height: 20),
+              _infoRow(Icons.trip_origin_rounded, 'Origin Stop',
+                  routeInfo['originStop']?.toString() ?? 'N/A', Colors.greenAccent),
+              const Divider(color: Colors.white10, height: 20),
+              _infoRow(Icons.school_rounded, 'Campus Stop',
+                  routeInfo['campusStop']?.toString() ?? 'Campus', Colors.cyanAccent),
+              const Divider(color: Colors.white10, height: 20),
+              _infoRow(Icons.place_rounded, 'Total Stops',
+                  '${routeInfo['totalStops']} stops', Colors.white54),
+            ],
+          ]),
+        ),
+
+        // KPI Grid
+        Text('30-DAY SUMMARY',
+            style: GoogleFonts.plusJakartaSans(
+                color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
+        const SizedBox(height: 12),
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          crossAxisSpacing: 12,
+          mainAxisSpacing: 12,
+          childAspectRatio: 1.55,
+          children: [
+            _kpiCard('OPERATING\nDAYS',
+                '${summary['totalOperatingDays']}', Icons.calendar_month_rounded, Colors.blueAccent),
+            _kpiCard('ON-TIME\nPERCENT',
+                '${summary['onTimePercent']}%', Icons.check_circle_rounded, Colors.greenAccent),
+            _kpiCard('AVG SPEED',
+                '${summary['avgSpeedKmh']} KM/H', Icons.speed_rounded, Colors.orangeAccent),
+            _kpiCard('AVG STUDENTS\n/DAY',
+                '${summary['avgStudentsPerDay']}', Icons.people_rounded, Colors.deepPurpleAccent),
+            _kpiCard('TOTAL STUDENTS\nSERVED',
+                '${summary['totalStudentsServed']}', Icons.school_rounded, Colors.cyanAccent),
+            _kpiCard('DELAYED\nDAYS',
+                '${summary['delayedDays']}', Icons.warning_rounded, Colors.redAccent),
+          ],
+        ),
+        const SizedBox(height: 28),
+
+        // Daily Log Header
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Text('DAILY OPERATIONS LOG',
+              style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
+          Text('${dailyRecords.length} ENTRIES',
+              style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w800)),
+        ]),
+        const SizedBox(height: 12),
+
+        // Daily Records
+        ...dailyRecords.asMap().entries.map((entry) {
+          final idx      = entry.key;
+          final record   = entry.value as Map<String, dynamic>;
+          final isOnTime = record['status'] == 'On-time';
+          final accent   = isOnTime ? Colors.blueAccent : Colors.orangeAccent;
+          final expanded = _expandedDays.contains(idx);
+          final timeline = (record['stopTimeline'] as List<dynamic>?) ?? [];
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1A1A2E),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: accent.withOpacity(0.15)),
+            ),
+            child: Column(children: [
+              // Day summary row
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  // Date chip
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: accent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: accent.withOpacity(0.25)),
+                    ),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(record['dayName']?.toString() ?? '',
+                          style: GoogleFonts.plusJakartaSans(
+                              color: accent, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                      Text(
+                        (record['date']?.toString() ?? '').split(' ').first,
+                        style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900),
+                      ),
+                      Text(
+                        (record['date']?.toString() ?? '').split(' ').skip(1).join(' '),
+                        style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white54, fontSize: 8, fontWeight: FontWeight.w700),
+                      ),
+                    ]),
+                  ),
+                  const SizedBox(width: 14),
+                  // Timings + stats
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      // Departure -> Arrival row
+                      Row(children: [
+                        const Icon(Icons.arrow_circle_right_rounded, color: Colors.greenAccent, size: 12),
+                        const SizedBox(width: 4),
+                        Text(record['departureTime']?.toString() ?? '',
+                            style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6),
+                          child: Text('->',
+                              style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 11)),
+                        ),
+                        const Icon(Icons.school_rounded, color: Colors.cyanAccent, size: 12),
+                        const SizedBox(width: 4),
+                        Text(record['arrivalTime']?.toString() ?? '',
+                            style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
+                      ]),
+                      const SizedBox(height: 6),
+                      // Route info
+                      Text(
+                        '${record['originStop'] ?? ''} -> ${record['destinationStop'] ?? ''}',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9.5),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 5),
+                      // Stats chips
+                      Wrap(spacing: 6, runSpacing: 4, children: [
+                        _statChip(Icons.timer_rounded, '${record['tripDurationMins']} min'),
+                        _statChip(Icons.people_rounded, '${record['studentCount']} students'),
+                        _statChip(Icons.speed_rounded, '${record['avgSpeedKmh']} km/h avg'),
+                        _statChip(Icons.directions_run_rounded, '${record['maxSpeedKmh']} km/h max'),
+                        _statChip(Icons.place_rounded, '${record['totalStops']} stops'),
+                        _statChip(Icons.person_rounded, record['driverName']?.toString() ?? 'N/A'),
+                      ]),
+                    ]),
+                  ),
+                  const SizedBox(width: 8),
+                  // Status badge + expand toggle
+                  Column(mainAxisSize: MainAxisSize.min, children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: accent.withOpacity(0.25)),
+                      ),
+                      child: Text(
+                        isOnTime ? 'ON\nTIME' : 'LATE',
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.plusJakartaSans(
+                            color: accent, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.8),
+                      ),
+                    ),
+                    if (!isOnTime && (record['delayMins'] ?? 0) > 0) ...[
+                      const SizedBox(height: 3),
+                      Text('+${record['delayMins']}m',
+                          style: GoogleFonts.plusJakartaSans(
+                              color: Colors.orangeAccent, fontSize: 8, fontWeight: FontWeight.w700)),
+                    ],
+                    if (timeline.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: () => setState(() {
+                          if (expanded) _expandedDays.remove(idx); else _expandedDays.add(idx);
+                        }),
+                        child: Icon(
+                          expanded
+                              ? Icons.keyboard_arrow_up_rounded
+                              : Icons.keyboard_arrow_down_rounded,
+                          color: Colors.white24,
+                          size: 20,
+                        ),
+                      ),
+                    ],
+                  ]),
+                ]),
+              ),
+
+              // Expandable stop timeline
+              if (expanded && timeline.isNotEmpty) ...[
+                const Divider(color: Colors.white10, height: 1),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text('STOP-BY-STOP PICKUP TIMELINE',
+                        style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                    const SizedBox(height: 10),
+                    ...timeline.asMap().entries.map((stopEntry) {
+                      final stop    = stopEntry.value as Map<String, dynamic>;
+                      final isFirst = stop['isOrigin'] == true;
+                      final isLast  = stop['isCampus'] == true;
+                      final dotCol  = isFirst
+                          ? Colors.greenAccent
+                          : isLast
+                              ? Colors.cyanAccent
+                              : Colors.white24;
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Column(children: [
+                            Container(
+                              width: 9,
+                              height: 9,
+                              decoration: BoxDecoration(
+                                color: dotCol,
+                                shape: BoxShape.circle,
+                                boxShadow: [BoxShadow(color: dotCol.withOpacity(0.5), blurRadius: 5)],
+                              ),
+                            ),
+                            if (stopEntry.key < timeline.length - 1)
+                              Container(width: 1, height: 24, color: Colors.white10),
+                          ]),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      stop['stopName']?.toString() ?? '',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: isFirst || isLast ? Colors.white : Colors.white54,
+                                        fontSize: 11,
+                                        fontWeight: isFirst || isLast
+                                            ? FontWeight.w800
+                                            : FontWeight.w500,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  Text(
+                                    stop['time']?.toString() ?? '',
+                                    style: GoogleFonts.plusJakartaSans(
+                                        color: dotCol, fontSize: 10, fontWeight: FontWeight.w800),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      );
+                    }),
+                  ]),
+                ),
+              ],
+            ]),
+          ).animate().fadeIn(delay: (idx * 35).ms).slideY(begin: 0.08);
+        }),
+      ],
+    );
+  }
+
+  Widget _statChip(IconData icon, String text) {
+    return Row(mainAxisSize: MainAxisSize.min, children: [
+      Icon(icon, size: 9, color: Colors.white24),
+      const SizedBox(width: 3),
+      Text(text, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9.5)),
+    ]);
+  }
+
+  Widget _infoRow(IconData icon, String label, String value, Color color) {
+    return Row(children: [
+      Container(
+        padding: const EdgeInsets.all(7),
+        decoration: BoxDecoration(
+            color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, color: color, size: 15),
+      ),
+      const SizedBox(width: 12),
+      Text(label,
+          style: GoogleFonts.plusJakartaSans(
+              color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w700)),
+      const Spacer(),
+      Flexible(
+        child: Text(value,
+            style: GoogleFonts.plusJakartaSans(
+                color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+            textAlign: TextAlign.right,
+            overflow: TextOverflow.ellipsis),
+      ),
+    ]);
+  }
+
+  Widget _kpiCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E1E1E),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color.withOpacity(0.15)),
+      ),
+      child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                  color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+              child: Icon(icon, color: color, size: 15),
+            ),
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(value,
+                    style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5)),
+              ),
+              Text(label,
+                  style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white38,
+                      fontSize: 7.5,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+            ]),
+          ]),
+    );
+  }
+}

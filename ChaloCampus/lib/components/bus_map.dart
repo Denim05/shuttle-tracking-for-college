@@ -17,6 +17,10 @@ class BusMap extends StatefulWidget {
   final RouteModel? selectedRoute;
   final String? centerOnBusId;
   final bool initialDriveMode;
+  final bool showMyLocation;
+  final bool showMapControls;
+  final bool showLocationButton;
+  final MapType initialMapType;
   final Function(bool)? onDriveModeChanged;
 
   const BusMap({
@@ -25,6 +29,10 @@ class BusMap extends StatefulWidget {
     this.selectedRoute,
     this.centerOnBusId,
     this.initialDriveMode = false,
+    this.showMyLocation = true,
+    this.showMapControls = true,
+    this.showLocationButton = true,
+    this.initialMapType = MapType.normal,
     this.onDriveModeChanged,
   });
 
@@ -71,6 +79,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     super.initState();
     _isDriveMode = widget.initialDriveMode;
     _isFollowing = widget.initialDriveMode;
+    _currentMapType = widget.initialMapType;
     _loadMapStyle();
     _precacheAllBusIcons();
     _loadStopIcons();
@@ -127,7 +136,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       const Offset(w / 2, w / 2 + 4),
       w / 2 - 4,
       Paint()
-        ..color = shadow.withValues(alpha: 0.40)
+        ..color = shadow.withOpacity(0.40)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
 
@@ -285,11 +294,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     _markerAnimations[busId]?.dispose();
 
     final controller = AnimationController(
-      duration: const Duration(milliseconds: 2000), // 2s glide matches GPS update frequency
+      duration: const Duration(milliseconds: 1000), // Reduced from 2s to 1s to match ~800ms GPS updates
       vsync: this,
     );
 
-    final animation = CurvedAnimation(parent: controller, curve: Curves.easeInOut);
+    final animation = CurvedAnimation(parent: controller, curve: Curves.linear);
 
     controller.addListener(() {
       if (mounted) {
@@ -434,7 +443,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         polylineId: const PolylineId('selected_route_glow'),
         points: routePoints,
         width: 10,
-        color: Color(int.parse(widget.selectedRoute!.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.15),
+        color: Color(int.parse(widget.selectedRoute!.color.replaceAll('#', '0xFF'))).withOpacity(0.15),
       );
 
       newPolylines['selected_route'] = Polyline(
@@ -452,7 +461,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         polylineId: const PolylineId('selected_route_flow'),
         points: routePoints,
         width: 6,
-        color: Colors.white.withValues(alpha: 0.4),
+        color: Colors.white.withOpacity(0.4),
         patterns: [
           PatternItem.dash(10),
           PatternItem.gap(10 + _polylineOffset),
@@ -467,7 +476,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           polylineId: PolylineId('trail_${entry.key}'),
           points: entry.value,
           width: 4,
-          color: Colors.blueAccent.withValues(alpha: 0.3),
+          color: Colors.blueAccent.withOpacity(0.3),
           patterns: [PatternItem.dash(20), PatternItem.gap(10)],
         );
       }
@@ -492,8 +501,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         circleId: CircleId('pulse_${_focusedBus!.id}'),
         center: pos,
         radius: radius,
-        fillColor: const Color(0xFF1A4CFF).withValues(alpha: 0.1),
-        strokeColor: const Color(0xFF1A4CFF).withValues(alpha: 0.3),
+        fillColor: const Color(0xFF1A4CFF).withOpacity(0.1),
+        strokeColor: const Color(0xFF1A4CFF).withOpacity(0.3),
         strokeWidth: 2,
       ));
     }
@@ -659,7 +668,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           markers: Set<Marker>.of(_markers.values),
           polylines: Set<Polyline>.of(_polylines.values),
           circles: _circles,
-          myLocationEnabled: true,
+          myLocationEnabled: widget.showMyLocation,
           myLocationButtonEnabled: false,
           zoomControlsEnabled: false,
           mapToolbarEnabled: false,
@@ -669,50 +678,53 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           trafficEnabled: true,
           onTap: (_) => setState(() => _focusedBus = null),
         ),
-        Positioned(
-          right: 20,
-          top: 100,
-          child: Column(
-            children: [
-              _buildMapControl(
-                icon: Icons.layers_rounded,
-                onTap: () => setState(() => _showLayerSelector = !_showLayerSelector),
-                isActive: _showLayerSelector,
-              ),
-              if (_showLayerSelector) ...[
-                const SizedBox(height: 8),
-                _buildLayerItem(MapType.normal, Icons.map_rounded),
-                const SizedBox(height: 8),
-                _buildLayerItem(MapType.satellite, Icons.satellite_alt_rounded),
-                const SizedBox(height: 8),
-                _buildLayerItem(MapType.hybrid, Icons.layers_outlined),
-                const SizedBox(height: 8),
-                _buildLayerItem(MapType.terrain, Icons.terrain_rounded),
-                const SizedBox(height: 8),
-                _buildLayerItem(MapType.none, Icons.nightlight_round), // 'none' represents Dark
+        if (widget.showMapControls)
+          Positioned(
+            right: 20,
+            top: 100,
+            child: Column(
+              children: [
+                _buildMapControl(
+                  icon: Icons.layers_rounded,
+                  onTap: () => setState(() => _showLayerSelector = !_showLayerSelector),
+                  isActive: _showLayerSelector,
+                ),
+                if (_showLayerSelector) ...[
+                  const SizedBox(height: 8),
+                  _buildLayerItem(MapType.normal, Icons.map_rounded),
+                  const SizedBox(height: 8),
+                  _buildLayerItem(MapType.satellite, Icons.satellite_alt_rounded),
+                  const SizedBox(height: 8),
+                  _buildLayerItem(MapType.hybrid, Icons.layers_outlined),
+                  const SizedBox(height: 8),
+                  _buildLayerItem(MapType.terrain, Icons.terrain_rounded),
+                  const SizedBox(height: 8),
+                  _buildLayerItem(MapType.none, Icons.nightlight_round), // 'none' represents Dark
+                ],
+                const SizedBox(height: 12),
+                _buildMapControl(
+                  icon: Icons.gps_fixed_rounded,
+                  onTap: _toggleFollow,
+                  isActive: _isFollowing,
+                ),
+                const SizedBox(height: 12),
+                // Drive Mode toggle button
+                _buildMapControl(
+                  icon: Icons.navigation_rounded,
+                  onTap: _toggleDriveMode,
+                  isActive: _isDriveMode,
+                  activeColor: const Color(0xFF00C853),
+                ),
+                if (widget.showLocationButton) ...[
+                  const SizedBox(height: 12),
+                  _buildMapControl(
+                    icon: Icons.my_location_rounded,
+                    onTap: _getCurrentLocation,
+                  ),
+                ],
               ],
-              const SizedBox(height: 12),
-              _buildMapControl(
-                icon: Icons.gps_fixed_rounded,
-                onTap: _toggleFollow,
-                isActive: _isFollowing,
-              ),
-              const SizedBox(height: 12),
-              // Drive Mode toggle button
-              _buildMapControl(
-                icon: Icons.navigation_rounded,
-                onTap: _toggleDriveMode,
-                isActive: _isDriveMode,
-                activeColor: const Color(0xFF00C853),
-              ),
-              const SizedBox(height: 12),
-              _buildMapControl(
-                icon: Icons.my_location_rounded,
-                onTap: _getCurrentLocation,
-              ),
-            ],
+            ),
           ),
-        ),
 
         // Drive Mode top HUD
         if (_isDriveMode && _focusedBus != null)
@@ -727,7 +739,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 decoration: BoxDecoration(
                   color: const Color(0xFF00C853),
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [BoxShadow(color: const Color(0xFF00C853).withValues(alpha: 0.4), blurRadius: 16)],
+                  boxShadow: [BoxShadow(color: const Color(0xFF00C853).withOpacity(0.4), blurRadius: 16)],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -757,12 +769,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D0B14).withValues(alpha: 0.7),
+                    color: const Color(0xFF0D0B14).withOpacity(0.7),
                     borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.4),
+                        color: Colors.black.withOpacity(0.4),
                         blurRadius: 30,
                         offset: const Offset(0, 10),
                       )
@@ -777,13 +789,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [const Color(0xFF1A4CFF), const Color(0xFF1A4CFF).withValues(alpha: 0.6)],
+                                colors: [const Color(0xFF1A4CFF), const Color(0xFF1A4CFF).withOpacity(0.6)],
                                 begin: Alignment.topLeft,
                                 end: Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(18),
                               boxShadow: [
-                                BoxShadow(color: const Color(0xFF1A4CFF).withValues(alpha: 0.3), blurRadius: 12, spreadRadius: 2)
+                                BoxShadow(color: const Color(0xFF1A4CFF).withOpacity(0.3), blurRadius: 12, spreadRadius: 2)
                               ],
                             ),
                             child: const Icon(Icons.directions_bus_filled_rounded, color: Colors.white, size: 28),
@@ -911,9 +923,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       child: Container(
         width: 40, height: 40,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF1A4CFF) : Colors.black.withValues(alpha: 0.7),
+          color: isSelected ? const Color(0xFF1A4CFF) : Colors.black.withOpacity(0.7),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+          border: Border.all(color: Colors.white.withOpacity(0.2)),
         ),
         child: Icon(icon, color: Colors.white, size: 18),
       ),
@@ -921,7 +933,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   Widget _buildMapControl({required IconData icon, required VoidCallback onTap, bool isActive = false, Color? activeColor}) {
-    final Color activeBg = (activeColor ?? const Color(0xFF1A4CFF)).withValues(alpha: 0.85);
+    final Color activeBg = (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.85);
     return GestureDetector(
       onTap: onTap,
       child: ClipRRect(
@@ -931,10 +943,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           child: Container(
             width: 48, height: 48,
             decoration: BoxDecoration(
-              color: isActive ? activeBg : Colors.black.withValues(alpha: 0.5),
+              color: isActive ? activeBg : Colors.black.withOpacity(0.5),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: isActive ? (activeColor ?? const Color(0xFF1A4CFF)).withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.1)),
-              boxShadow: isActive ? [BoxShadow(color: (activeColor ?? const Color(0xFF1A4CFF)).withValues(alpha: 0.4), blurRadius: 12)] : [],
+              border: Border.all(color: isActive ? (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.5) : Colors.white.withOpacity(0.1)),
+              boxShadow: isActive ? [BoxShadow(color: (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.4), blurRadius: 12)] : [],
             ),
             child: Icon(icon, color: Colors.white, size: 22),
           ),
@@ -947,7 +959,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: Colors.white.withOpacity(0.05),
         borderRadius: BorderRadius.circular(6),
       ),
       child: Row(
@@ -968,7 +980,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A4CFF).withValues(alpha: 0.1),
+            color: const Color(0xFF1A4CFF).withOpacity(0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: const Color(0xFF1A4CFF), size: 18),

@@ -104,8 +104,8 @@ class _AppTextFieldState extends State<AppTextField> {
           duration: const Duration(milliseconds: 180),
           decoration: BoxDecoration(
             color       : _isFocused
-                ? Colors.white.withValues(alpha: 0.05)
-                : Colors.white.withValues(alpha: 0.02),
+                ? Colors.white.withOpacity(0.05)
+                : Colors.white.withOpacity(0.02),
             borderRadius: BorderRadius.circular(AppRadius.md),
             border      : Border.all(
               color: borderColor,

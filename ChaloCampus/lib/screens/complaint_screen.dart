@@ -146,8 +146,8 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
             width: 90, height: 90,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: Colors.blueAccent.withValues(alpha: 0.1),
-              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3), width: 2),
+              color: Colors.blueAccent.withOpacity(0.1),
+              border: Border.all(color: Colors.blueAccent.withOpacity(0.3), width: 2),
             ),
             child: const Icon(Icons.check_rounded, color: Colors.blueAccent, size: 44),
           ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
@@ -171,7 +171,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
           ElevatedButton(
             onPressed: () => Navigator.pop(context),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF2D5BFF).withValues(alpha: 0.15),
+              backgroundColor: const Color(0xFF2D5BFF).withOpacity(0.15),
               foregroundColor: const Color(0xFF2D5BFF),
               padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -224,7 +224,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
               decoration: BoxDecoration(
                 color: Color(0xFF1E1E1E),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                border: Border.all(color: Colors.white.withOpacity(0.05)),
               ),
               child: TextFormField(
                 controller: _descController,
@@ -263,7 +263,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
                   padding: const EdgeInsets.all(20),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
                   elevation: 0,
-                  disabledBackgroundColor: Colors.redAccent.withValues(alpha: 0.3),
+                  disabledBackgroundColor: Colors.redAccent.withOpacity(0.3),
                 ),
                 child: _isSubmitting
                     ? const SizedBox(
@@ -304,10 +304,10 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         decoration: BoxDecoration(
-          color: isSelected ? color.withValues(alpha: 0.1) : Color(0xFF1E1E1E),
+          color: isSelected ? color.withOpacity(0.1) : Color(0xFF1E1E1E),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: isSelected ? color.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.04),
+            color: isSelected ? color.withOpacity(0.4) : Colors.white.withOpacity(0.04),
             width: isSelected ? 1.5 : 1,
           ),
         ),
@@ -316,7 +316,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: color.withValues(alpha: isSelected ? 0.15 : 0.06),
+                color: color.withOpacity(isSelected ? 0.15 : 0.06),
                 shape: BoxShape.circle,
               ),
               child: Icon(cat['icon'] as IconData, color: color, size: 20),
