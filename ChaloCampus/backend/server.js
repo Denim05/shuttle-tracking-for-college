@@ -1804,6 +1804,21 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
     console.log(`📡 Socket.io ready for connections`);
+
+    // ─── Keep-Alive: Prevent Render free tier from sleeping ───────────────────
+    // Pings itself every 14 minutes (Render sleeps after 15 min of inactivity)
+    if (process.env.NODE_ENV === 'production') {
+        const https = require('https');
+        const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
+        setInterval(() => {
+            https.get(`${SELF_URL}/`, (res) => {
+                console.log(`🏓 [Keep-Alive] Self-ping OK — status: ${res.statusCode}`);
+            }).on('error', (err) => {
+                console.warn(`⚠️ [Keep-Alive] Self-ping failed: ${err.message}`);
+            });
+        }, 14 * 60 * 1000); // every 14 minutes
+        console.log(`🏓 [Keep-Alive] Self-ping scheduled every 14 min → ${SELF_URL}`);
+    }
 });
 
 
