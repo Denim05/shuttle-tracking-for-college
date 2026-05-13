@@ -52,6 +52,20 @@ const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed) => {
     return Math.round((distance / speed) * 60);
 };
 
+const Route = require('./models/Route');
+const Bus = require('./models/Bus');
+const User = require('./models/User');
+const Student = require('./models/Student');
+const Driver = require('./models/Driver');
+const Admin = require('./models/Admin');
+const Manager = require('./models/Manager');
+const Alert = require('./models/Alert');
+const Notification = require('./models/Notification');
+const Complaint = require('./models/Complaint');
+const Schedule = require('./models/Schedule');
+const RegistrationForm = require('./models/RegistrationForm');
+const RegistrationSubmission = require('./models/RegistrationSubmission');
+
 const authMiddleware = require('./middleware/authMiddleware');
 
 const app = express();
@@ -149,8 +163,8 @@ async function autoSeedRoutes() {
             console.log(`  ✅ [SEED] Bus ${r.busNo}: ${r.name}`);
         }
         console.log(`🎉 [SEED] Done! Seeded ${SGI_ROUTES.length} routes & buses.`);
-    } catch (err) {
-        console.error('❌ [SEED] Auto-seed failed:', err.message);
+    } catch (_err) {
+        console.error('❌ [SEED] Auto-seed failed:', _err.message);
     }
 }
 
@@ -164,21 +178,6 @@ app.get('/', (req, res) => {
     });
 });
 
-// API Routes
-const Route = require('./models/Route');
-const Bus = require('./models/Bus');
-const Student = require('./models/Student');
-const Driver = require('./models/Driver');
-const Admin = require('./models/Admin');
-const Manager = require('./models/Manager');
-const User = require('./models/User');
-const Alert = require('./models/Alert');
-const Notification = require('./models/Notification');
-const Complaint = require('./models/Complaint');
-const Schedule = require('./models/Schedule');
-const RegistrationForm = require('./models/RegistrationForm');
-const RegistrationSubmission = require('./models/RegistrationSubmission');
-
 // Helper to broadcast stats
 const broadcastStats = async () => {
     try {
@@ -186,8 +185,8 @@ const broadcastStats = async () => {
         const routeCount = await Route.countDocuments();
         const userCount = await User.countDocuments();
         io.emit('statsUpdate', { busCount, routeCount, userCount });
-    } catch (err) {
-        console.error('Stats broadcast error:', err);
+    } catch (_err) {
+        console.error('Stats broadcast error:', _err);
     }
 };
 
@@ -278,8 +277,8 @@ app.post('/api/auth/login', async (req, res) => {
         res.json({ token, user: userResponse });
         console.timeEnd('LoginRequest');
 
-    } catch (err) {
-        console.error('❌ Login Error:', err);
+    } catch (_err) {
+        console.error('❌ Login Error:', _err);
         console.timeEnd('LoginRequest');
         res.status(500).json({ error: 'Server error' });
     }
@@ -611,13 +610,71 @@ app.get('/api/alerts', async (req, res) => {
 });
 
 // Manager: Get Users
+/**
+ * --- MANAGER: FLEET & ROUTE MANAGEMENT ---
+ */
+
+// Add a new Bus
+app.post('/api/manager/buses', authMiddleware, async (req, res) => {
+    try {
+        const bus = new Bus(req.body);
+        await bus.save();
+        broadcastStats();
+        res.status(201).json(bus);
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to create bus' });
+    }
+});
+
+// Update Bus
+app.put('/api/manager/buses/:id', authMiddleware, async (req, res) => {
+    try {
+        const bus = await Bus.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json(bus);
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to update bus' });
+    }
+});
+
+// Delete Bus
+app.delete('/api/manager/buses/:id', authMiddleware, async (req, res) => {
+    try {
+        await Bus.findByIdAndDelete(req.params.id);
+        broadcastStats();
+        res.json({ message: 'Bus deleted successfully' });
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to delete bus' });
+    }
+});
+
+// Add a new Route
+app.post('/api/manager/routes', authMiddleware, async (req, res) => {
+    try {
+        const route = new Route(req.body);
+        await route.save();
+        broadcastStats();
+        res.status(201).json(route);
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to create route' });
+    }
+});
+
+// Delete Route
+app.delete('/api/manager/routes/:id', authMiddleware, async (req, res) => {
+    try {
+        await Route.findByIdAndDelete(req.params.id);
+        broadcastStats();
+        res.json({ message: 'Route deleted successfully' });
+    } catch (_err) {
+        res.status(500).json({ error: 'Failed to delete route' });
+    }
+});
+
 app.get('/api/manager/users', authMiddleware, async (req, res) => {
     try {
         const users = await User.find().select('-password');
-        console.log(`📦 Sending ${users.length} users to Manager`);
         res.json(users);
-    } catch (err) {
-        console.error('❌ Error fetching manager users:', err);
+    } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch users' });
     }
 });
@@ -956,8 +1013,6 @@ io.on('connection', (socket) => {
         try {
             if (!incomingBusId) return;
 
-            const Bus = require('./models/Bus');
-            const Route = require('./models/Route');
             
             let bus = await Bus.findById(incomingBusId);
             
@@ -1007,12 +1062,20 @@ io.on('connection', (socket) => {
                             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                             const distanceKm = R * c;
 
-                            if (distanceKm <= 1.5) { // 1.5km radius
-                                io.emit('busApproachingStop', {
-                                    busId: bus._id.toString(),
-                                    stopName: stop.name,
-                                    minutes: minutes
-                                });
+                            if (distanceKm <= GEOFENCE_RADIUS_KM) {
+                                const now = Date.now();
+                                if (!busGeofenceState[bus._id]) busGeofenceState[bus._id] = {};
+                                const lastNotified = busGeofenceState[bus._id][stop.name] || 0;
+
+                                if (now - lastNotified > COOLDOWN_MS) {
+                                    busGeofenceState[bus._id][stop.name] = now;
+                                    io.emit('busApproachingStop', {
+                                        busId: bus._id.toString(),
+                                        stopName: stop.name,
+                                        minutes: minutes
+                                    });
+                                    console.log(`🔔 [GEOFENCE] Notified: Bus ${bus.busNumber} near ${stop.name}`);
+                                }
                             }
                         }
  else {
@@ -1096,8 +1159,8 @@ app.post('/api/manager/seed', async (req, res) => {
 
         res.json({ message: "Database seeded successfully with 2 routes and 2 buses!" });
         broadcastStats();
-    } catch (err) {
-        console.error("Seed Error:", err);
+    } catch (_err) {
+        console.error("Seed Error:", _err);
         res.status(500).json({ error: "Failed to seed database" });
     }
 });
@@ -1129,7 +1192,7 @@ app.get('/api/eta', async (req, res) => {
         }
 
         const speed = bus.speed > 5 ? bus.speed : 30; // default 30 km/h
-        const minutes = calculateETA(bus.currentLat, bus.currentLng, stop.lat, stop.lng, speed);
+        const minutes = await calculateETA(bus.currentLat, bus.currentLng, stop.lat, stop.lng, speed);
 
         res.json({
             eta: minutes,
@@ -1142,8 +1205,8 @@ app.get('/api/eta', async (req, res) => {
             speed: bus.speed,
             lastUpdated: bus.lastUpdated,
         });
-    } catch (err) {
-        console.error('❌ ETA Error:', err);
+    } catch (_err) {
+        console.error('❌ ETA Error:', _err);
         res.status(500).json({ error: 'Failed to calculate ETA' });
     }
 });
@@ -1157,7 +1220,7 @@ app.get('/api/schedule', async (req, res) => {
         const query = routeId ? { routeId } : {};
         const schedules = await Schedule.find(query).sort({ stopName: 1 });
         res.json(schedules);
-    } catch (err) {
+    } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch schedules' });
     }
 });
@@ -1174,7 +1237,7 @@ app.post('/api/schedule', authMiddleware, async (req, res) => {
             { upsert: true, new: true }
         );
         res.json(entry);
-    } catch (err) {
+    } catch (_err) {
         res.status(500).json({ error: 'Failed to save schedule' });
     }
 });
@@ -1203,8 +1266,8 @@ app.post('/api/complaints', authMiddleware, async (req, res) => {
         console.log(`🚨 [Complaint] New from user ${req.user.id}: "${description.substring(0,60)}..."`);
 
         res.status(201).json(complaint);
-    } catch (err) {
-        console.error('❌ Complaint Error:', err);
+    } catch (_err) {
+        console.error('❌ Complaint Error:', _err);
         res.status(500).json({ error: 'Failed to submit complaint' });
     }
 });
@@ -1213,7 +1276,7 @@ app.get('/api/complaints', authMiddleware, async (req, res) => {
     try {
         const complaints = await Complaint.find().sort({ createdAt: -1 }).limit(100);
         res.json(complaints);
-    } catch (err) {
+    } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch complaints' });
     }
 });
@@ -1226,7 +1289,7 @@ app.put('/api/complaints/:id', authMiddleware, async (req, res) => {
             { new: true }
         );
         res.json(updated);
-    } catch (err) {
+    } catch (_err) {
         res.status(500).json({ error: 'Failed to update complaint' });
     }
 });
@@ -1266,7 +1329,7 @@ app.post('/api/notify-delay', authMiddleware, async (req, res) => {
 
         console.log(`⚠️ [Delay Alert] Route ${routeName}: ${message}`);
         res.json({ success: true });
-    } catch (err) {
+    } catch (_err) {
         res.status(500).json({ error: 'Failed to send delay alert' });
     }
 });
@@ -1598,8 +1661,8 @@ app.post('/api/public/register/:formId', async (req, res) => {
         });
         console.log(`📝 [Registration] New submission: ${name} (${studentId}) → ${routeName}`);
         res.status(201).json({ success: true });
-    } catch (err) {
-        console.error('Registration submission error:', err);
+    } catch (_err) {
+        console.error('Registration submission error:', _err);
         res.status(500).json({ error: 'Server error. Please try again.' });
     }
 });
@@ -1623,7 +1686,7 @@ app.post('/api/manager/registration-form', authMiddleware, async (req, res) => {
         const shareUrl = `${getBaseUrl(req)}/register/${form._id}`;
         console.log(`📋 [Form Created] ID: ${form._id} | URL: ${shareUrl}`);
         res.status(201).json({ form, shareUrl });
-    } catch (err) {
+    } catch (_err) {
         res.status(500).json({ error: 'Failed to create form' });
     }
 });
@@ -1717,8 +1780,8 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
             password: rawPassword,
             message: `Account created for ${submission.name}!\n\nUsername: "${username}"\nPassword: "${rawPassword}"\n\nShare these with the student. They can change their password after first login.`
         });
-    } catch (err) {
-        console.error('Approval error:', err);
+    } catch (_err) {
+        console.error('Approval error:', _err);
         res.status(500).json({ error: 'Failed to approve registration' });
     }
 });

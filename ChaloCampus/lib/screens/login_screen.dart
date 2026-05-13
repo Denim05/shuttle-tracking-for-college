@@ -7,6 +7,8 @@ import '../services/auth_service.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../services/api_service.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -103,6 +105,35 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } finally {
       if (mounted) setState(() => _isGuestLoading = false);
+    }
+  }
+
+  Future<void> _handleRegister() async {
+    try {
+      final api = ApiService();
+      final data = await api.get('public/active-form');
+      if (data != null && data['active'] == true && data['url'] != null) {
+        final url = Uri.parse(data['url']);
+        if (await canLaunchUrl(url)) {
+          await launchUrl(url, mode: LaunchMode.externalApplication);
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Registration is currently closed.'),
+              backgroundColor: Colors.orange,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to connect to registration portal'), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -312,19 +343,40 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 32),
                   
                   TextButton(
+                    onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleRegister,
+                    child: RichText(
+                      text: TextSpan(
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13),
+                        children: [
+                          const TextSpan(text: 'New Student? '),
+                          TextSpan(
+                            text: 'Register Now',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 8),
+                  
+                  TextButton(
                     onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
                     child: _isGuestLoading 
-                      ? const CircularProgressIndicator()
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
                       : RichText(
                           text: TextSpan(
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 14),
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white10, fontSize: 12),
                             children: [
-                              const TextSpan(text: 'Not a Registered User? '),
+                              const TextSpan(text: 'Or '),
                               TextSpan(
                                 text: 'Continue as Guest',
                                 style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF2D5BFF).withOpacity(0.8),
-                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white38,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
                             ],

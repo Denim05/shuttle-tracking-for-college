@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -11,8 +11,12 @@ import '../services/socket_service.dart';
 import '../services/bus_store.dart';
 import '../components/bus_map.dart';
 import 'registration_manager_screen.dart';
+import 'complaint_manager_screen.dart';
+import 'route_management_screen.dart';
+import 'fleet_maintenance_screen.dart';
 
 import 'package:url_launcher/url_launcher.dart';
+import '../constants/constants.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -72,8 +76,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   Future<void> _downloadReport({String? busId}) async {
     final uri = busId != null 
-        ? 'https://smart-shuttle-backend-2h13.onrender.com/api/manager/reports/bus-trip-report?busId=$busId'
-        : 'https://smart-shuttle-backend-2h13.onrender.com/api/manager/reports/bus-trip-report';
+        ? '${AppConstants.apiUrl}/manager/reports/bus-trip-report?busId=$busId'
+        : '${AppConstants.apiUrl}/manager/reports/bus-trip-report';
         
     final url = Uri.parse(uri);
     if (await canLaunchUrl(url)) {
@@ -191,7 +195,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Widget build(BuildContext context) {
     final socketService = Provider.of<SocketService>(context);
     return DefaultTabController(
-      length: 7,
+      length: 8,
       child: Scaffold(
         backgroundColor: const Color(0xFF121212),
         body: ValueListenableBuilder<bool>(
@@ -332,6 +336,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             ),
                             text: 'Alerts',
                           ),
+                          const Tab(icon: Icon(Icons.report_problem_rounded, size: 20), text: 'Complaints'),
                         ],
                       ),
                     ),
@@ -341,13 +346,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         ? _buildLoadingState()
                         : TabBarView(
                             children: [
-                              _buildFleetTab(),
+                              const FleetMaintenanceScreen(),
                               _buildMapTab(),
                               _buildDriverTab(),
                               _buildUserTab(),
                               RegistrationManagerScreen(routes: _routes),
-                              _buildRoutesTab(),
+                              const RouteManagementScreen(),
                               _buildAlertTab(),
+                              const ComplaintManagerScreen(),
                             ],
                           ),
                     ),
