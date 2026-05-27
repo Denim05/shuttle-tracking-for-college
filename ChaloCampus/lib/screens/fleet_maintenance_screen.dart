@@ -171,7 +171,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
         title: Text('Fleet Maintenance', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add_bus_rounded, color: Colors.blueAccent),
+            icon: const Icon(Icons.add_rounded, color: Colors.blueAccent),
             onPressed: _showAddBusDialog,
           ),
           const SizedBox(width: 8),

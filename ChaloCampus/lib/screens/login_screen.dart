@@ -271,12 +271,15 @@ class _LoginScreenState extends State<LoginScreen> {
                                         size: 26
                                       ).animate(target: isSelected ? 1 : 0).scale(begin: const Offset(1,1), end: const Offset(1.2,1.2)),
                                       const SizedBox(height: 8),
-                                      Text(
-                                        role['label'],
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w900,
-                                          color: isSelected ? Colors.white : Colors.white24,
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          role['label'],
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            color: isSelected ? Colors.white : Colors.white24,
+                                          ),
                                         ),
                                       ),
                                     ],
