@@ -16,8 +16,8 @@ const getApiUrl = () => {
 
     // If using Tunnel (ngrok/expo), debuggerHost might be a domain.
     // Port 5000 is NOT tunneled by default. We must use the LAN IP.
-    // DETECTED IP: 10.131.148.86
-    const LAN_IP = '10.116.176.86';
+    // DETECTED IP: 172.24.2.86
+    const LAN_IP = '172.24.2.86';
 
     if (!localhost) {
         if (Platform.OS === 'android') {
@@ -233,12 +233,67 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
 
         try {
-            /* Optional: Attempt to fetch from backend, but don't clear data if it fails
-            const response = await fetch(`${API_URL}/api/routes`);
-            const routesData = await response.json();
-            // ... process data ...
-            set({ routes: routesData, ... });
-            */
+            // Attempt to fetch from backend
+            const response = await fetch(`${getApiUrl()}/api/guest/routes`);
+            const data = await response.json();
+            
+            if (data.routes && Array.isArray(data.routes)) {
+                // Map DB routes to app format
+                const mappedRoutes: Route[] = data.routes.map((r: any) => ({
+                    id: r._id,
+                    name: r.name,
+                    color: r.color,
+                    coordinates: r.coordinates || []
+                }));
+                
+                // Also fetch buses to show real fleet
+                const busResponse = await fetch(`${getApiUrl()}/api/guest/buses`);
+                const busesData = await busResponse.json();
+                
+                const mappedBuses: Bus[] = busesData.map((b: any) => ({
+                    id: b._id,
+                    routeId: b.routeId,
+                    routeName: b.routeName,
+                    routeColor: b.routeColor,
+                    currentLat: b.currentLat,
+                    currentLng: b.currentLng,
+                    occupancyLevel: b.occupancy || 'Low',
+                    status: b.status || 'On-time',
+                    heading: b.heading || 0,
+                    nextStopId: '',
+                    speed: b.speed
+                }));
+
+                // Extract and flatten stops from routes
+                const stopsMap: { [key: string]: Stop } = {};
+                data.routes.forEach((r: any) => {
+                    if (r.stops && Array.isArray(r.stops)) {
+                        r.stops.forEach((s: any) => {
+                            if (!stopsMap[s.name]) {
+                                stopsMap[s.name] = {
+                                    id: s._id || `stop-${s.name}`,
+                                    name: s.name,
+                                    lat: s.lat || 0,
+                                    lng: s.lng || 0,
+                                    routes: [r.name],
+                                    nextArrivals: []
+                                };
+                            } else {
+                                if (!stopsMap[s.name].routes.includes(r.name)) {
+                                    stopsMap[s.name].routes.push(r.name);
+                                }
+                            }
+                        });
+                    }
+                });
+
+                set({ 
+                    routes: mappedRoutes,
+                    buses: mappedBuses,
+                    stops: Object.values(stopsMap)
+                });
+                console.log(`✅ Loaded ${mappedRoutes.length} real routes and ${Object.keys(stopsMap).length} unique stops from backend.`);
+            }
 
             // Setup Socket.io - SINGLETON CHECK
             if (!socket) {
