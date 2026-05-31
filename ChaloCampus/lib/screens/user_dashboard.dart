@@ -270,7 +270,6 @@ class _UserDashboardState extends State<UserDashboard> {
             child: _getViewForIndex(auth, _currentIndex, busStore),
           ),
           bottomNavigationBar: _buildModernBottomNav(),
-          floatingActionButton: _currentIndex == 0 ? _buildSOSButton(auth) : null,
         );
       },
     );
@@ -339,6 +338,7 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildFloatingHeader(BusStore busStore) {
     final socketService = Provider.of<SocketService>(context, listen: false);
+    final auth = Provider.of<AuthService>(context, listen: false);
     final topPadding = MediaQuery.of(context).padding.top;
     return Positioned(
       top: topPadding + 10, left: 16, right: 16,
@@ -435,6 +435,30 @@ class _UserDashboardState extends State<UserDashboard> {
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: const Icon(Icons.swap_horiz_rounded, color: Colors.white60, size: 18),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onLongPress: () => _triggerSOS(auth),
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('⚠️ Hold down to send Emergency SOS!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                    backgroundColor: Colors.redAccent,
+                    behavior: SnackBarBehavior.floating,
+                    duration: const Duration(seconds: 2),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                );
+              },
+              child: Container(
+                width: 34, height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
+                ),
+                child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 17),
               ),
             ),
           ],
@@ -1003,25 +1027,27 @@ class _UserDashboardState extends State<UserDashboard> {
           _buildProfileTile('PICKUP', user?.pickupPoint ?? 'NOT SET', Icons.location_on_outlined),
           _buildProfileTile('ROUTE', _selectedRoute?.name ?? 'NOT ASSIGNED', Icons.alt_route_rounded),
         ]),
-        const SizedBox(height: 24),
-        // ── Account / Security ─────────────────────────────────────────────
-        _buildProfileSection('ACCOUNT', [
-          ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-            leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.deepPurpleAccent.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(10),
+        if (!auth.isGuest) ...[
+          const SizedBox(height: 24),
+          // ── Account / Security ─────────────────────────────────────────────
+          _buildProfileSection('ACCOUNT', [
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.deepPurpleAccent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.lock_outline_rounded, color: Colors.deepPurpleAccent, size: 18),
               ),
-              child: const Icon(Icons.lock_outline_rounded, color: Colors.deepPurpleAccent, size: 18),
+              title: Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: Text('Update your login password', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
+              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+              onTap: () => _showChangePasswordSheet(auth),
             ),
-            title: Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-            subtitle: Text('Update your login password', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
-            trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
-            onTap: () => _showChangePasswordSheet(auth),
-          ),
-        ]),
+          ]),
+        ],
         const SizedBox(height: 40),
         ElevatedButton(
           onPressed: () => auth.logout(),
@@ -1498,7 +1524,9 @@ class _UserDashboardState extends State<UserDashboard> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'LAT: ${stop['lat'].toStringAsFixed(4)} | LNG: ${stop['lng'].toStringAsFixed(4)}',
+                        (stop['lat'] != null && stop['lng'] != null)
+                            ? 'LAT: ${stop['lat'].toStringAsFixed(4)} | LNG: ${stop['lng'].toStringAsFixed(4)}'
+                            : 'NO COORDINATES',
                         style: GoogleFonts.plusJakartaSans(color: Colors.white10, fontSize: 9, fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 20),

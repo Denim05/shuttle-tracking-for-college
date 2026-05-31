@@ -110,59 +110,20 @@ mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' })
         console.error('❌ MongoDB Connection Error:', err);
     });
 
-// ─── Auto-Seed: Seeds all 13 real Sagar Group of Institutions routes ──────────
+// ─── Auto-Seed: Seeds all 17 real Sagar Group of Institutions routes ──────────
 // Only runs if the Route collection is empty (safe to deploy multiple times)
 async function autoSeedRoutes() {
     try {
         const Route = require('./models/Route');
-        const Bus   = require('./models/Bus');
         const count = await Route.countDocuments();
         if (count > 0) {
             console.log(`🗂️  [SEED] ${count} routes already exist — skipping auto-seed.`);
             return;
         }
         console.log('🌱 [SEED] No routes found — seeding real SGI bus routes...');
-
-        const SGI_ROUTES = [
-            { busNo:'01', vehicle:'MP04 PA 3497', name:'Gandinagar Route',              color:'#6C63FF', driver:'Ghanshyam Nagar',       stops:['Gandinagar','Pul Bogda','Roshanpura','Manavseva Square','Bharat Mata Square','Ashoka Garden Chouraha','Nehru Nagar','Ratibad Campus'] },
-            { busNo:'02', vehicle:'MP04 PA 3498', name:'Ashoka Garden Route (Bus 02)',   color:'#FF6B6B', driver:'Rahul Verma',            stops:['Bhopal Railway Station Platform-1','Pushpa Nagar','Sangam Tent House','80-feet Road','Ashoka Garden Pani ki Tanki','Prabhat Square','Bogda Pull','Jinsi Square','Roshanpura','Dipo','Ratibad Campus'] },
-            { busNo:'03', vehicle:'MP04 PA 3501', name:'Karond Route',                   color:'#00F0FF', driver:'Praveen Pal',            stops:['DwarkaDham SPS Campus','Lambakheda','Karond','Bhanpur','Chhola Mandir','Best Prize','Kalyan Nagar','Shiv Mandir','Karond Sabzi Mandi','DIG Bungla','Nadra Bus Stand','Bharat Talkies','Jahangirabad','PHQ','Roshanpura','Bharat Mata Square','Ratibad Campus'] },
-            { busNo:'04', vehicle:'MP04 PA 3504', name:'Kolar Road Route',               color:'#FFB347', driver:'Mukesh Shisodiya',       stops:['DPS School','Bairagarh','610 Kolar','Babadiya Kala','Aura Mall','Shivay Complex','10 No Shop','Arera Petrol Pump','Patrakar Colony','Pancheel Nagar','Vaishali Nagar','Nehru Nagar','Ratibad Campus'] },
-            { busNo:'05', vehicle:'MP04 PA 3510', name:'Ashoka Garden Route (Bus 05)',   color:'#FF2E63', driver:'Babloo Meena',           stops:['Bhopal Railway Station Platform-1','Pushpa Nagar','Sangam Tent House','80-feet Road','Ashoka Garden Pani ki Tanki','Prabhat Square','Ratibad Campus'] },
-            { busNo:'06', vehicle:'MP04 PA 3511', name:'Ashta Route',                    color:'#A8FF78', driver:'Raj Kumar',             stops:['Alipur','Old Bus Stand','Bhopal Naka','Bajaranga Colony','Colony Square','Banjari Mata','Kachanariya Jod','Kotri','Jat Khedi Jod','Amlaha','Bhadakhedi Jod','Goodwela','Jhagriya By-pass Sehore','Jhagriya','Ratibad Campus'] },
-            { busNo:'07', vehicle:'MP04 PA 3512', name:'Kolar Route (Bus 07)',            color:'#F7971E', driver:'Virendra',              stops:['Gehnu Kheda','D-Mart','Lalita Nagar','Naya Pura','Mandakini','J.K. Hospital','Bansal Hospital','10 Number','Arera Petrol Pump','Kolar Tiraha','Panchsil Nagar','Vaishali Nagar','Nehru Nagar Chauraha','Nehru Nagar Naya Basera','Dipo 100 Daily Office','Ratibad Campus'] },
-            { busNo:'09', vehicle:'MP04 PA 3513', name:'Mandideep Route',                color:'#2D5BFF', driver:'Satish Tomar',           stops:['Satlapur','Vardhman','Sarakiya','HEG/Mandideep','Samardha','Radhapuram','Pal Dhaba','Indus Town','11 Meal','Misrod','Ashima Mall','Danish Nagar','Bagsawaniya Thana','SP Office','Narayan Nagar','Ganesh Mandir','BJP Office','Nutan College','Durga Petrol Pump','Narmada Bhawan','Panchsil Nagar','Mata Mandir','PNT','Nehru Nagar New Basti','Nehru Nagar Square','Ratibad Campus'] },
-            { busNo:'10', vehicle:'MP04 PA 3523', name:'Ashoka Garden Route (Bus 10)',   color:'#B721FF', driver:'Devendra Parmar',        stops:['Bhopal Railway Station Platform-1','Pushpa Nagar','Sangam Tent House','80-feet Road','Ashoka Garden Pani ki Tanki','Prabhat Square','Bogda Pull','Jinsi Square','Roshanpura','Dipo','Ratibad Campus'] },
-            { busNo:'11', vehicle:'MP04 PA 3522', name:'SLV Route',                      color:'#21D4FD', driver:'Tulsi Das',             stops:['SOS','Transport Nagar','Patel Nagar','Anand Nagar Police Choki','Ratna Giri Chourha','Viranda Van Nagar','Tanatan Daba','Narela Chouraha','Ayodhya Nagar Square','Piplani Chouraha','Indrapuri','ITI','Bijli Gate','Subhash Nagar','Vallabh Bhavan','Ratibad Campus'] },
-            { busNo:'12', vehicle:'MP04 PA 3521', name:'Neelbad Route',                  color:'#43E97B', driver:'Arjun Maran',           stops:['Neelbad','Ratibad Campus'] },
-            { busNo:'13', vehicle:'MP04 PA 2288', name:'Sehore Route',                   color:'#FA709A', driver:'Mukesh Verma',          stops:['Bishan Khedi','Bhav Khedi','Khakar Kheda','Daite Colony','Kodiya','Ganesh Mandir Sehore','Moti Baba Mandir','Reliance Petrol Pump','Kohli Pura','Ganga Ashram','Bhopal Naka','Chanakya Puri','Chanakya Puri Vishal Mega Mart','Ratibad Campus'] },
-            { busNo:'14', vehicle:'MP04 PA 2290', name:'Fanda Route',                    color:'#FEE140', driver:'Sunil Kumar Prajapati', stops:['Fanda','Pipaliya','Padli Jod','Kolas','Naya Gano','Sastakhedi','Tilakhedi','Deheriya','Mundla','Narela','Khokariya','Kodiya','Kajlash','Nanni','Ratibad Campus'] },
-        ];
-
-        for (const r of SGI_ROUTES) {
-            const route = await Route.create({
-                name: r.name,
-                color: r.color,
-                stops: r.stops.map(name => ({ name })),
-                coordinates: [], // No fake polyline
-            });
-            await Bus.create({
-                busNumber: r.vehicle,
-                name: `Bus ${r.busNo} - ${r.name}`,
-                routeId: route._id.toString(),
-                routeName: r.name,
-                routeColor: r.color,
-                currentLat: 23.1270,
-                currentLng: 77.3494,
-                heading: 0, speed: 0,
-                status: 'On-time',
-                occupancy: 'Low',
-                etas: [],
-                lastUpdated: new Date(),
-            });
-            console.log(`  ✅ [SEED] Bus ${r.busNo}: ${r.name}`);
-        }
-        console.log(`🎉 [SEED] Done! Seeded ${SGI_ROUTES.length} routes & buses.`);
+        const { seed: seedRealRoutes } = require('./seed_real_routes');
+        await seedRealRoutes(false); // false means do not disconnect Mongoose
+        console.log(`🎉 [SEED] Auto-seed completed successfully with 17 unique routes and 30 buses!`);
     } catch (_err) {
         console.error('❌ [SEED] Auto-seed failed:', _err.message);
     }
@@ -511,80 +472,109 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
     try {
         const Route = require('./models/Route');
         const Bus = require('./models/Bus');
+        const Driver = require('./models/Driver');
         
         const { busId } = req.query;
-        let csvContent = 'Date,Bus ID,Route Name,Driver,Start Time,End Time,Average Speed (KM/H),Max Speed (KM/H),Stops Covered,Passenger Count\n';
+        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Trip Start Time,Trip End Time,Stop Sequence,Stop Name,Reached Time\n';
         
         if (busId) {
-            // Generate a detailed 30-day report for a SINGLE bus
+            // Generate a detailed 30-day stop-by-stop report for a SINGLE bus
             const bus = await Bus.findById(busId);
             if (!bus) return res.status(404).json({ error: 'Bus not found' });
             
             const route = await Route.findById(bus.routeId);
             const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            const driver = 'Assigned Driver'; 
             
-            // Generate last 30 days of simulated data for this bus
+            const driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() });
+            const driverName = driverDoc ? driverDoc.name : 'Unassigned';
+            
+            // Generate last 30 days of data for this bus
             for (let i = 0; i < 30; i++) {
                 const reportDate = new Date();
                 reportDate.setDate(reportDate.getDate() - i);
-                const dateStr = reportDate.toLocaleDateString();
                 
-                // Skip weekends roughly (if Saturday/Sunday)
+                // Skip weekends
                 if (reportDate.getDay() === 0 || reportDate.getDay() === 6) continue;
                 
+                const dateStr = reportDate.toISOString().split('T')[0];
+                
+                // Standard starting time: 07:30 AM
                 const startTime = new Date(reportDate);
-                startTime.setHours(7, Math.floor(Math.random() * 30), 0);
+                startTime.setHours(7, 30, 0); 
+                
+                // Trip duration: e.g. 50-60 mins
+                const durationMins = 45 + Math.floor(Math.random() * 15);
                 const endTime = new Date(startTime);
-                endTime.setHours(startTime.getHours() + 1, Math.floor(Math.random() * 59), 0);
+                endTime.setMinutes(startTime.getMinutes() + durationMins);
                 
-                const avgSpeed = (25 + Math.random() * 15).toFixed(1);
-                const maxSpeed = (parseFloat(avgSpeed) + 15 + Math.random() * 10).toFixed(1);
-                const stopsCovered = route ? route.stops.length : Math.floor(Math.random() * 10 + 5);
-                const passengerCount = Math.floor(Math.random() * 40 + 20); // 20 to 60
+                const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
                 
-                const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-                
-                csvContent += `"${dateStr}","${bus.id}","${routeName}","${driver}","${startStr}","${endStr}","${avgSpeed}","${maxSpeed}","${stopsCovered}","${passengerCount}"\n`;
+                const stops = route ? route.stops : [];
+                if (stops.length > 0) {
+                    const timeStepMins = durationMins / stops.length;
+                    for (let sIdx = 0; sIdx < stops.length; sIdx++) {
+                        const stop = stops[sIdx];
+                        const stopTime = new Date(startTime);
+                        stopTime.setMinutes(startTime.getMinutes() + Math.round((sIdx + 1) * timeStepMins));
+                        const reachedStr = stopTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                        
+                        csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
+                    }
+                } else {
+                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","N/A","No Stops Configured","N/A"\n`;
+                }
             }
             
             res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', `attachment; filename="bus_${busId}_report.csv"`);
+            res.setHeader('Content-Disposition', `attachment; filename="bus_${busId}_trip_report.csv"`);
             return res.status(200).send(csvContent);
         }
 
-        // Default: Generate today's report for ALL buses
+        // Default: Generate today's detailed report for ALL buses
         const routes = await Route.find();
         const buses = await Bus.find();
-        const today = new Date().toLocaleDateString();
+        const drivers = await Driver.find();
+        const todayStr = new Date().toISOString().split('T')[0];
         
         for (const bus of buses) {
             const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
             const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            const driver = 'Assigned Driver';
+            
+            const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
+            const driverName = driverDoc ? driverDoc.name : 'Unassigned';
             
             const startTime = new Date();
-            startTime.setHours(7, Math.floor(Math.random() * 30), 0);
+            startTime.setHours(7, 30, 0); 
+            
+            const durationMins = 45 + Math.floor(Math.random() * 15);
             const endTime = new Date(startTime);
-            endTime.setHours(startTime.getHours() + 1, Math.floor(Math.random() * 59), 0);
+            endTime.setMinutes(startTime.getMinutes() + durationMins);
             
-            const avgSpeed = (25 + Math.random() * 15).toFixed(1);
-            const maxSpeed = (parseFloat(avgSpeed) + 15 + Math.random() * 10).toFixed(1);
-            const stopsCovered = route ? route.stops.length : Math.floor(Math.random() * 10 + 5);
-            const passengerCount = Math.floor(Math.random() * 40 + 10);
+            const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+            const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
             
-            const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-            
-            csvContent += `"${today}","${bus.id}","${routeName}","${driver}","${startStr}","${endStr}","${avgSpeed}","${maxSpeed}","${stopsCovered}","${passengerCount}"\n`;
+            const stops = route ? route.stops : [];
+            if (stops.length > 0) {
+                const timeStepMins = durationMins / stops.length;
+                for (let sIdx = 0; sIdx < stops.length; sIdx++) {
+                    const stop = stops[sIdx];
+                    const stopTime = new Date(startTime);
+                    stopTime.setMinutes(startTime.getMinutes() + Math.round((sIdx + 1) * timeStepMins));
+                    const reachedStr = stopTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
+                    
+                    csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
+                }
+            } else {
+                csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","N/A","No Stops Configured","N/A"\n`;
+            }
         }
 
         res.setHeader('Content-Type', 'text/csv');
-        res.setHeader('Content-Disposition', 'attachment; filename="bus_fleet_report.csv"');
+        res.setHeader('Content-Disposition', 'attachment; filename="bus_fleet_trip_report.csv"');
         res.status(200).send(csvContent);
-    } catch (_err) {
-        console.error('Report Generation Error:', _err);
+    } catch (err) {
+        console.error('Report Generation Error:', err);
         res.status(500).json({ error: 'Failed to generate report' });
     }
 });
@@ -755,9 +745,48 @@ app.get('/api/drivers/my-bus', authMiddleware, async (req, res) => {
 // Manager: Update Driver
 app.put('/api/manager/drivers/:id', async (req, res) => {
     try {
-        const updatedDriver = await Driver.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const driverId = req.params.id;
+        const { assignedBus, ...otherData } = req.body;
+        
+        // Find existing driver to see if assignedBus is changing
+        const oldDriver = await Driver.findById(driverId);
+        if (!oldDriver) {
+            return res.status(404).json({ error: 'Driver not found' });
+        }
+        
+        const oldBusId = oldDriver.assignedBus;
+        const newBusId = assignedBus !== undefined ? assignedBus : oldBusId;
+        
+        // Update driver first
+        const updatedDriver = await Driver.findByIdAndUpdate(
+            driverId,
+            { assignedBus: newBusId, ...otherData },
+            { new: true }
+        );
+        
+        // If bus assignment is changing
+        if (assignedBus !== undefined && oldBusId !== newBusId) {
+            // 1. If old bus existed, clear its driverId
+            if (oldBusId) {
+                await Bus.findByIdAndUpdate(oldBusId, { driverId: "" });
+            }
+            
+            // 2. If new bus is assigned
+            if (newBusId && newBusId.trim() !== "" && newBusId.trim().toUpperCase() !== "UNASSIGNED") {
+                // Clear any other driver that was assigned to this new bus
+                await Driver.updateMany(
+                    { _id: { $ne: driverId }, assignedBus: newBusId },
+                    { assignedBus: "" }
+                );
+                
+                // Set the new bus's driverId to this driver
+                await Bus.findByIdAndUpdate(newBusId, { driverId: driverId });
+            }
+        }
+        
         res.json(updatedDriver);
-    } catch (_err) {
+    } catch (err) {
+        console.error('❌ Error updating driver:', err);
         res.status(500).json({ error: 'Failed to update driver' });
     }
 });
@@ -1103,61 +1132,11 @@ io.on('connection', (socket) => {
 // --- SEED DATABASE ROUTE ---
 app.post('/api/manager/seed', async (req, res) => {
     try {
-        // 1. Clear existing data (Optional, but good for fresh seed)
-        await Route.deleteMany({});
-        await Bus.deleteMany({});
-
-        // 2. Create Routes
-        const route1 = new Route({
-            name: "Route 1 - MP Nagar",
-            color: "#6C63FF",
-            stops: [
-                { name: "ChaloCampus Hub", lat: 23.2333, lng: 77.4333 },
-                { name: "Chetak Bridge", lat: 23.2350, lng: 77.4380 },
-                { name: "MP Nagar Zone 1", lat: 23.2310, lng: 77.4280 }
-            ]
-        });
-        const route2 = new Route({
-            name: "Route 2 - Indrapuri",
-            color: "#00F0FF",
-            stops: [
-                { name: "ChaloCampus Hub", lat: 23.2333, lng: 77.4333 },
-                { name: "Indrapuri C-Sector", lat: 23.2510, lng: 77.4680 },
-                { name: "Piplani Petrol Pump", lat: 23.2550, lng: 77.4780 }
-            ]
-        });
-        await route1.save();
-        await route2.save();
-
-        // 3. Create Buses
-        const bus1 = new Bus({
-            busNumber: "MP-04-AB-1234",
-            name: "MP-04-AB-1234",
-            routeId: route1._id,
-            routeName: route1.name,
-            routeColor: route1.color,
-            currentLat: 23.2333,
-            currentLng: 77.4333,
-            status: "On-time",
-            occupancy: "Low",
-            lastUpdated: new Date()
-        });
-        const bus2 = new Bus({
-            busNumber: "MP-04-XY-5678",
-            name: "MP-04-XY-5678",
-            routeId: route2._id,
-            routeName: route2.name,
-            routeColor: route2.color,
-            currentLat: 23.2333,
-            currentLng: 77.4333,
-            status: "Delayed",
-            occupancy: "Medium",
-            lastUpdated: new Date()
-        });
-        await bus1.save();
-        await bus2.save();
-
-        res.json({ message: "Database seeded successfully with 2 routes and 2 buses!" });
+        console.log('🌱 [Manager API] Seeding real routes and buses from seed_real_routes...');
+        const { seed: seedRealRoutes } = require('./seed_real_routes');
+        await seedRealRoutes(false); // pass false so we don't disconnect mongoose!
+        
+        res.json({ message: "Database seeded successfully with 17 unique routes and 30 buses!" });
         broadcastStats();
     } catch (_err) {
         console.error("Seed Error:", _err);

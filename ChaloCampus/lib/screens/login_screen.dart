@@ -114,8 +114,18 @@ class _LoginScreenState extends State<LoginScreen> {
       final data = await api.get('public/active-form');
       if (data != null && data['active'] == true && data['url'] != null) {
         final url = Uri.parse(data['url']);
-        if (await canLaunchUrl(url)) {
-          await launchUrl(url, mode: LaunchMode.externalApplication);
+        try {
+          final success = await launchUrl(url, mode: LaunchMode.externalApplication);
+          if (!success) {
+            await launchUrl(url);
+          }
+        } catch (e) {
+          debugPrint('Error launching registration URL: $e');
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Could not open link: $e'), backgroundColor: Colors.redAccent),
+            );
+          }
         }
       } else {
         if (mounted) {
@@ -162,28 +172,7 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 children: [
-                  const SizedBox(height: 60),
-                  // Logo
-                  Container(
-                    width: 100,
-                    height: 100,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(30),
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF2D5BFF).withOpacity(0.2),
-                          blurRadius: 40,
-                          offset: const Offset(0, 10),
-                        ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.keyboard_arrow_up_rounded, color: Color(0xFF2D5BFF), size: 64),
-                    ),
-                  ).animate().fadeIn(duration: 800.ms).slideY(begin: -0.2),
-                  
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 80),
                   
                   Text(
                     'ChaloCampus',
@@ -343,28 +332,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.1),
                   
-                  const SizedBox(height: 32),
-                  
-                  TextButton(
-                    onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleRegister,
-                    child: RichText(
-                      text: TextSpan(
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13),
-                        children: [
-                          const TextSpan(text: 'New Student? '),
-                          TextSpan(
-                            text: 'Register Now',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.blueAccent,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 24),
                   
                   TextButton(
                     onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,

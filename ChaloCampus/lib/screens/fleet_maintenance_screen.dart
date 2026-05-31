@@ -208,10 +208,20 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            bus['busNumber'] ?? bus['id'] ?? 'N/A',
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
-                          ),
+                          (() {
+                            final String busName = bus['name']?.toString() ?? '';
+                            final String busLabel = busName.contains(' - ') 
+                                ? busName.split(' - ').first 
+                                : 'Bus';
+                            final String busNum = bus['busNumber']?.toString() ?? 'N/A';
+                            final String cleanPlate = (busNum.isNotEmpty && busNum != 'N/A') 
+                                ? ' ($busNum)' 
+                                : '';
+                            return Text(
+                              '$busLabel$cleanPlate',
+                              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 1),
+                            );
+                          })(),
                           Text(
                             bus['routeName'] ?? 'Unknown Route',
                             style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),

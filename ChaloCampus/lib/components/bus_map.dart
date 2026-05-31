@@ -681,7 +681,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         if (widget.showMapControls)
           Positioned(
             right: 20,
-            top: 100,
+            top: MediaQuery.of(context).padding.top + 80,
             child: Column(
               children: [
                 _buildMapControl(
@@ -729,7 +729,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         // Drive Mode top HUD
         if (_isDriveMode && _focusedBus != null)
           Positioned(
-            top: 16,
+            top: MediaQuery.of(context).padding.top + 10,
             left: 16,
             right: 80,
             child: GestureDetector(

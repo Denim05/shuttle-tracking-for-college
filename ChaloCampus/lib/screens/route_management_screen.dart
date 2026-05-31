@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
+import 'route_edit_screen.dart';
 
 class RouteManagementScreen extends StatefulWidget {
   const RouteManagementScreen({super.key});
@@ -151,45 +152,72 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
               itemBuilder: (context, index) {
                 final route = _routes[index];
                 final color = Color(int.parse(route['color'].replaceAll('#', '0xFF')));
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1E1E1E),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: color.withOpacity(0.1)),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: color.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(16),
+                return GestureDetector(
+                  onTap: () async {
+                    final result = await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => RouteEditScreen(route: route),
+                      ),
+                    );
+                    if (result == true) {
+                      _fetchRoutes();
+                    }
+                  },
+                  child: Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF1E1E1E),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(color: color.withOpacity(0.1)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: color.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Icon(Icons.route_rounded, color: color, size: 28),
                         ),
-                        child: Icon(Icons.route_rounded, color: color, size: 28),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              route['name'] ?? 'Unknown Route',
-                              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
-                            ),
-                            Text(
-                              '${(route['stops'] as List).length} Stops',
-                              style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
-                            ),
-                          ],
+                        const SizedBox(width: 20),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                route['name'] ?? 'Unknown Route',
+                                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                              ),
+                              Text(
+                                '${(route['stops'] as List).length} Stops',
+                                style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                        onPressed: () => _deleteRoute(route['_id']),
-                      ),
-                    ],
+                        IconButton(
+                          icon: const Icon(Icons.mode_edit_outline_rounded, color: Colors.white38, size: 20),
+                          onPressed: () async {
+                            final result = await Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => RouteEditScreen(route: route),
+                              ),
+                            );
+                            if (result == true) {
+                              _fetchRoutes();
+                            }
+                          },
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                          onPressed: () => _deleteRoute(route['_id']),
+                        ),
+                      ],
+                    ),
                   ),
                 ).animate().fadeIn(delay: (index * 100).ms).slideX(begin: 0.1);
               },

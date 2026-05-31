@@ -28,10 +28,11 @@ class ManagerDashboard extends StatefulWidget {
 class _ManagerDashboardState extends State<ManagerDashboard> {
   final ApiService _apiService = ApiService();
   bool _isLoading = true;
-  // _buses removed â€” fleet data now comes from BusStore (Consumer<BusStore>)
+  // _buses removed — fleet data now comes from BusStore (Consumer<BusStore>)
   List<RouteModel> _routes = [];
   List<dynamic> _users = [];
   List<dynamic> _drivers = [];
+  List<dynamic> _rawBuses = [];
   late SocketService _socketService;
   late BusStore _busStore;
   final TextEditingController _notifController = TextEditingController();
@@ -80,17 +81,23 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         : '${AppConstants.apiUrl}/manager/reports/bus-trip-report';
         
     final url = Uri.parse(uri);
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Downloading ${busId != null ? 'Bus' : 'Fleet'} Report...'), backgroundColor: Colors.blueAccent),
-        );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Downloading ${busId != null ? 'Bus' : 'Fleet'} Report...'), backgroundColor: Colors.blueAccent),
+      );
+    }
+    
+    try {
+      final success = await launchUrl(url, mode: LaunchMode.externalApplication);
+      if (!success) {
+        // Fallback to standard launch
+        await launchUrl(url);
       }
-    } else {
+    } catch (e) {
+      debugPrint('Error launching report URL: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to open report download link'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text('Could not open link: $e'), backgroundColor: Colors.redAccent),
         );
       }
     }
@@ -124,6 +131,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         _routes = (routeData as List).map((r) => RouteModel.fromJson(r)).toList();
         _users = userData as List;
         _drivers = driverData as List;
+        _rawBuses = busData as List;
         _isLoading = false;
       });
       // Seed BusStore with initial bus data (real-time updates come via socket)
@@ -195,7 +203,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   Widget build(BuildContext context) {
     final socketService = Provider.of<SocketService>(context);
     return DefaultTabController(
-      length: 8,
+      length: 7,
       child: Scaffold(
         backgroundColor: const Color(0xFF121212),
         body: ValueListenableBuilder<bool>(
@@ -238,30 +246,32 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'CHALO CAMPUS',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: Colors.white,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w900,
-                                  letterSpacing: 4,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'CHALO CAMPUS',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 4,
+                                  ),
                                 ),
-                              ),
-                              const SizedBox(height: 4),
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 6, height: 6,
-                                    decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-                                  ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
-                                  const SizedBox(width: 8),
-                                  Text('Admin Panel', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
-                                ],
-                              ),
-                            ],
+                                const SizedBox(height: 4),
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 6, height: 6,
+                                      decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
+                                    ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
+                                    const SizedBox(width: 8),
+                                    Text('Admin Panel', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
                           Row(
                             children: [
@@ -308,7 +318,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           const Tab(icon: Icon(Icons.map_rounded, size: 20), text: 'Map'),
                           const Tab(icon: Icon(Icons.badge_rounded, size: 20), text: 'Drivers'),
                           const Tab(icon: Icon(Icons.people_alt_rounded, size: 20), text: 'Users'),
-                          const Tab(icon: Icon(Icons.assignment_ind_rounded, size: 20), text: 'Register'),
                           const Tab(icon: Icon(Icons.route_rounded, size: 20), text: 'Routes'),
                           Tab(
                             icon: Consumer<BusStore>(
@@ -350,7 +359,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               _buildMapTab(),
                               _buildDriverTab(),
                               _buildUserTab(),
-                              RegistrationManagerScreen(routes: _routes),
                               const RouteManagementScreen(),
                               _buildAlertTab(),
                               const ComplaintManagerScreen(),
@@ -369,14 +377,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   Widget _buildAppBarAction(IconData icon, VoidCallback onTap) {
     return Container(
-      margin: const EdgeInsets.only(left: 8),
+      margin: const EdgeInsets.only(left: 6),
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.05),
         shape: BoxShape.circle,
         border: Border.all(color: Colors.white.withOpacity(0.1)),
       ),
       child: IconButton(
-        icon: Icon(icon, color: Colors.white, size: 20),
+        padding: const EdgeInsets.all(8),
+        constraints: const BoxConstraints(),
+        icon: Icon(icon, color: Colors.white, size: 18),
         onPressed: onTap,
       ),
     );
@@ -579,6 +589,27 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         itemBuilder: (context, index) {
           final driver = _drivers[index];
           final bool isActive = driver['status'] != 'Suspended';
+
+          // Lookup clean bus name
+          final assignedBusId = driver['assignedBus'];
+          final bus = _rawBuses.firstWhere(
+            (b) => b['_id'] == assignedBusId, 
+            orElse: () => null
+          );
+          final String assignedBusText = bus != null 
+              ? (() {
+                  final String busName = bus['name']?.toString() ?? '';
+                  final String busLabel = busName.contains(' - ') 
+                      ? busName.split(' - ').first 
+                      : 'Bus';
+                  final String busNum = bus['busNumber']?.toString() ?? 'N/A';
+                  final String cleanPlate = (busNum.isNotEmpty && busNum != 'N/A') 
+                      ? ' ($busNum)' 
+                      : '';
+                  return '$busLabel$cleanPlate';
+                })().toUpperCase()
+              : 'UNASSIGNED';
+
           return _buildGlassCard(
             index: index,
             child: Row(
@@ -608,7 +639,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'ASSIGNED: ${driver['assignedBus'] ?? 'UNASSIGNED'}',
+                        'ASSIGNED: $assignedBusText',
                         style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1),
                       ),
                     ],
@@ -623,14 +654,22 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     side: const BorderSide(color: Colors.white10),
                   ),
                   onSelected: (value) async {
-                    final newStatus = value == 'Suspend' ? 'Suspended' : 'Active';
-                    await _apiService.put('manager/drivers/${driver['_id']}', {'status': newStatus});
-                    _loadData();
+                    if (value == 'AssignBus') {
+                      _showAssignBusDialog(driver);
+                    } else {
+                      final newStatus = value == 'Suspend' ? 'Suspended' : 'Active';
+                      await _apiService.put('manager/drivers/${driver['_id']}', {'status': newStatus});
+                      _loadData();
+                    }
                   },
                   itemBuilder: (context) => [
                     PopupMenuItem(
                       value: isActive ? 'Suspend' : 'Activate',
                       child: Text(isActive ? 'Suspend' : 'Activate', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                    ),
+                    PopupMenuItem(
+                      value: 'AssignBus',
+                      child: Text('Assign Bus', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
                     ),
                   ],
                 ),
@@ -1181,12 +1220,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 child: ListView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   children: [
-                    _buildDialogOption('Mark Operational', Icons.check_circle_rounded, Colors.blueAccent, () => _updateBus(bus, status: 'On-time')),
-                    _buildDialogOption('Signal Delay', Icons.bolt_rounded, Colors.orangeAccent, () => _updateBus(bus, status: 'Delayed')),
+                    _buildDialogOption('Reassign Driver', Icons.badge_rounded, Colors.deepPurpleAccent, () {
+                      Navigator.pop(context);
+                      _showBusDriverAssignmentDialog(bus);
+                    }),
                     const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 24),
+                      padding: EdgeInsets.symmetric(vertical: 8),
                       child: Divider(color: Colors.white10),
                     ),
+                    _buildDialogOption('Mark Operational', Icons.check_circle_rounded, Colors.blueAccent, () => _updateBus(bus, status: 'On-time')),
+                    _buildDialogOption('Signal Delay', Icons.bolt_rounded, Colors.orangeAccent, () => _updateBus(bus, status: 'Delayed')),
                     Text('SECTOR REASSIGNMENT', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
                     const SizedBox(height: 16),
                     ..._routes.map((r) => _buildDialogOption(
@@ -1250,6 +1293,223 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             ],
           ).animate().slideY(begin: 1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic),
         ),
+      ),
+    );
+  }
+
+  void _showAssignBusDialog(dynamic driver) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0B14),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 24),
+              Text('FLEET ASSIGNMENT', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2)),
+              const SizedBox(height: 4),
+              Text('DRIVER: ${(driver['name'] ?? driver['username']).toUpperCase()}', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              const SizedBox(height: 24),
+              
+              // Unassign Option
+              _buildDialogOption('UNASSIGNED / NO BUS', Icons.close_rounded, Colors.redAccent, () async {
+                try {
+                  await _apiService.put('manager/drivers/${driver['_id']}', {'assignedBus': ''});
+                  _loadData();
+                } catch (e) {
+                  debugPrint('Error unassigning bus: $e');
+                }
+              }),
+              const Divider(color: Colors.white10, height: 16),
+              
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _rawBuses.length,
+                  itemBuilder: (context, index) {
+                    final b = _rawBuses[index];
+                    final String busName = b['name']?.toString() ?? '';
+                    final String busLabel = busName.contains(' - ') 
+                        ? busName.split(' - ').first 
+                        : 'Bus';
+                    final String busNum = b['busNumber']?.toString() ?? 'N/A';
+                    final String cleanPlate = (busNum.isNotEmpty && busNum != 'N/A') 
+                        ? ' ($busNum)' 
+                        : '';
+                    
+                    final String displayName = '$busLabel$cleanPlate';
+                    final String routeInfo = b['routeName'] ?? 'Unknown Route';
+                    final Color routeColor = b['routeColor'] != null
+                        ? Color(int.parse(b['routeColor'].replaceAll('#', '0xFF')))
+                        : Colors.blueAccent;
+                    
+                    final bool isCurrent = driver['assignedBus'] == b['_id'];
+                    
+                    return ListTile(
+                      onTap: () async {
+                        Navigator.pop(context);
+                        try {
+                          await _apiService.put('manager/drivers/${driver['_id']}', {'assignedBus': b['_id']});
+                          _loadData();
+                        } catch (e) {
+                          debugPrint('Error assigning bus: $e');
+                        }
+                      },
+                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                      leading: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (isCurrent ? Colors.green : routeColor).withOpacity(0.1), 
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: (isCurrent ? Colors.green : routeColor).withOpacity(0.2))
+                        ),
+                        child: Icon(Icons.directions_bus_filled_rounded, color: isCurrent ? Colors.green : routeColor, size: 20),
+                      ),
+                      title: Text(
+                        displayName.toUpperCase(), 
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isCurrent ? Colors.green : Colors.white, 
+                          fontWeight: FontWeight.w900, 
+                          fontSize: 14, 
+                          letterSpacing: 1
+                        )
+                      ),
+                      subtitle: Text(
+                        routeInfo, 
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white38, 
+                          fontSize: 10, 
+                          fontWeight: FontWeight.bold
+                        )
+                      ),
+                      trailing: isCurrent 
+                          ? const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20)
+                          : const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white10, size: 16),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ).animate().slideY(begin: 1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic),
+      ),
+    );
+  }
+
+  void _showBusDriverAssignmentDialog(Bus bus) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+        child: Container(
+          height: MediaQuery.of(context).size.height * 0.7,
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0B14),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 24),
+              Text('DRIVER REASSIGNMENT', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2)),
+              const SizedBox(height: 4),
+              Text('UNIT: UNIT_${bus.id.substring(bus.id.length - 4).toUpperCase()} (${bus.routeName.toUpperCase()})', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1)),
+              const SizedBox(height: 24),
+              
+              // Unassign current driver Option
+              _buildDialogOption('NO DRIVER / UNASSIGNED', Icons.person_off_rounded, Colors.redAccent, () async {
+                try {
+                  // Find driver currently assigned to this bus and clear their assignment
+                  final currentDriver = _drivers.firstWhere(
+                    (d) => d['assignedBus'] == bus.id,
+                    orElse: () => null
+                  );
+                  if (currentDriver != null) {
+                    await _apiService.put('manager/drivers/${currentDriver['_id']}', {'assignedBus': ''});
+                  }
+                  _loadData();
+                } catch (e) {
+                  debugPrint('Error clearing driver assignment: $e');
+                }
+              }),
+              const Divider(color: Colors.white10, height: 16),
+              
+              Expanded(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _drivers.length,
+                  itemBuilder: (context, index) {
+                    final d = _drivers[index];
+                    final String name = (d['name'] ?? d['username'] ?? 'Unknown').toString().toUpperCase();
+                    final String contact = d['contactNumber'] ?? 'NO CONTACT';
+                    final bool isActive = d['status'] != 'Suspended';
+                    final bool isCurrent = d['assignedBus'] == bus.id;
+                    
+                    return ListTile(
+                      onTap: () async {
+                        Navigator.pop(context);
+                        try {
+                          await _apiService.put('manager/drivers/${d['_id']}', {'assignedBus': bus.id});
+                          _loadData();
+                        } catch (e) {
+                          debugPrint('Error assigning driver: $e');
+                        }
+                      },
+                      contentPadding: const EdgeInsets.symmetric(vertical: 4),
+                      leading: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: (isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent)).withOpacity(0.1), 
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: (isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent)).withOpacity(0.2))
+                        ),
+                        child: Icon(Icons.shield_rounded, color: isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent), size: 20),
+                      ),
+                      title: Text(
+                        name, 
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isCurrent ? Colors.green : Colors.white, 
+                          fontWeight: FontWeight.w900, 
+                          fontSize: 14, 
+                          letterSpacing: 1
+                        )
+                      ),
+                      subtitle: Text(
+                        'CONTACT: $contact', 
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white38, 
+                          fontSize: 10, 
+                          fontWeight: FontWeight.bold
+                        )
+                      ),
+                      trailing: isCurrent 
+                          ? const Icon(Icons.check_circle_rounded, color: Colors.green, size: 20)
+                          : const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white10, size: 16),
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        ).animate().slideY(begin: 1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic),
       ),
     );
   }

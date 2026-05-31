@@ -81,17 +81,30 @@ class BusStore extends ChangeNotifier {
 
   Bus? busById(String id) => _buses[id];
 
-  /// Live notification feed, newest first.
-  List<LiveNotification> get notifications => List.unmodifiable(_notifications);
+  /// Live notification feed, newest first, filtered to show only notifications from the last 24 hours (1 day).
+  List<LiveNotification> get notifications {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    return List.unmodifiable(
+      _notifications.where((n) => n.timestamp.isAfter(cutoff)),
+    );
+  }
 
-  /// Number of unread notifications for badge display.
-  int get unreadCount => _notifications.where((n) => !n.isRead).length;
+  /// Number of unread notifications for badge display (within the last 24 hours).
+  int get unreadCount {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
+    return _notifications
+        .where((n) => !n.isRead && n.timestamp.isAfter(cutoff))
+        .length;
+  }
 
   /// Seed historical notifications loaded from the API.
   void seedNotifications(List<dynamic> json) {
+    final cutoff = DateTime.now().subtract(const Duration(hours: 24));
     for (final item in json) {
       try {
         final n = LiveNotification.fromJson(item as Map<String, dynamic>);
+        // Skip seeding notifications older than 24 hours
+        if (n.timestamp.isBefore(cutoff)) continue;
         // Avoid duplicates
         if (!_notifications.any((x) => x.id == n.id)) {
           _notifications.add(n);
