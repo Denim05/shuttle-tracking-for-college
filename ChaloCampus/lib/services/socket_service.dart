@@ -231,6 +231,15 @@ class SocketService with ChangeNotifier {
     });
   }
 
+  void emitTripEnd(String busId) {
+    if (_socket == null || !_socket!.connected) {
+      debugPrint('⚠️ Cannot emit tripEnd: Socket not connected');
+      return;
+    }
+    _socket?.emit('tripEnd', {'busId': busId});
+    debugPrint('🏁 Emitted tripEnd for Bus $busId');
+  }
+
   void emitNotification(Map<String, dynamic> data) =>
       _socket?.emit('managerBroadcast', data);
 

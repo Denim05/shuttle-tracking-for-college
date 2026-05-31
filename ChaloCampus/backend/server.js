@@ -63,6 +63,7 @@ const Alert = require('./models/Alert');
 const Notification = require('./models/Notification');
 const Complaint = require('./models/Complaint');
 const Schedule = require('./models/Schedule');
+const LiveTripLog = require('./models/LiveTripLog');
 const RegistrationForm = require('./models/RegistrationForm');
 const RegistrationSubmission = require('./models/RegistrationSubmission');
 
@@ -467,110 +468,160 @@ app.post('/api/manager/notifications', async (req, res) => {
     }
 });
 
-// Manager: Generate Bus Trip Report (CSV/Excel)
+// ─── MANAGER: LIVE BUS TRIP REPORT (CSV/Excel) ──────────────────────────────
+// GET /api/manager/reports/bus-trip-report?busId=<id>&days=<n>
+// Generates a CSV report per bus using REAL live trip log data.
+// Falls back to estimated schedule data for buses with no live GPS data.
 app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
     try {
-        const Route = require('./models/Route');
-        const Bus = require('./models/Bus');
-        const Driver = require('./models/Driver');
+        const { busId, days } = req.query;
+        const lookbackDays = Math.min(parseInt(days) || 30, 90);
         
-        const { busId } = req.query;
-        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Trip Start Time,Trip End Time,Stop Sequence,Stop Name,Reached Time\n';
-        
+        // Helper to format a Date as 'HH:MM AM/PM'
+        const fmtTime = (d) => {
+            if (!d) return 'N/A';
+            const dt = new Date(d);
+            return dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        };
+
+        // Helper to format a date as YYYY-MM-DD
+        const fmtDate = (d) => new Date(d).toISOString().split('T')[0];
+
+        // ── SINGLE BUS REPORT ────────────────────────────────────────────────
         if (busId) {
-            // Generate a detailed 30-day stop-by-stop report for a SINGLE bus
             const bus = await Bus.findById(busId);
             if (!bus) return res.status(404).json({ error: 'Bus not found' });
-            
+
             const route = await Route.findById(bus.routeId);
             const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            
+            const stops = route ? route.stops : [];
+
             const driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() });
             const driverName = driverDoc ? driverDoc.name : 'Unassigned';
-            
-            // Generate last 30 days of data for this bus
-            for (let i = 0; i < 30; i++) {
-                const reportDate = new Date();
-                reportDate.setDate(reportDate.getDate() - i);
-                
-                // Skip weekends
-                if (reportDate.getDay() === 0 || reportDate.getDay() === 6) continue;
-                
-                const dateStr = reportDate.toISOString().split('T')[0];
-                
-                // Standard starting time: 07:30 AM
-                const startTime = new Date(reportDate);
-                startTime.setHours(7, 30, 0); 
-                
-                // Trip duration: e.g. 50-60 mins
-                const durationMins = 45 + Math.floor(Math.random() * 15);
-                const endTime = new Date(startTime);
-                endTime.setMinutes(startTime.getMinutes() + durationMins);
-                
-                const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                
-                const stops = route ? route.stops : [];
-                if (stops.length > 0) {
-                    const timeStepMins = durationMins / stops.length;
-                    for (let sIdx = 0; sIdx < stops.length; sIdx++) {
-                        const stop = stops[sIdx];
-                        const stopTime = new Date(startTime);
-                        stopTime.setMinutes(startTime.getMinutes() + Math.round((sIdx + 1) * timeStepMins));
-                        const reachedStr = stopTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                        
-                        csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
+
+            // Fetch real live logs for this bus in lookback window
+            const sinceDate = new Date();
+            sinceDate.setDate(sinceDate.getDate() - lookbackDays);
+            const liveLogs = await LiveTripLog.find({
+                busId: bus._id.toString(),
+                startTime: { $gte: sinceDate }
+            }).sort({ startTime: -1 });
+
+            let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Stop Sequence,Stop Name,Reached Time\n';
+
+            // Build a set of dates covered by live logs
+            const liveDates = new Set(liveLogs.map(l => l.date));
+
+            // Iterate last N weekdays
+            for (let i = 0; i < lookbackDays; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
+                const dateStr = fmtDate(d);
+
+                if (liveDates.has(dateStr)) {
+                    // ── USE REAL LIVE DATA ──
+                    const log = liveLogs.find(l => l.date === dateStr);
+                    const startStr = fmtTime(log.startTime);
+                    const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
+
+                    if (stops.length > 0) {
+                        stops.forEach((stop, sIdx) => {
+                            const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
+                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
+                            csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
+                        });
+                    } else {
+                        csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
                     }
                 } else {
-                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","N/A","No Stops Configured","N/A"\n`;
+                    // ── FALLBACK: ESTIMATED DATA ──
+                    const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
+                    const dayIndex   = d.getDate() + d.getMonth() * 31;
+                    const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
+                    const startH = 7, startM = (busNumSeed * 3 % 45) + jitter;
+                    const startBase = new Date(d);
+                    startBase.setHours(startH, startM, 0, 0);
+                    const durationMins = 45 + Math.min(stops.length * 2, 25) + ((dayIndex * 3) % 10);
+                    const endBase = new Date(startBase.getTime() + durationMins * 60000);
+                    const startStr = fmtTime(startBase);
+                    const endStr   = fmtTime(endBase);
+
+                    if (stops.length > 0) {
+                        stops.forEach((stop, sIdx) => {
+                            const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
+                            csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${fmtTime(stopTime)}"\n`;
+                        });
+                    } else {
+                        csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
+                    }
                 }
             }
-            
-            res.setHeader('Content-Type', 'text/csv');
-            res.setHeader('Content-Disposition', `attachment; filename="bus_${busId}_trip_report.csv"`);
+
+            const safeName = (bus.busNumber || busId).replace(/[^a-zA-Z0-9_-]/g, '_');
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${safeName}_trip_report.csv"`);
             return res.status(200).send(csvContent);
         }
 
-        // Default: Generate today's detailed report for ALL buses
-        const routes = await Route.find();
-        const buses = await Bus.find();
+        // ── ALL BUSES REPORT (Today + Live Data) ─────────────────────────────
+        const routes  = await Route.find();
+        const buses   = await Bus.find().sort({ name: 1 });
         const drivers = await Driver.find();
-        const todayStr = new Date().toISOString().split('T')[0];
-        
+        const todayStr = fmtDate(new Date());
+
+        // Fetch all live logs for today
+        const todayLiveLogs = await LiveTripLog.find({ date: todayStr });
+
+        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Stop Sequence,Stop Name,Reached Time\n';
+
         for (const bus of buses) {
             const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
             const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            
+            const stops = route ? route.stops : [];
+
             const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
             const driverName = driverDoc ? driverDoc.name : 'Unassigned';
-            
-            const startTime = new Date();
-            startTime.setHours(7, 30, 0); 
-            
-            const durationMins = 45 + Math.floor(Math.random() * 15);
-            const endTime = new Date(startTime);
-            endTime.setMinutes(startTime.getMinutes() + durationMins);
-            
-            const startStr = startTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-            const endStr = endTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-            
-            const stops = route ? route.stops : [];
-            if (stops.length > 0) {
-                const timeStepMins = durationMins / stops.length;
-                for (let sIdx = 0; sIdx < stops.length; sIdx++) {
-                    const stop = stops[sIdx];
-                    const stopTime = new Date(startTime);
-                    stopTime.setMinutes(startTime.getMinutes() + Math.round((sIdx + 1) * timeStepMins));
-                    const reachedStr = stopTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-                    
-                    csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
+
+            // Check for today's live log
+            const liveLog = todayLiveLogs.find(l => l.busId === bus._id.toString());
+
+            if (liveLog) {
+                // ── REAL LIVE DATA FOR TODAY ──
+                const startStr = fmtTime(liveLog.startTime);
+                const endStr   = liveLog.endTime ? fmtTime(liveLog.endTime) : 'In Progress';
+
+                if (stops.length > 0) {
+                    stops.forEach((stop, sIdx) => {
+                        const reached = liveLog.reachedStops.find(rs => rs.stopName === stop.name);
+                        const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
+                        csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${liveLog.driverName}","LIVE","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
+                    });
+                } else {
+                    csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${liveLog.driverName}","LIVE","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
                 }
             } else {
-                csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","${startStr}","${endStr}","N/A","No Stops Configured","N/A"\n`;
+                // ── FALLBACK: ESTIMATED (bus not yet started today) ──
+                const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
+                const startTime = new Date();
+                startTime.setHours(7, 30, 0, 0);
+                const durationMins = 45 + Math.floor(Math.random() * 15);
+                const endTime = new Date(startTime.getTime() + durationMins * 60000);
+                const startStr = fmtTime(startTime);
+                const endStr   = fmtTime(endTime);
+
+                if (stops.length > 0) {
+                    stops.forEach((stop, sIdx) => {
+                        const stopTime = new Date(startTime.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
+                        csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${fmtTime(stopTime)}"\n`;
+                    });
+                } else {
+                    csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
+                }
             }
         }
 
-        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
         res.setHeader('Content-Disposition', 'attachment; filename="bus_fleet_trip_report.csv"');
         res.status(200).send(csvContent);
     } catch (err) {
@@ -1042,14 +1093,13 @@ io.on('connection', (socket) => {
         try {
             if (!incomingBusId) return;
 
-            
             let bus = await Bus.findById(incomingBusId);
             
             // SECURITY BLOCK: If the ID is from an old simulation, reject it.
             if (!bus) {
                 if (data.driverId) bus = await Bus.findOne({ driverId: data.driverId });
                 if (!bus) {
-                    process.stdout.write('?? [SIM-BLOCK] Rejected Old/Simulation BusID: ' + incomingBusId + '\r');
+                    process.stdout.write('🚫 [SIM-BLOCK] Rejected Old/Simulation BusID: ' + incomingBusId + '\r');
                     return;
                 }
             }
@@ -1059,7 +1109,27 @@ io.on('connection', (socket) => {
             const speed = data.speed !== undefined ? Number(data.speed) : (bus.speed || 0);
             const heading = data.heading !== undefined ? Number(data.heading) : (bus.heading || 0);
 
-            console.log(`📍 [REAL-TIME] Bus: ${bus.busNumber} | Speed: ${speed.toFixed(1)} KM/H`);
+            process.stdout.write(`📍 [LIVE] Bus: ${bus.busNumber} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Speed: ${speed.toFixed(1)} KM/H\r`);
+
+            // ── LIVE TRIP LOG: Auto-create today's trip if not exists ──────────────
+            const todayStr = new Date().toISOString().split('T')[0];
+            let tripLog = await LiveTripLog.findOne({ busId: bus._id.toString(), date: todayStr, status: 'Active' });
+            if (!tripLog) {
+                // Get driver name
+                const driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() }).select('name');
+                const driverNameLive = driverDoc ? driverDoc.name : 'Unassigned';
+                tripLog = await LiveTripLog.create({
+                    busId:      bus._id.toString(),
+                    busNumber:  bus.busNumber || 'N/A',
+                    busName:    bus.name || bus.busNumber,
+                    driverName: driverNameLive,
+                    routeName:  bus.routeName || 'Unassigned',
+                    date:       todayStr,
+                    startTime:  new Date(),
+                    status:     'Active'
+                });
+                console.log(`🚀 [TRIP START] New live trip log created for Bus ${bus.busNumber} on ${todayStr}`);
+            }
 
             // Update DB
             bus.currentLat = lat;
@@ -1067,21 +1137,21 @@ io.on('connection', (socket) => {
             bus.speed = speed;
             bus.heading = heading;
             bus.lastUpdated = new Date();
+            bus.status = speed > 2 ? 'On-time' : bus.status;
             
             // Calculate ETAs and Geofencing
             const etas = [];
             if (bus.routeId) {
                 const route = await Route.findById(bus.routeId);
                 if (route && route.stops) {
-                    // Optimized: Only calculate for the first 3 upcoming stops to save API quota
-                    const upcomingStops = route.stops.slice(0, 5); 
+                    const upcomingStops = route.stops.slice(0, 5);
                     
                     for (const stop of upcomingStops) {
                         if (stop.lat && stop.lng) {
                             const minutes = await calculateETA(lat, lng, stop.lat, stop.lng, speed);
                             etas.push({ stopName: stop.name, minutes });
 
-                            // GEOFENCE LOGIC (Keep it fast with local math)
+                            // GEOFENCE LOGIC
                             const R = 6371;
                             const dLat = (stop.lat - lat) * Math.PI / 180;
                             const dLon = (stop.lng - lng) * Math.PI / 180;
@@ -1103,11 +1173,18 @@ io.on('connection', (socket) => {
                                         stopName: stop.name,
                                         minutes: minutes
                                     });
-                                    console.log(`🔔 [GEOFENCE] Notified: Bus ${bus.busNumber} near ${stop.name}`);
+                                    console.log(`🔔 [GEOFENCE] Bus ${bus.busNumber} reached stop: ${stop.name}`);
+
+                                    // ── LIVE TRIP LOG: Record actual stop-reached time ──
+                                    const alreadyRecorded = tripLog.reachedStops.some(rs => rs.stopName === stop.name);
+                                    if (!alreadyRecorded) {
+                                        tripLog.reachedStops.push({ stopName: stop.name, reachedTime: new Date() });
+                                        await tripLog.save();
+                                        console.log(`✅ [TRIP LOG] Recorded: Bus ${bus.busNumber} → Stop "${stop.name}" at ${new Date().toLocaleTimeString()}`);
+                                    }
                                 }
                             }
-                        }
- else {
+                        } else {
                             etas.push({ stopName: stop.name, minutes: 0 });
                         }
                     }
@@ -1120,7 +1197,26 @@ io.on('connection', (socket) => {
             io.emit('busLocationUpdate', bus);
 
         } catch (err) {
-            console.error('? [TRACKING ERROR]:', err.message);
+            console.error('❌ [TRACKING ERROR]:', err.message);
+        }
+    });
+
+    // Driver signals end of trip
+    socket.on('tripEnd', async (data) => {
+        try {
+            const busId = (data.busId || '').toString();
+            const todayStr = new Date().toISOString().split('T')[0];
+            const tripLog = await LiveTripLog.findOne({ busId, date: todayStr, status: 'Active' });
+            if (tripLog) {
+                tripLog.endTime = new Date();
+                tripLog.status = 'Completed';
+                await tripLog.save();
+                // Update bus status to Offline
+                await Bus.findByIdAndUpdate(busId, { status: 'Offline' });
+                console.log(`🏁 [TRIP END] Bus trip completed for busId: ${busId}`);
+            }
+        } catch (err) {
+            console.error('❌ [TRIP END ERROR]:', err.message);
         }
     });
     socket.on('ping', () => socket.emit('pong'));

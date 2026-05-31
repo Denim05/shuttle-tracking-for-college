@@ -321,6 +321,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
   void _stopTracking() {
     _positionStream?.cancel();
     _heartbeatTimer?.cancel();
+
+    // Notify server the trip has ended so it logs the end time
+    if (_selectedBusId != null) {
+      try {
+        final socketService = Provider.of<SocketService>(context, listen: false);
+        socketService.emitTripEnd(_selectedBusId!);
+      } catch (e) {
+        debugPrint('⚠️ Could not emit tripEnd: $e');
+      }
+    }
+
     setState(() {
       _isOnline         = false;
       _speedKmH            = 0;
