@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -10,7 +11,6 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/bus_model.dart';
 import '../models/route_model.dart';
-import '../utils/map_math.dart';
 
 class BusMap extends StatefulWidget {
   final List<Bus> buses;
@@ -47,83 +47,424 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   LatLng _center = const LatLng(23.2599, 77.4126);
   Bus? _focusedBus;
   bool _isFollowing = false;
-  bool _isDriveMode = false; // Google Maps Drive Mode
+  bool _isDriveMode = false;
   MapType _currentMapType = MapType.normal;
   bool _showLayerSelector = false;
-  
-  final Map<String, Marker> _markers = {};
-  final Map<String, Polyline> _polylines = {};
-  final Map<String, List<LatLng>> _busTrails = {};
-  final Map<String, AnimationController> _markerAnimations = {};
-  final Map<String, LatLng> _animatedPositions = {};
-  final Map<String, double> _animatedHeadings = {};
-  
-  final Set<Circle> _circles = {};
-  
-  final Map<String, BitmapDescriptor> _busIcons = {};
+
+  // ── Map object sets — only rebuilt when GPS data changes ──────────────────
+  Set<Marker>   _markers   = {};
+  Set<Polyline> _polylines = {};
+  Set<Circle>   _circles   = {};
+
+  // ── Animation state ────────────────────────────────────────────────────────
+  final Map<String, AnimationController> _markerAnims    = {};
+  final Map<String, LatLng>              _animatedPos     = {};
+  final Map<String, double>              _animatedHeading = {};
+  final Map<String, List<LatLng>>       _busTrails       = {};
+
+  // ── Polyline flow — 8fps timer, only touches route_flow polyline ───────────
+  Timer? _flowTimer;
+  double _flowOffset = 0.0;
+
+  // ── Camera debounce ───────────────────────────────────────────────────────
+  Timer? _cameraDebounce;
+  bool   _mapReady = false;
+
+  // ── Icon caches ───────────────────────────────────────────────────────────
+  final Map<String, BitmapDescriptor> _busIcons        = {};
   final Map<String, BitmapDescriptor> _focusedBusIcons = {};
-  
-  static const int _maxTrailPoints = 20;
-  static const LatLng _bhopal = LatLng(23.2599, 77.4126);
-
-  // -- Animation State for Flowing Route --
-  double _polylineOffset = 0.0;
-  late AnimationController _polylineFlowController;
-
-  String? _darkMapStyle;
   BitmapDescriptor? _stopIcon;
   BitmapDescriptor? _lastStopIcon;
+
+  static const int    _maxTrail         = 20;
+  static const LatLng _bhopal           = LatLng(23.2599, 77.4126);
+  static const double _trailMinDistM    = 8.0;
+
+  String? _darkMapStyle;
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // LIFECYCLE
+  // ═══════════════════════════════════════════════════════════════════════════
 
   @override
   void initState() {
     super.initState();
-    _isDriveMode = widget.initialDriveMode;
-    _isFollowing = widget.initialDriveMode;
+    _isDriveMode   = widget.initialDriveMode;
+    _isFollowing   = widget.initialDriveMode;
     _currentMapType = widget.initialMapType;
-    _loadMapStyle();
-    _precacheAllBusIcons();
-    _loadStopIcons();
-    
-    // Controller for animated route flow
-    _polylineFlowController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
-    )..repeat();
-    
-    _polylineFlowController.addListener(() {
-      if (mounted) {
-        setState(() {
-          _polylineOffset = _polylineFlowController.value * 20.0;
-        });
+
+    _buildDarkMapStyle();
+
+    // Flow: update at ~8fps (every 125ms) — only changes the dashed overlay
+    _flowTimer = Timer.periodic(const Duration(milliseconds: 125), (_) {
+      if (!mounted) return;
+      _flowOffset = (_flowOffset + 2.5) % 20.0;
+      _updateFlowPolyline();
+    });
+
+    // Precache icons and then build initial markers
+    _precacheIcons().then((_) => _rebuildMapObjects());
+  }
+
+  @override
+  void didUpdateWidget(covariant BusMap old) {
+    super.didUpdateWidget(old);
+
+    bool needsRebuild = false;
+
+    for (final bus in widget.buses) {
+      final newPos = LatLng(bus.currentLat, bus.currentLng);
+      final oldPos = _animatedPos[bus.id];
+
+      // Precache icon if new bus
+      if (!_busIcons.containsKey(bus.id)) {
+        final label = _busLabel(bus.id);
+        _ensureBusIcon(bus.id, label, isFocused: false);
+        _ensureBusIcon(bus.id, label, isFocused: true);
       }
+
+      if (oldPos == null) {
+        // Brand-new bus: set initial position immediately
+        _animatedPos[bus.id]     = newPos;
+        _animatedHeading[bus.id] = bus.heading;
+        _updateTrail(bus.id, newPos);
+        needsRebuild = true;
+      } else {
+        final moved = (oldPos.latitude  - newPos.latitude).abs()  > 1e-7 ||
+                      (oldPos.longitude - newPos.longitude).abs() > 1e-7;
+        final turned = (_animatedHeading[bus.id] ?? 0.0) != bus.heading;
+
+        if (moved || turned) {
+          _startMarkerAnimation(bus.id, oldPos, newPos,
+              _animatedHeading[bus.id] ?? bus.heading, bus.heading);
+          _updateTrail(bus.id, newPos);
+          needsRebuild = true;
+
+          // Debounced camera follow (once per GPS update, not every anim frame)
+          if (_isFollowing) _scheduleCameraMove(bus);
+        }
+      }
+    }
+
+    if (needsRebuild) _rebuildMapObjects();
+
+    // Route changed
+    if (old.selectedRoute?.id != widget.selectedRoute?.id) _rebuildMapObjects();
+  }
+
+  @override
+  void dispose() {
+    for (final c in _markerAnims.values) c.dispose();
+    _flowTimer?.cancel();
+    _cameraDebounce?.cancel();
+    _mapController?.dispose();
+    super.dispose();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ANIMATION
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _startMarkerAnimation(
+      String busId, LatLng start, LatLng end,
+      double startBearing, double endBearing) {
+    _markerAnims[busId]?.stop();
+    _markerAnims[busId]?.dispose();
+
+    final ctrl = AnimationController(
+      duration: const Duration(milliseconds: 900),
+      vsync: this,
+    );
+    final anim = CurvedAnimation(parent: ctrl, curve: Curves.easeInOut);
+
+    ctrl.addListener(() {
+      if (!mounted) return;
+      final t = anim.value;
+
+      // Interpolate position
+      final lat = start.latitude  + (end.latitude  - start.latitude)  * t;
+      final lng = start.longitude + (end.longitude - start.longitude) * t;
+      _animatedPos[busId] = LatLng(lat, lng);
+
+      // Interpolate heading (handles 0/360 wrap)
+      double diff = endBearing - startBearing;
+      if (diff >  180) diff -= 360;
+      if (diff < -180) diff += 360;
+      _animatedHeading[busId] = startBearing + diff * t;
+
+      // Only rebuild map objects — not the whole widget tree
+      _rebuildMapObjects();
+    });
+
+    ctrl.addStatusListener((s) {
+      if (s == AnimationStatus.completed) {
+        _animatedPos[busId]     = end;
+        _animatedHeading[busId] = endBearing;
+        _rebuildMapObjects();
+      }
+    });
+
+    _markerAnims[busId] = ctrl;
+    ctrl.forward();
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MAP OBJECT BUILDERS — called only when data actually changes
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _rebuildMapObjects() {
+    if (!mounted) return;
+
+    final newMarkers   = _buildMarkers();
+    final newPolylines = _buildPolylines();
+    final newCircles   = _buildCircles();
+
+    // Single setState for all three sets together
+    setState(() {
+      _markers   = newMarkers;
+      _polylines = newPolylines;
+      _circles   = newCircles;
     });
   }
 
-  Future<void> _loadStopIcons() async {
-    _stopIcon = await _drawStopMarker(false);
-    _lastStopIcon = await _drawStopMarker(true);
-    if (mounted) setState(() {});
+  // Update only the animated dashed flow polyline — called at 8fps
+  void _updateFlowPolyline() {
+    if (!mounted || widget.selectedRoute == null) return;
+    if (widget.selectedRoute!.coordinates.isEmpty) return;
+
+    final pts = widget.selectedRoute!.coordinates
+        .map((c) => LatLng(c['latitude']!, c['longitude']!))
+        .toList();
+
+    final flow = Polyline(
+      polylineId: const PolylineId('route_flow'),
+      points:     pts,
+      width:      5,
+      color:      Colors.white.withOpacity(0.35),
+      patterns:   [PatternItem.dash(10), PatternItem.gap(10 + _flowOffset)],
+    );
+
+    setState(() {
+      _polylines = {
+        ..._polylines.where((p) => p.polylineId.value != 'route_flow'),
+        flow,
+      };
+    });
   }
 
-  Future<void> _precacheAllBusIcons() async {
+  Set<Marker> _buildMarkers() {
+    final result = <String, Marker>{};
+
     for (final bus in widget.buses) {
-      final label = bus.id.substring(bus.id.length.clamp(4, bus.id.length) - 4).toUpperCase();
+      final isFocused = _focusedBus?.id == bus.id;
+      final pos       = _animatedPos[bus.id]     ?? LatLng(bus.currentLat, bus.currentLng);
+      final heading   = _animatedHeading[bus.id] ?? bus.heading;
+
+      final icon = isFocused
+          ? (_focusedBusIcons[bus.id] ?? _busIcons[bus.id] ?? BitmapDescriptor.defaultMarker)
+          : (_busIcons[bus.id]         ?? BitmapDescriptor.defaultMarker);
+
+      result[bus.id] = Marker(
+        markerId: MarkerId(bus.id),
+        position: pos,
+        rotation: _isDriveMode ? 0 : heading,
+        anchor:   const Offset(0.5, 0.5),
+        flat:     true,
+        consumeTapEvents: false,
+        infoWindow: InfoWindow(
+          title:   'Shuttle ${_busLabel(bus.id)}',
+          snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}',
+        ),
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          setState(() {
+            _focusedBus  = bus;
+            _isDriveMode = true;
+            _isFollowing = true;
+          });
+          _scheduleCameraMove(bus);
+          _rebuildMapObjects();
+        },
+        icon:   icon,
+        zIndex: isFocused ? 2.0 : 1.0,
+      );
+    }
+
+    // Stop markers
+    if (widget.selectedRoute != null) {
+      final stops    = widget.selectedRoute!.stops;
+      final hasCoords = stops.any((s) =>
+          s['lat'] != null && s['lng'] != null &&
+          (s['lat'] as num) != 0 && (s['lng'] as num) != 0);
+
+      if (hasCoords) {
+        for (var i = 0; i < stops.length; i++) {
+          final stop = stops[i];
+          if (stop['lat'] == null || stop['lng'] == null) continue;
+          final lat = (stop['lat'] as num).toDouble();
+          final lng = (stop['lng'] as num).toDouble();
+          if (lat == 0 && lng == 0) continue;
+
+          final stopId = 'stop_${stop['name']}';
+          final isLast = i == stops.length - 1;
+
+          result[stopId] = Marker(
+            markerId: MarkerId(stopId),
+            position: LatLng(lat, lng),
+            anchor:   const Offset(0.5, 0.5),
+            icon: isLast
+                ? (_lastStopIcon ?? BitmapDescriptor.defaultMarker)
+                : (_stopIcon     ?? BitmapDescriptor.defaultMarker),
+            alpha: 0.9,
+            infoWindow: InfoWindow(title: stop['name'], snippet: 'Bus Stop'),
+          );
+        }
+      }
+    }
+
+    return Set<Marker>.of(result.values);
+  }
+
+  Set<Polyline> _buildPolylines() {
+    final result = <String, Polyline>{};
+
+    if (widget.selectedRoute != null) {
+      final pts = widget.selectedRoute!.coordinates
+          .map((c) => LatLng(c['latitude']!, c['longitude']!))
+          .toList();
+
+      final routeColor = Color(
+          int.parse(widget.selectedRoute!.color.replaceAll('#', '0xFF')));
+
+      // Glow
+      result['route_glow'] = Polyline(
+        polylineId: const PolylineId('route_glow'),
+        points:     pts,
+        width:      10,
+        color:      routeColor.withOpacity(0.15),
+      );
+
+      // Solid line
+      result['route'] = Polyline(
+        polylineId: const PolylineId('route'),
+        points:     pts,
+        width:      5,
+        color:      routeColor,
+        jointType:  JointType.round,
+        endCap:     Cap.roundCap,
+        startCap:   Cap.roundCap,
+      );
+    }
+
+    // Trails
+    for (final entry in _busTrails.entries) {
+      if (entry.value.length >= 2) {
+        result['trail_${entry.key}'] = Polyline(
+          polylineId: PolylineId('trail_${entry.key}'),
+          points:     entry.value,
+          width:      4,
+          color:      Colors.blueAccent.withOpacity(0.35),
+          patterns:   [PatternItem.dash(20), PatternItem.gap(10)],
+          endCap:     Cap.roundCap,
+          startCap:   Cap.roundCap,
+        );
+      }
+    }
+
+    return Set<Polyline>.of(result.values);
+  }
+
+  Set<Circle> _buildCircles() {
+    final result = <Circle>{};
+    if (_focusedBus != null) {
+      final pos = _animatedPos[_focusedBus!.id]
+          ?? LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng);
+      result.add(Circle(
+        circleId:    CircleId('pulse_${_focusedBus!.id}'),
+        center:      pos,
+        radius:      20,
+        fillColor:   const Color(0xFF1A4CFF).withOpacity(0.08),
+        strokeColor: const Color(0xFF1A4CFF).withOpacity(0.25),
+        strokeWidth: 2,
+      ));
+    }
+    return result;
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CAMERA — debounced to avoid firing on every animation frame
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _scheduleCameraMove(Bus bus) {
+    _cameraDebounce?.cancel();
+    _cameraDebounce = Timer(const Duration(milliseconds: 200), () {
+      if (!mounted || !_mapReady) return;
+      final pos     = _animatedPos[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
+      final heading = _animatedHeading[bus.id] ?? bus.heading;
+      _moveCameraTo(pos, heading);
+    });
+  }
+
+  void _moveCameraTo(LatLng pos, double heading) {
+    if (_isDriveMode) {
+      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target:  pos,
+          zoom:    18.0,
+          tilt:    52.0,
+          bearing: heading,
+        ),
+      ));
+    } else {
+      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
+        CameraPosition(target: pos, zoom: 16.5, tilt: 0, bearing: 0),
+      ));
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TRAIL
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  void _updateTrail(String busId, LatLng pos) {
+    final trail = _busTrails[busId] ?? [];
+    if (trail.isEmpty ||
+        Geolocator.distanceBetween(
+            trail.first.latitude, trail.first.longitude,
+            pos.latitude, pos.longitude) > _trailMinDistM) {
+      trail.insert(0, pos);
+      if (trail.length > _maxTrail) trail.removeLast();
+      _busTrails[busId] = trail;
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // ICONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  String _busLabel(String busId) =>
+      busId.substring(busId.length.clamp(4, busId.length) - 4).toUpperCase();
+
+  Future<void> _precacheIcons() async {
+    for (final bus in widget.buses) {
+      final label = _busLabel(bus.id);
       await _ensureBusIcon(bus.id, label, isFocused: false);
       await _ensureBusIcon(bus.id, label, isFocused: true);
     }
-    if (mounted) setState(() {});
+    _stopIcon     = await _drawStopMarker(false);
+    _lastStopIcon = await _drawStopMarker(true);
   }
 
   Future<void> _ensureBusIcon(String busId, String label, {required bool isFocused}) async {
-    final key = isFocused ? 'focused_$busId' : busId;
-    if (_busIcons.containsKey(key)) return;
+    final map = isFocused ? _focusedBusIcons : _busIcons;
+    if (map.containsKey(busId)) return;
     final icon = await _drawBusMarker(label, isFocused: isFocused);
-    if (mounted) setState(() => (isFocused ? _focusedBusIcons : _busIcons)[busId] = icon);
+    if (mounted) map[busId] = icon;
   }
 
   Future<BitmapDescriptor> _drawBusMarker(String label, {bool isFocused = false}) async {
-    const double w   = 60.0;
-    const double h   = 60.0;
+    const double w = 60.0;
+    const double h = 60.0;
     final Color fill   = isFocused ? Colors.white : const Color(0xFF1A6BFF);
     final Color border = isFocused ? const Color(0xFF1A6BFF) : Colors.white;
     final Color shadow = isFocused ? Colors.white : const Color(0xFF1A6BFF);
@@ -131,45 +472,37 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     final ui.PictureRecorder rec = ui.PictureRecorder();
     final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, w, h));
 
-    // ── Drop shadow ────────────────────────────────────────────────────────
+    // Drop shadow
     canvas.drawCircle(
-      const Offset(w / 2, w / 2 + 4),
-      w / 2 - 4,
+      const Offset(w / 2, w / 2 + 4), w / 2 - 4,
       Paint()
         ..color = shadow.withOpacity(0.40)
         ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
     );
 
-    // ── Main circle body ──────────────────────────────────────────────────
-    canvas.drawCircle(
-      const Offset(w / 2, w / 2),
-      w / 2 - 4,
-      Paint()..color = fill,
-    );
+    // Main body
+    canvas.drawCircle(const Offset(w / 2, w / 2), w / 2 - 4, Paint()..color = fill);
 
-    // ── White ring border ─────────────────────────────────────────────────
+    // Border ring
     canvas.drawCircle(
-      const Offset(w / 2, w / 2),
-      w / 2 - 4,
+      const Offset(w / 2, w / 2), w / 2 - 4,
       Paint()
         ..color = border
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3.0,
     );
 
-    // ── Navigation chevron arrow (sharp upward arrow inside circle) ───────
-    final double cx = w / 2;
-    final double cy = w / 2;
+    // Navigation chevron
+    final double cx = w / 2, cy = w / 2;
     final Paint arrowPaint = Paint()
       ..color = isFocused ? const Color(0xFF1A6BFF) : Colors.white
       ..style = PaintingStyle.fill;
 
-    // Draw chevron: two filled triangles forming a chevron shape
     final Path chevron = Path()
-      ..moveTo(cx, cy - 14)              // tip (top)
-      ..lineTo(cx - 10, cy + 10)         // bottom-left
-      ..lineTo(cx, cy + 4)               // inner bottom-center
-      ..lineTo(cx + 10, cy + 10)         // bottom-right
+      ..moveTo(cx, cy - 14)
+      ..lineTo(cx - 10, cy + 10)
+      ..lineTo(cx, cy + 4)
+      ..lineTo(cx + 10, cy + 10)
       ..close();
     canvas.drawPath(chevron, arrowPaint);
 
@@ -182,25 +515,19 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     const double size = 40.0;
     final ui.PictureRecorder rec = ui.PictureRecorder();
     final Canvas canvas = Canvas(rec, const Rect.fromLTWH(0, 0, size, size));
-    
-    final Paint paint = Paint()
-      ..color = isLast ? Colors.redAccent : Colors.white
-      ..style = PaintingStyle.fill;
-      
-    canvas.drawCircle(const Offset(size/2, size/2), size/2 - 4, paint);
-    
-    final Paint borderPaint = Paint()
-      ..color = isLast ? Colors.white : const Color(0xFF1A4CFF)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3;
-      
-    canvas.drawCircle(const Offset(size/2, size/2), size/2 - 4, borderPaint);
-    
+
+    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2 - 4,
+        Paint()..color = isLast ? Colors.redAccent : Colors.white);
+    canvas.drawCircle(
+      const Offset(size / 2, size / 2), size / 2 - 4,
+      Paint()
+        ..color = isLast ? Colors.white : const Color(0xFF1A4CFF)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 3,
+    );
     if (isLast) {
-      final Paint innerPaint = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.fill;
-      canvas.drawCircle(const Offset(size/2, size/2), size/2 - 12, innerPaint);
+      canvas.drawCircle(const Offset(size / 2, size / 2), size / 2 - 12,
+          Paint()..color = Colors.white);
     }
 
     final ui.Image img = await rec.endRecording().toImage(size.toInt(), size.toInt());
@@ -208,379 +535,89 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     return BitmapDescriptor.fromBytes(bd!.buffer.asUint8List());
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // MAP STYLE
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  Future<void> _loadMapStyle() async {
-    // Custom dark mode style for Google Maps
+  void _buildDarkMapStyle() {
     _darkMapStyle = '''
     [
-      {
-        "elementType": "geometry",
-        "stylers": [{"color": "#212121"}]
-      },
-      {
-        "elementType": "labels.icon",
-        "stylers": [{"visibility": "off"}]
-      },
-      {
-        "elementType": "labels.text.fill",
-        "stylers": [{"color": "#757575"}]
-      },
-      {
-        "elementType": "labels.text.stroke",
-        "stylers": [{"color": "#212121"}]
-      },
-      {
-        "featureType": "administrative",
-        "elementType": "geometry",
-        "stylers": [{"color": "#757575"}]
-      },
-      {
-        "featureType": "poi",
-        "elementType": "geometry",
-        "stylers": [{"color": "#181818"}]
-      },
-      {
-        "featureType": "road",
-        "elementType": "geometry.fill",
-        "stylers": [{"color": "#2c2c2c"}]
-      },
-      {
-        "featureType": "water",
-        "elementType": "geometry",
-        "stylers": [{"color": "#000000"}]
-      }
+      {"elementType":"geometry","stylers":[{"color":"#1a1a2e"}]},
+      {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
+      {"elementType":"labels.text.fill","stylers":[{"color":"#8b8b9e"}]},
+      {"elementType":"labels.text.stroke","stylers":[{"color":"#1a1a2e"}]},
+      {"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#3d3d5c"}]},
+      {"featureType":"poi","stylers":[{"visibility":"off"}]},
+      {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a2a4a"}]},
+      {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1a1a2e"}]},
+      {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#3a3a6a"}]},
+      {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#1a1a2e"}]},
+      {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#8b8b9e"}]},
+      {"featureType":"transit","stylers":[{"visibility":"off"}]},
+      {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0d0d1a"}]},
+      {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#3d3d5c"}]}
     ]
     ''';
   }
 
-  @override
-  void dispose() {
-    _mapController?.dispose();
-    for (var controller in _markerAnimations.values) {
-      controller.dispose();
-    }
-    _polylineFlowController.dispose();
-    super.dispose();
-  }
-
-  @override
-  void didUpdateWidget(covariant BusMap oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _handleBusUpdates(oldWidget.buses);
-  }
-
-  void _handleBusUpdates(List<Bus> oldBuses) {
-    for (var bus in widget.buses) {
-      final oldPos = _animatedPositions[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
-      final oldHeading = _animatedHeadings[bus.id] ?? bus.heading;
-      final newPos = LatLng(bus.currentLat, bus.currentLng);
-      
-      // If the bus moved or rotated, start/update its animation
-      if (oldPos.latitude != newPos.latitude || oldPos.longitude != newPos.longitude || oldHeading != bus.heading) {
-        _animateBusMarker(bus.id, oldPos, newPos, oldHeading, bus.heading);
-      }
-      
-      // Initial state for new buses
-      if (!_animatedPositions.containsKey(bus.id)) {
-        _animatedPositions[bus.id] = newPos;
-        _animatedHeadings[bus.id] = bus.heading;
-      }
-    }
-  }
-
-  void _animateBusMarker(String busId, LatLng start, LatLng end, double startRotation, double endRotation) {
-    // Cancel previous animation if it exists
-    _markerAnimations[busId]?.stop();
-    _markerAnimations[busId]?.dispose();
-
-    final controller = AnimationController(
-      duration: const Duration(milliseconds: 1000), // Reduced from 2s to 1s to match ~800ms GPS updates
-      vsync: this,
-    );
-
-    final animation = CurvedAnimation(parent: controller, curve: Curves.linear);
-
-    controller.addListener(() {
-      if (mounted) {
-        setState(() {
-          final t = animation.value;
-          final lat = start.latitude + (end.latitude - start.latitude) * t;
-          final lng = start.longitude + (end.longitude - start.longitude) * t;
-          _animatedPositions[busId] = LatLng(lat, lng);
-          
-          // Smooth rotation interpolation (handles 0/360 boundary)
-          double rotationDiff = endRotation - startRotation;
-          if (rotationDiff > 180) rotationDiff -= 360;
-          if (rotationDiff < -180) rotationDiff += 360;
-          _animatedHeadings[busId] = startRotation + (rotationDiff * t);
-        });
-
-        // Follow bus with camera during animation
-        if (_isFollowing) {
-          final idx = widget.buses.indexWhere((b) => b.id == busId);
-          if (idx != -1) {
-            _moveCameraToBus(widget.buses[idx], _animatedPositions[busId]!);
-          }
-        }
-      }
-    });
-
-    controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        // Ensure final position is exactly the target
-        if (mounted) {
-          setState(() {
-            _animatedPositions[busId] = end;
-            _animatedHeadings[busId] = endRotation;
-          });
-        }
-      }
-    });
-
-    _markerAnimations[busId] = controller;
-    controller.forward();
-  }
-
-  void _updateMarkers() {
-    final Map<String, Marker> newMarkers = {};
-    
-    for (var bus in widget.buses) {
-      final isFocused = _focusedBus?.id == bus.id;
-      final pos = _animatedPositions[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
-      final heading = _animatedHeadings[bus.id] ?? bus.heading;
-      final label = bus.id.substring(bus.id.length.clamp(4, bus.id.length) - 4).toUpperCase();
-
-      // Trigger async icon creation if not yet cached
-      _ensureBusIcon(bus.id, label, isFocused: false);
-      _ensureBusIcon(bus.id, label, isFocused: true);
-
-      final icon = isFocused
-          ? (_focusedBusIcons[bus.id] ?? _busIcons[bus.id] ?? BitmapDescriptor.defaultMarker)
-          : (_busIcons[bus.id] ?? BitmapDescriptor.defaultMarker);
-
-      newMarkers[bus.id] = Marker(
-        markerId: MarkerId(bus.id),
-        position: pos,
-        rotation: _isDriveMode ? 0 : heading, // rotation is handled by camera bearing in drive mode
-        anchor: const Offset(0.5, 0.5), // center anchor for rotation
-        flat: true,
-        consumeTapEvents: false,
-        infoWindow: InfoWindow(
-          title: 'Shuttle $label',
-          snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}',
-        ),
-        onTap: () {
-          HapticFeedback.mediumImpact();
-          setState(() {
-            _focusedBus = bus;
-            _isDriveMode = true;
-            _isFollowing = true;
-          });
-        },
-        icon: icon,
-        zIndex: isFocused ? 2.0 : 1.0,
-      );
-
-      // Stop markers — only show when route is selected AND stop has valid coordinates
-      if (widget.selectedRoute != null) {
-        final stops = widget.selectedRoute!.stops;
-        // Check if any stop actually has coordinates
-        final hasCoords = stops.any((s) => 
-          s['lat'] != null && s['lng'] != null &&
-          (s['lat'] as num) != 0 && (s['lng'] as num) != 0
-        );
-        
-        if (hasCoords) {
-          for (var i = 0; i < stops.length; i++) {
-            final stop = stops[i];
-            // Skip stops without valid coordinates
-            if (stop['lat'] == null || stop['lng'] == null) continue;
-            final lat = (stop['lat'] as num).toDouble();
-            final lng = (stop['lng'] as num).toDouble();
-            if (lat == 0 && lng == 0) continue;
-            
-            final stopId = 'stop_${stop['name']}';
-            final isLast = i == stops.length - 1;
-            
-            newMarkers[stopId] = Marker(
-              markerId: MarkerId(stopId),
-              position: LatLng(lat, lng),
-              anchor: const Offset(0.5, 0.5),
-              icon: isLast ? (_lastStopIcon ?? BitmapDescriptor.defaultMarker) : (_stopIcon ?? BitmapDescriptor.defaultMarker),
-              alpha: 0.9,
-              infoWindow: InfoWindow(title: stop['name'], snippet: 'Bus Stop'),
-            );
-          }
-        }
-        // If no coordinates, show bus position only (no stop markers)
-      }
-
-      // Update trail
-      final trail = _busTrails[bus.id] ?? [];
-      if (trail.isEmpty || Geolocator.distanceBetween(
-        trail.first.latitude, trail.first.longitude, pos.latitude, pos.longitude) > 8.0) {
-        trail.insert(0, pos);
-        if (trail.length > _maxTrailPoints) trail.removeLast();
-        _busTrails[bus.id] = trail;
-      }
-    }
-
-    if (mounted) setState(() { _markers
-      ..clear()
-      ..addAll(newMarkers); });
-  }
-
-  void _updatePolylines() {
-    final Map<String, Polyline> newPolylines = {};
-
-    // Selected Route
-    if (widget.selectedRoute != null) {
-      final routePoints = widget.selectedRoute!.coordinates
-          .map((c) => LatLng(c['latitude']!, c['longitude']!))
-          .toList();
-
-      newPolylines['selected_route_glow'] = Polyline(
-        polylineId: const PolylineId('selected_route_glow'),
-        points: routePoints,
-        width: 10,
-        color: Color(int.parse(widget.selectedRoute!.color.replaceAll('#', '0xFF'))).withOpacity(0.15),
-      );
-
-      newPolylines['selected_route'] = Polyline(
-        polylineId: const PolylineId('selected_route'),
-        points: routePoints,
-        width: 5,
-        color: Color(int.parse(widget.selectedRoute!.color.replaceAll('#', '0xFF'))),
-        jointType: JointType.round,
-        endCap: Cap.roundCap,
-        startCap: Cap.roundCap,
-      );
-
-      // Add a "flow" pattern to the route
-      newPolylines['selected_route_flow'] = Polyline(
-        polylineId: const PolylineId('selected_route_flow'),
-        points: routePoints,
-        width: 6,
-        color: Colors.white.withOpacity(0.4),
-        patterns: [
-          PatternItem.dash(10),
-          PatternItem.gap(10 + _polylineOffset),
-        ],
-      );
-    }
-
-    // Bus Trails
-    for (var entry in _busTrails.entries) {
-      if (entry.value.length >= 2) {
-        newPolylines['trail_${entry.key}'] = Polyline(
-          polylineId: PolylineId('trail_${entry.key}'),
-          points: entry.value,
-          width: 4,
-          color: Colors.blueAccent.withOpacity(0.3),
-          patterns: [PatternItem.dash(20), PatternItem.gap(10)],
-        );
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _polylines.clear();
-        _polylines.addAll(newPolylines);
-      });
-    }
-  }
-
-  void _updateCircles() {
-    final Set<Circle> newCircles = {};
-    if (_focusedBus != null) {
-      final pos = _animatedPositions[_focusedBus!.id] ?? LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng);
-      // Use the polyline flow offset for a pulsing effect
-      final radius = 15.0 + (_polylineOffset / 2); 
-
-      newCircles.add(Circle(
-        circleId: CircleId('pulse_${_focusedBus!.id}'),
-        center: pos,
-        radius: radius,
-        fillColor: const Color(0xFF1A4CFF).withOpacity(0.1),
-        strokeColor: const Color(0xFF1A4CFF).withOpacity(0.3),
-        strokeWidth: 2,
-      ));
-    }
-    
-    if (mounted) {
-      setState(() {
-        _circles.clear();
-        _circles.addAll(newCircles);
-      });
-    }
-  }
-
-  Future<void> _requestPermissions() async {
-    PermissionStatus status = await Permission.location.request();
-    if (status.isGranted) {
-      _getCurrentLocation();
-    } else if (status.isPermanentlyDenied) {
-      if (mounted) {
-        _showPermissionDialog(true);
-      }
-    } else {
-      if (mounted) {
-        _showPermissionDialog(false);
-      }
-    }
-  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UI CONTROLS
+  // ═══════════════════════════════════════════════════════════════════════════
 
   void _toggleFollow() {
     setState(() {
       _isFollowing = !_isFollowing;
       if (!_isFollowing) _isDriveMode = false;
-      if (_isFollowing && widget.buses.isNotEmpty) {
-        final bus = widget.buses.first;
-        final pos = _animatedPositions[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
-        _moveCameraToBus(bus, pos);
-      }
     });
+    if (_isFollowing && widget.buses.isNotEmpty) {
+      final bus = _focusedBus ?? widget.buses.first;
+      _scheduleCameraMove(bus);
+    }
   }
 
   void _toggleDriveMode() {
-    setState(() {
-      _isDriveMode = !_isDriveMode;
-      if (_isDriveMode) {
-        _isFollowing = true;
-        // Focus the first bus when entering drive mode
-        if (_focusedBus == null && widget.buses.isNotEmpty) {
-          _focusedBus = widget.buses.first;
-        }
-      } else {
-        // Exit drive mode — reset camera to top-down view
-        final bus = _focusedBus ?? (widget.buses.isNotEmpty ? widget.buses.first : null);
-        if (bus != null) {
-          final pos = _animatedPositions[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
-          _mapController?.animateCamera(CameraUpdate.newCameraPosition(
-            CameraPosition(target: pos, zoom: 16, tilt: 0, bearing: 0),
-          ));
-        }
+    setState(() => _isDriveMode = !_isDriveMode);
+
+    if (_isDriveMode) {
+      _isFollowing = true;
+      _focusedBus ??= widget.buses.isNotEmpty ? widget.buses.first : null;
+      if (_focusedBus != null) _scheduleCameraMove(_focusedBus!);
+    } else {
+      final bus = _focusedBus ?? (widget.buses.isNotEmpty ? widget.buses.first : null);
+      if (bus != null) {
+        final pos = _animatedPos[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
+        _mapController?.animateCamera(CameraUpdate.newCameraPosition(
+          CameraPosition(target: pos, zoom: 16, tilt: 0, bearing: 0),
+        ));
       }
-      widget.onDriveModeChanged?.call(_isDriveMode);
-    });
+    }
+    widget.onDriveModeChanged?.call(_isDriveMode);
+    _rebuildMapObjects();
   }
 
-  void _moveCameraToBus(Bus bus, LatLng pos) {
-    if (_isDriveMode) {
-      // Drive Mode: tilt 45°, rotate map to match bus heading
-      final heading = _animatedHeadings[bus.id] ?? bus.heading;
-      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(
-          target: pos,
-          zoom: 17.5,
-          tilt: 50,              // 3D perspective tilt
-          bearing: heading,      // Map rotates with bus
-        ),
-      ));
-    } else {
-      _mapController?.animateCamera(CameraUpdate.newCameraPosition(
-        CameraPosition(target: pos, zoom: 16, tilt: 0, bearing: 0),
-      ));
+  Future<void> _getCurrentLocation() async {
+    try {
+      if (!await Permission.location.isGranted) {
+        await _requestPermissions();
+        return;
+      }
+      final Position pos = await Geolocator.getCurrentPosition();
+      final latlng = LatLng(pos.latitude, pos.longitude);
+      setState(() => _center = latlng);
+      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(latlng, 15));
+    } catch (e) {
+      debugPrint('Location error: $e');
+    }
+  }
+
+  Future<void> _requestPermissions() async {
+    final status = await Permission.location.request();
+    if (status.isGranted) {
+      _getCurrentLocation();
+    } else if (status.isPermanentlyDenied && mounted) {
+      _showPermissionDialog(true);
+    } else if (mounted) {
+      _showPermissionDialog(false);
     }
   }
 
@@ -590,24 +627,30 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       barrierDismissible: false,
       builder: (context) => AlertDialog(
         backgroundColor: const Color(0xFF0F1528),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Colors.white10)),
-        title: Text('Location Consent', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+        shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: Colors.white10)),
+        title: Text('Location Consent',
+            style: GoogleFonts.plusJakartaSans(
+                color: Colors.white, fontWeight: FontWeight.bold)),
         content: Text(
-          isPermanent 
-            ? 'Location tracking is disabled in your settings. Please enable it to see your position on the map.'
-            : 'We need your location to show where you are relative to the bus. Please grant permission to continue.',
+          isPermanent
+              ? 'Location tracking is disabled. Please enable it in Settings.'
+              : 'We need your location to show your position on the map.',
           style: GoogleFonts.plusJakartaSans(color: Colors.white70),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Maybe Later', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+            child: Text('Maybe Later',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: const Color(0xFF1A4CFF),
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () async {
               Navigator.pop(context);
@@ -624,101 +667,101 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     );
   }
 
-  Future<void> _getCurrentLocation() async {
-    try {
-      if (!await Permission.location.isGranted) return;
-      Position position = await Geolocator.getCurrentPosition();
-      final pos = LatLng(position.latitude, position.longitude);
-      setState(() => _center = pos);
-      _mapController?.animateCamera(CameraUpdate.newLatLngZoom(pos, 15));
-    } catch (e) {
-      debugPrint('Location error: $e');
-    }
-  }
+  // ═══════════════════════════════════════════════════════════════════════════
+  // BUILD
+  // ═══════════════════════════════════════════════════════════════════════════
 
   @override
   Widget build(BuildContext context) {
-    _updateMarkers();
-    _updatePolylines();
-    _updateCircles();
+    // NOTE: NO calls to _updateMarkers / _updatePolylines / _updateCircles here.
+    // Map objects are rebuilt only when data actually changes (in didUpdateWidget
+    // or when the user taps a marker). This prevents the infinite rebuild loop.
 
     return Stack(
       children: [
+        // ── Google Map ──────────────────────────────────────────────────────
         GoogleMap(
           initialCameraPosition: CameraPosition(
-            target: widget.buses.isNotEmpty 
-              ? LatLng(widget.buses.first.currentLat, widget.buses.first.currentLng) 
-              : _bhopal,
-            zoom: 15,
+            target: widget.buses.isNotEmpty
+                ? LatLng(widget.buses.first.currentLat,
+                         widget.buses.first.currentLng)
+                : _bhopal,
+            zoom: _isDriveMode ? 18 : 15,
+            tilt:    _isDriveMode ? 52 : 0,
+            bearing: _isDriveMode
+                ? (_animatedHeading[widget.buses.isNotEmpty ? widget.buses.first.id : ''] ?? 0)
+                : 0,
           ),
-          onMapCreated: (controller) {
-            _mapController = controller;
+          onMapCreated: (ctrl) {
+            _mapController = ctrl;
+            _mapReady = true;
             if (_currentMapType == MapType.none) {
-               _mapController?.setMapStyle(_darkMapStyle);
+              ctrl.setMapStyle(_darkMapStyle);
             }
-            // Move camera to the first bus once map is ready
             if (widget.buses.isNotEmpty) {
               final b = widget.buses.first;
-              _mapController?.animateCamera(CameraUpdate.newLatLngZoom(
-                LatLng(b.currentLat, b.currentLng), 15,
-              ));
+              ctrl.animateCamera(CameraUpdate.newLatLngZoom(
+                  LatLng(b.currentLat, b.currentLng),
+                  _isDriveMode ? 18 : 15));
             }
           },
-          mapType: _currentMapType == MapType.none ? MapType.normal : _currentMapType,
-          markers: Set<Marker>.of(_markers.values),
-          polylines: Set<Polyline>.of(_polylines.values),
-          circles: _circles,
-          myLocationEnabled: widget.showMyLocation,
+          mapType:               _currentMapType == MapType.none ? MapType.normal : _currentMapType,
+          markers:               _markers,
+          polylines:             _polylines,
+          circles:               _circles,
+          myLocationEnabled:     widget.showMyLocation,
           myLocationButtonEnabled: false,
-          zoomControlsEnabled: false,
-          mapToolbarEnabled: false,
-          compassEnabled: true,
-          tiltGesturesEnabled: true,
-          buildingsEnabled: true,
-          trafficEnabled: true,
+          zoomControlsEnabled:   false,
+          mapToolbarEnabled:     false,
+          compassEnabled:        _isDriveMode,
+          tiltGesturesEnabled:   true,
+          rotateGesturesEnabled: true,
+          buildingsEnabled:      _isDriveMode,   // 3D buildings only in drive mode
+          trafficEnabled:        true,
           onTap: (_) => setState(() => _focusedBus = null),
         ),
+
+        // ── Map Controls ────────────────────────────────────────────────────
         if (widget.showMapControls)
           Positioned(
             right: 20,
-            top: MediaQuery.of(context).padding.top + 80,
+            top:   MediaQuery.of(context).padding.top + 80,
             child: Column(
               children: [
                 _buildMapControl(
-                  icon: Icons.layers_rounded,
+                  icon:  Icons.layers_rounded,
                   onTap: () => setState(() => _showLayerSelector = !_showLayerSelector),
                   isActive: _showLayerSelector,
                 ),
                 if (_showLayerSelector) ...[
                   const SizedBox(height: 8),
-                  _buildLayerItem(MapType.normal, Icons.map_rounded),
+                  _buildLayerItem(MapType.normal,    Icons.map_rounded),
                   const SizedBox(height: 8),
                   _buildLayerItem(MapType.satellite, Icons.satellite_alt_rounded),
                   const SizedBox(height: 8),
-                  _buildLayerItem(MapType.hybrid, Icons.layers_outlined),
+                  _buildLayerItem(MapType.hybrid,    Icons.layers_outlined),
                   const SizedBox(height: 8),
-                  _buildLayerItem(MapType.terrain, Icons.terrain_rounded),
+                  _buildLayerItem(MapType.terrain,   Icons.terrain_rounded),
                   const SizedBox(height: 8),
-                  _buildLayerItem(MapType.none, Icons.nightlight_round), // 'none' represents Dark
+                  _buildLayerItem(MapType.none,      Icons.nightlight_round),
                 ],
                 const SizedBox(height: 12),
                 _buildMapControl(
-                  icon: Icons.gps_fixed_rounded,
-                  onTap: _toggleFollow,
-                  isActive: _isFollowing,
+                  icon:        Icons.gps_fixed_rounded,
+                  onTap:       _toggleFollow,
+                  isActive:    _isFollowing,
                 ),
                 const SizedBox(height: 12),
-                // Drive Mode toggle button
                 _buildMapControl(
-                  icon: Icons.navigation_rounded,
-                  onTap: _toggleDriveMode,
-                  isActive: _isDriveMode,
+                  icon:        Icons.navigation_rounded,
+                  onTap:       _toggleDriveMode,
+                  isActive:    _isDriveMode,
                   activeColor: const Color(0xFF00C853),
                 ),
                 if (widget.showLocationButton) ...[
                   const SizedBox(height: 12),
                   _buildMapControl(
-                    icon: Icons.my_location_rounded,
+                    icon:  Icons.my_location_rounded,
                     onTap: _getCurrentLocation,
                   ),
                 ],
@@ -726,11 +769,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             ),
           ),
 
-        // Drive Mode top HUD
+        // ── Drive Mode HUD ──────────────────────────────────────────────────
         if (_isDriveMode && _focusedBus != null)
           Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
-            left: 16,
+            top:   MediaQuery.of(context).padding.top + 10,
+            left:  16,
             right: 80,
             child: GestureDetector(
               onTap: _toggleDriveMode,
@@ -739,7 +782,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 decoration: BoxDecoration(
                   color: const Color(0xFF00C853),
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [BoxShadow(color: const Color(0xFF00C853).withOpacity(0.4), blurRadius: 16)],
+                  boxShadow: [
+                    BoxShadow(
+                        color: const Color(0xFF00C853).withOpacity(0.4),
+                        blurRadius: 16)
+                  ],
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
@@ -747,8 +794,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                     const Icon(Icons.navigation_rounded, color: Colors.white, size: 16),
                     const SizedBox(width: 8),
                     Text(
-                      'DRIVE MODE  •  ${(_animatedHeadings[_focusedBus!.id] ?? 0).toInt()}°  •  Tap to exit',
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 12, letterSpacing: 1),
+                      'DRIVE MODE  •  ${(_animatedHeading[_focusedBus!.id] ?? 0).toInt()}°  •  Tap to exit',
+                      style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          letterSpacing: 1),
                     ),
                   ],
                 ),
@@ -756,11 +807,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             ),
           ),
 
-        // Bus Detail Card
+        // ── Focused Bus Card ────────────────────────────────────────────────
         if (_focusedBus != null)
           Positioned(
-            left: 16,
-            right: 16,
+            left:   16,
+            right:  16,
             bottom: 32,
             child: ClipRRect(
               borderRadius: BorderRadius.circular(28),
@@ -769,15 +820,14 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D0B14).withOpacity(0.7),
+                    color: const Color(0xFF0D0B14).withOpacity(0.82),
                     borderRadius: BorderRadius.circular(28),
                     border: Border.all(color: Colors.white.withOpacity(0.1)),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.4),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      )
+                          color: Colors.black.withOpacity(0.4),
+                          blurRadius: 30,
+                          offset: const Offset(0, 10))
                     ],
                   ),
                   child: Column(
@@ -789,16 +839,23 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
-                                colors: [const Color(0xFF1A4CFF), const Color(0xFF1A4CFF).withOpacity(0.6)],
+                                colors: [
+                                  const Color(0xFF1A4CFF),
+                                  const Color(0xFF1A4CFF).withOpacity(0.6)
+                                ],
                                 begin: Alignment.topLeft,
-                                end: Alignment.bottomRight,
+                                end:   Alignment.bottomRight,
                               ),
                               borderRadius: BorderRadius.circular(18),
                               boxShadow: [
-                                BoxShadow(color: const Color(0xFF1A4CFF).withOpacity(0.3), blurRadius: 12, spreadRadius: 2)
+                                BoxShadow(
+                                    color: const Color(0xFF1A4CFF).withOpacity(0.3),
+                                    blurRadius: 12,
+                                    spreadRadius: 2)
                               ],
                             ),
-                            child: const Icon(Icons.directions_bus_filled_rounded, color: Colors.white, size: 28),
+                            child: const Icon(Icons.directions_bus_filled_rounded,
+                                color: Colors.white, size: 28),
                           ),
                           const SizedBox(width: 18),
                           Expanded(
@@ -806,39 +863,41 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'SHUTTLE ${_focusedBus!.id.substring(_focusedBus!.id.length - 4).toUpperCase()}',
+                                  'SHUTTLE ${_busLabel(_focusedBus!.id)}',
                                   style: GoogleFonts.plusJakartaSans(
-                                    color: Colors.white,
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.5,
-                                  ),
+                                      color: Colors.white,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5),
                                 ),
                                 const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 8, height: 8,
-                                      decoration: const BoxDecoration(color: Colors.greenAccent, shape: BoxShape.circle),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'ACTIVE ON ${_focusedBus!.routeId.toUpperCase()}',
-                                      style: GoogleFonts.plusJakartaSans(
+                                Row(children: [
+                                  Container(
+                                    width: 8, height: 8,
+                                    decoration: const BoxDecoration(
+                                        color: Colors.greenAccent,
+                                        shape: BoxShape.circle),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    _focusedBus!.routeName.toUpperCase(),
+                                    style: GoogleFonts.plusJakartaSans(
                                         color: Colors.white60,
                                         fontSize: 10,
                                         fontWeight: FontWeight.w600,
-                                        letterSpacing: 1.0,
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                        letterSpacing: 1.0),
+                                  ),
+                                ]),
                               ],
                             ),
                           ),
                           IconButton(
-                            onPressed: () => setState(() => _focusedBus = null),
-                            icon: const Icon(Icons.close_rounded, color: Colors.white38),
+                            onPressed: () {
+                              setState(() => _focusedBus = null);
+                              _rebuildMapObjects();
+                            },
+                            icon: const Icon(Icons.close_rounded,
+                                color: Colors.white38),
                           ),
                         ],
                       ),
@@ -846,17 +905,23 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
                         children: [
-                          _buildPremiumStat(Icons.speed_rounded, '${_focusedBus!.speed.toInt()}', 'KM/H'),
-                          _buildPremiumStat(Icons.people_alt_rounded, _focusedBus!.occupancy, 'LOAD'),
-                          _buildPremiumStat(Icons.timer_outlined, _focusedBus!.etas.isNotEmpty ? '${_focusedBus!.etas.first.minutes}' : '--', 'MIN ETA'),
+                          _buildPremiumStat(Icons.speed_rounded,
+                              '${_focusedBus!.speed.toInt()}', 'KM/H'),
+                          _buildPremiumStat(Icons.people_alt_rounded,
+                              _focusedBus!.occupancy, 'LOAD'),
                           _buildPremiumStat(
-                            Icons.social_distance_rounded, 
-                            _calculateDistance(
-                              LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng),
-                              _center
-                            ), 
-                            'DIST'
-                          ),
+                              Icons.timer_outlined,
+                              _focusedBus!.etas.isNotEmpty
+                                  ? '${_focusedBus!.etas.first.minutes}'
+                                  : '--',
+                              'MIN ETA'),
+                          _buildPremiumStat(
+                              Icons.social_distance_rounded,
+                              _calculateDistance(
+                                  LatLng(_focusedBus!.currentLat,
+                                         _focusedBus!.currentLng),
+                                  _center),
+                              'DIST'),
                         ],
                       ),
                       if (_focusedBus!.etas.isNotEmpty) ...[
@@ -868,7 +933,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                           child: ListView.separated(
                             scrollDirection: Axis.horizontal,
                             itemCount: _focusedBus!.etas.length,
-                            separatorBuilder: (_, __) => const SizedBox(width: 20),
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(width: 20),
                             itemBuilder: (context, index) {
                               final eta = _focusedBus!.etas[index];
                               return Column(
@@ -876,12 +942,19 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                                 children: [
                                   Text(
                                     eta.stopName.toUpperCase(),
-                                    style: GoogleFonts.plusJakartaSans(color: Colors.white30, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                    style: GoogleFonts.plusJakartaSans(
+                                        color: Colors.white30,
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
                                     '${eta.minutes} MIN',
-                                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFF1A4CFF), fontSize: 14, fontWeight: FontWeight.w800),
+                                    style: GoogleFonts.plusJakartaSans(
+                                        color: const Color(0xFF1A4CFF),
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800),
                                   ),
                                 ],
                               );
@@ -894,36 +967,41 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 ),
               ),
             ),
-          ).animate().slideY(begin: 1, end: 0, duration: 600.ms, curve: Curves.easeOutQuart).fadeIn(),
+          ).animate().slideY(begin: 1, end: 0, duration: 500.ms, curve: Curves.easeOutQuart).fadeIn(),
       ],
     );
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // HELPER WIDGETS
+  // ═══════════════════════════════════════════════════════════════════════════
+
   String _calculateDistance(LatLng p1, LatLng p2) {
-    double distance = Geolocator.distanceBetween(p1.latitude, p1.longitude, p2.latitude, p2.longitude);
-    if (distance < 1000) {
-      return '${distance.toInt()}M';
-    } else {
-      return '${(distance / 1000).toStringAsFixed(1)}KM';
-    }
+    final d = Geolocator.distanceBetween(
+        p1.latitude, p1.longitude, p2.latitude, p2.longitude);
+    return d < 1000 ? '${d.toInt()}M' : '${(d / 1000).toStringAsFixed(1)}KM';
   }
 
   Widget _buildLayerItem(MapType type, IconData icon) {
-    bool isSelected = _currentMapType == type;
+    final isSelected = _currentMapType == type;
     return GestureDetector(
-      onTap: () => setState(() {
-        _currentMapType = type;
+      onTap: () {
+        setState(() {
+          _currentMapType = type;
+          _showLayerSelector = false;
+        });
         if (type == MapType.none) {
           _mapController?.setMapStyle(_darkMapStyle);
         } else {
           _mapController?.setMapStyle(null);
         }
-        _showLayerSelector = false;
-      }),
+      },
       child: Container(
         width: 40, height: 40,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF1A4CFF) : Colors.black.withOpacity(0.7),
+          color: isSelected
+              ? const Color(0xFF1A4CFF)
+              : Colors.black.withOpacity(0.7),
           borderRadius: BorderRadius.circular(10),
           border: Border.all(color: Colors.white.withOpacity(0.2)),
         ),
@@ -932,7 +1010,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     ).animate().slideX(begin: 0.5, end: 0);
   }
 
-  Widget _buildMapControl({required IconData icon, required VoidCallback onTap, bool isActive = false, Color? activeColor}) {
+  Widget _buildMapControl({
+    required IconData icon,
+    required VoidCallback onTap,
+    bool isActive = false,
+    Color? activeColor,
+  }) {
     final Color activeBg = (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.85);
     return GestureDetector(
       onTap: onTap,
@@ -945,30 +1028,20 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               color: isActive ? activeBg : Colors.black.withOpacity(0.5),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: isActive ? (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.5) : Colors.white.withOpacity(0.1)),
-              boxShadow: isActive ? [BoxShadow(color: (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.4), blurRadius: 12)] : [],
+              border: Border.all(
+                color: isActive
+                    ? (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.5)
+                    : Colors.white.withOpacity(0.1),
+              ),
+              boxShadow: isActive
+                  ? [BoxShadow(
+                      color: (activeColor ?? const Color(0xFF1A4CFF)).withOpacity(0.4),
+                      blurRadius: 12)]
+                  : [],
             ),
             child: Icon(icon, color: Colors.white, size: 22),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildTrackerTag(IconData icon, String label) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 10, color: const Color(0xFF1A4CFF)),
-          const SizedBox(width: 4),
-          Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 10)),
-        ],
       ),
     );
   }
@@ -986,12 +1059,18 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           child: Icon(icon, color: const Color(0xFF1A4CFF), size: 18),
         ),
         const SizedBox(height: 8),
-        Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800)),
-        Text(unit, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 7, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+        Text(value,
+            style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontSize: 15,
+                fontWeight: FontWeight.w800)),
+        Text(unit,
+            style: GoogleFonts.plusJakartaSans(
+                color: Colors.white38,
+                fontSize: 7,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5)),
       ],
     );
   }
 }
-
-
-
