@@ -60,6 +60,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   final Map<String, LatLng>              _animatedPos     = {};
   final Map<String, double>              _animatedHeading = {};
   final Map<String, List<LatLng>>       _busTrails       = {};
+  final Map<String, DateTime>            _lastUpdateTimes = {};
+  final Map<String, LatLng>              _startPos        = {};
+  final Map<String, LatLng>              _targetPos       = {};
+  final Map<String, double>              _startHeading    = {};
+  final Map<String, double>              _targetHeading   = {};
 
   // ── Polyline flow — 8fps timer, only touches route_flow polyline ───────────
   Timer? _flowTimer;
@@ -133,6 +138,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         _animatedPos[bus.id]     = newPos;
         _animatedHeading[bus.id] = bus.heading;
         _updateTrail(bus.id, newPos);
+        _lastUpdateTimes[bus.id] = DateTime.now();
         needsRebuild = true;
       } else {
         final moved = (oldPos.latitude  - newPos.latitude).abs()  > 1e-7 ||
@@ -140,8 +146,35 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         final turned = (_animatedHeading[bus.id] ?? 0.0) != bus.heading;
 
         if (moved || turned) {
-          _startMarkerAnimation(bus.id, oldPos, newPos,
-              _animatedHeading[bus.id] ?? bus.heading, bus.heading);
+          // Calculate time since last update to dynamically adapt animation duration
+          final now = DateTime.now();
+          final lastUpdate = _lastUpdateTimes[bus.id];
+          _lastUpdateTimes[bus.id] = now;
+
+          Duration animDuration = const Duration(milliseconds: 900);
+          if (lastUpdate != null) {
+            final diff = now.difference(lastUpdate);
+            // Cap duration between 400ms and 4000ms to handle anomalous delay packets
+            if (diff.inMilliseconds > 400 && diff.inMilliseconds < 4000) {
+              // Target 92% of packet frequency to ensure completion before next update
+              animDuration = Duration(milliseconds: (diff.inMilliseconds * 0.92).round());
+            }
+          }
+
+          // Suppress heading adjustments when the bus is stationary to avoid oscillation/jitter
+          double targetBearing = bus.heading;
+          if (bus.speed <= 2.0 && _animatedHeading[bus.id] != null) {
+            targetBearing = _animatedHeading[bus.id]!;
+          }
+
+          _startMarkerAnimation(
+            bus.id,
+            oldPos,
+            newPos,
+            _animatedHeading[bus.id] ?? bus.heading,
+            targetBearing,
+            animDuration,
+          );
           _updateTrail(bus.id, newPos);
           needsRebuild = true;
         }
@@ -174,58 +207,70 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
   void _startMarkerAnimation(
       String busId, LatLng start, LatLng end,
-      double startBearing, double endBearing) {
-    _markerAnims[busId]?.stop();
-    _markerAnims[busId]?.dispose();
+      double startBearing, double endBearing, Duration duration) {
+    var ctrl = _markerAnims[busId];
+    if (ctrl == null) {
+      // Reuse the AnimationController instance per bus to optimize CPU and GC performance
+      ctrl = AnimationController(vsync: this);
+      _markerAnims[busId] = ctrl;
 
-    final ctrl = AnimationController(
-      duration: const Duration(milliseconds: 900),
-      vsync: this,
-    );
-    final anim = CurvedAnimation(parent: ctrl, curve: Curves.easeInOut);
+      ctrl.addListener(() {
+        if (!mounted) return;
+        final t = ctrl!.value;
 
-    ctrl.addListener(() {
-      if (!mounted) return;
-      final t = anim.value;
+        final sPos = _startPos[busId] ?? start;
+        final tPos = _targetPos[busId] ?? end;
+        final sHead = _startHeading[busId] ?? startBearing;
+        final tHead = _targetHeading[busId] ?? endBearing;
 
-      // Interpolate position
-      final lat = start.latitude  + (end.latitude  - start.latitude)  * t;
-      final lng = start.longitude + (end.longitude - start.longitude) * t;
-      _animatedPos[busId] = LatLng(lat, lng);
+        // Interpolate position linearly to preserve constant velocity in continuous streams
+        final lat = sPos.latitude  + (tPos.latitude  - sPos.latitude)  * t;
+        final lng = sPos.longitude + (tPos.longitude - sPos.longitude) * t;
+        _animatedPos[busId] = LatLng(lat, lng);
 
-      // Interpolate heading (handles 0/360 wrap)
-      double diff = endBearing - startBearing;
-      if (diff >  180) diff -= 360;
-      if (diff < -180) diff += 360;
-      _animatedHeading[busId] = startBearing + diff * t;
+        // Interpolate heading smoothly with shortest-path wrap correction
+        double diff = tHead - sHead;
+        if (diff >  180) diff -= 360;
+        if (diff < -180) diff += 360;
+        _animatedHeading[busId] = sHead + diff * t;
 
-      // If we are following this bus, update the camera position in real-time
-      if (_isFollowing && _focusedBus?.id == busId) {
-        final headingVal = _isDriveMode ? _animatedHeading[busId]! : 0.0;
-        _mapController?.moveCamera(CameraUpdate.newCameraPosition(
-          CameraPosition(
-            target:  _animatedPos[busId]!,
-            zoom:    _isDriveMode ? 18.0 : 16.5,
-            tilt:    _isDriveMode ? 52.0 : 0.0,
-            bearing: headingVal,
-          ),
-        ));
-      }
+        // If we are following this bus, update the camera position in real-time
+        if (_isFollowing && _focusedBus?.id == busId) {
+          final headingVal = _isDriveMode ? _animatedHeading[busId]! : 0.0;
+          _mapController?.moveCamera(CameraUpdate.newCameraPosition(
+            CameraPosition(
+              target:  _animatedPos[busId]!,
+              zoom:    _isDriveMode ? 18.0 : 16.5,
+              tilt:    _isDriveMode ? 52.0 : 0.0,
+              bearing: headingVal,
+            ),
+          ));
+        }
 
-      // Only rebuild map objects — not the whole widget tree
-      _rebuildMapObjects();
-    });
-
-    ctrl.addStatusListener((s) {
-      if (s == AnimationStatus.completed) {
-        _animatedPos[busId]     = end;
-        _animatedHeading[busId] = endBearing;
+        // Only rebuild map objects — not the whole widget tree
         _rebuildMapObjects();
-      }
-    });
+      });
 
-    _markerAnims[busId] = ctrl;
-    ctrl.forward();
+      ctrl.addStatusListener((s) {
+        if (s == AnimationStatus.completed) {
+          _animatedPos[busId]     = _targetPos[busId] ?? end;
+          _animatedHeading[busId] = _targetHeading[busId] ?? endBearing;
+          _rebuildMapObjects();
+        }
+      });
+    } else {
+      ctrl.stop();
+    }
+
+    // Set new segment bounds
+    _startPos[busId] = _animatedPos[busId] ?? start;
+    _targetPos[busId] = end;
+    _startHeading[busId] = _animatedHeading[busId] ?? startBearing;
+    _targetHeading[busId] = endBearing;
+
+    // Reset and trigger play with the adapted duration
+    ctrl.duration = duration;
+    ctrl.forward(from: 0.0);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
