@@ -602,7 +602,6 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                 }
             } else {
                 // ── FALLBACK: ESTIMATED (bus not yet started today) ──
-                const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
                 const startTime = new Date();
                 startTime.setHours(7, 30, 0, 0);
                 const durationMins = 45 + Math.floor(Math.random() * 15);
@@ -627,6 +626,588 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
     } catch (err) {
         console.error('Report Generation Error:', err);
         res.status(500).json({ error: 'Failed to generate report' });
+    }
+});
+
+// ─── MANAGER: PRINTABLE HTML OPERATIONAL REPORT ──────────────────────────────
+// GET /api/manager/reports/bus-trip-report/html?busId=<id>&days=<n>
+// Renders a premium, print-friendly HTML report for SGI Management.
+app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
+    try {
+        const { busId, days } = req.query;
+        const lookbackDays = Math.min(parseInt(days) || 30, 90);
+
+        // Helper to format a Date as 'HH:MM AM/PM'
+        const fmtTime = (d) => {
+            if (!d) return 'N/A';
+            const dt = new Date(d);
+            return dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+        };
+
+        // Helper to format a date as YYYY-MM-DD
+        const fmtDate = (d) => new Date(d).toISOString().split('T')[0];
+
+        const records = [];
+        let title = 'SGI FLEET OPERATIONAL REPORT';
+        let scopeType = 'Full Fleet';
+        let liveCount = 0;
+
+        if (busId) {
+            const bus = await Bus.findById(busId);
+            if (!bus) return res.status(404).send('<h1>Bus not found</h1>');
+
+            const route = await Route.findById(bus.routeId);
+            const routeName = route ? route.name : (bus.routeName || 'Unassigned');
+            const stops = route ? route.stops : [];
+
+            const driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() });
+            const driverName = driverDoc ? driverDoc.name : 'Unassigned';
+
+            title = `SGI OPERATIONAL REPORT: ${bus.name.toUpperCase()}`;
+            scopeType = `Bus ${bus.busNumber}`;
+
+            const sinceDate = new Date();
+            sinceDate.setDate(sinceDate.getDate() - lookbackDays);
+            const liveLogs = await LiveTripLog.find({
+                busId: bus._id.toString(),
+                startTime: { $gte: sinceDate }
+            }).sort({ startTime: -1 });
+
+            const liveDates = new Set(liveLogs.map(l => l.date));
+
+            for (let i = 0; i < lookbackDays; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                if (d.getDay() === 0 || d.getDay() === 6) continue;
+                const dateStr = fmtDate(d);
+
+                if (liveDates.has(dateStr)) {
+                    liveCount++;
+                    const log = liveLogs.find(l => l.date === dateStr);
+                    const startStr = fmtTime(log.startTime);
+                    const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
+
+                    if (stops.length > 0) {
+                        stops.forEach((stop, sIdx) => {
+                            const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
+                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
+                            records.push({
+                                date: dateStr,
+                                busName: bus.name,
+                                busNumber: bus.busNumber,
+                                routeName: routeName,
+                                driverName: log.driverName,
+                                source: 'LIVE',
+                                startTime: startStr,
+                                endTime: endStr,
+                                stopSeq: sIdx + 1,
+                                stopName: stop.name,
+                                reachedTime: reachedStr
+                            });
+                        });
+                    } else {
+                        records.push({
+                            date: dateStr,
+                            busName: bus.name,
+                            busNumber: bus.busNumber,
+                            routeName: routeName,
+                            driverName: log.driverName,
+                            source: 'LIVE',
+                            startTime: startStr,
+                            endTime: endStr,
+                            stopSeq: 'N/A',
+                            stopName: 'No Stops',
+                            reachedTime: 'N/A'
+                        });
+                    }
+                } else {
+                    const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
+                    const dayIndex   = d.getDate() + d.getMonth() * 31;
+                    const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
+                    const startH = 7, startM = (busNumSeed * 3 % 45) + jitter;
+                    const startBase = new Date(d);
+                    startBase.setHours(startH, startM, 0, 0);
+                    const durationMins = 45 + Math.min(stops.length * 2, 25) + ((dayIndex * 3) % 10);
+                    const endBase = new Date(startBase.getTime() + durationMins * 60000);
+                    const startStr = fmtTime(startBase);
+                    const endStr   = fmtTime(endBase);
+
+                    if (stops.length > 0) {
+                        stops.forEach((stop, sIdx) => {
+                            const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
+                            records.push({
+                                date: dateStr,
+                                busName: bus.name,
+                                busNumber: bus.busNumber,
+                                routeName: routeName,
+                                driverName: driverName,
+                                source: 'ESTIMATED',
+                                startTime: startStr,
+                                endTime: endStr,
+                                stopSeq: sIdx + 1,
+                                stopName: stop.name,
+                                reachedTime: fmtTime(stopTime)
+                            });
+                        });
+                    } else {
+                        records.push({
+                            date: dateStr,
+                            busName: bus.name,
+                            busNumber: bus.busNumber,
+                            routeName: routeName,
+                            driverName: driverName,
+                            source: 'ESTIMATED',
+                            startTime: startStr,
+                            endTime: endStr,
+                            stopSeq: 'N/A',
+                            stopName: 'No Stops',
+                            reachedTime: 'N/A'
+                        });
+                    }
+                }
+            }
+        } else {
+            const routes  = await Route.find();
+            const buses   = await Bus.find().sort({ name: 1 });
+            const drivers = await Driver.find();
+            const todayStr = fmtDate(new Date());
+
+            const todayLiveLogs = await LiveTripLog.find({ date: todayStr });
+
+            for (const bus of buses) {
+                const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
+                const routeName = route ? route.name : (bus.routeName || 'Unassigned');
+                const stops = route ? route.stops : [];
+
+                const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
+                const driverName = driverDoc ? driverDoc.name : 'Unassigned';
+
+                const liveLog = todayLiveLogs.find(l => l.busId === bus._id.toString());
+
+                if (liveLog) {
+                    liveCount++;
+                    const startStr = fmtTime(liveLog.startTime);
+                    const endStr   = liveLog.endTime ? fmtTime(liveLog.endTime) : 'In Progress';
+
+                    if (stops.length > 0) {
+                        stops.forEach((stop, sIdx) => {
+                            const reached = liveLog.reachedStops.find(rs => rs.stopName === stop.name);
+                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
+                            records.push({
+                                date: todayStr,
+                                busName: bus.name,
+                                busNumber: bus.busNumber,
+                                routeName: routeName,
+                                driverName: liveLog.driverName,
+                                source: 'LIVE',
+                                startTime: startStr,
+                                endTime: endStr,
+                                stopSeq: sIdx + 1,
+                                stopName: stop.name,
+                                reachedTime: reachedStr
+                            });
+                        });
+                    } else {
+                        records.push({
+                            date: todayStr,
+                            busName: bus.name,
+                            busNumber: bus.busNumber,
+                            routeName: routeName,
+                            driverName: liveLog.driverName,
+                            source: 'LIVE',
+                            startTime: startStr,
+                            endTime: endStr,
+                            stopSeq: 'N/A',
+                            stopName: 'No Stops',
+                            reachedTime: 'N/A'
+                        });
+                    }
+                } else {
+                    const startTime = new Date();
+                    startTime.setHours(7, 30, 0, 0);
+                    const durationMins = 45 + Math.floor(Math.random() * 15);
+                    const endTime = new Date(startTime.getTime() + durationMins * 60000);
+                    const startStr = fmtTime(startTime);
+                    const endStr   = fmtTime(endTime);
+
+                    if (stops.length > 0) {
+                        stops.forEach((stop, sIdx) => {
+                            const stopTime = new Date(startTime.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
+                            records.push({
+                                date: todayStr,
+                                busName: bus.name,
+                                busNumber: bus.busNumber,
+                                routeName: routeName,
+                                driverName: driverName,
+                                source: 'ESTIMATED',
+                                startTime: startStr,
+                                endTime: endStr,
+                                stopSeq: sIdx + 1,
+                                stopName: stop.name,
+                                reachedTime: fmtTime(stopTime)
+                            });
+                        });
+                    } else {
+                        records.push({
+                            date: todayStr,
+                            busName: bus.name,
+                            busNumber: bus.busNumber,
+                            routeName: routeName,
+                            driverName: driverName,
+                            source: 'ESTIMATED',
+                            startTime: startStr,
+                            endTime: endStr,
+                            stopSeq: 'N/A',
+                            stopName: 'No Stops',
+                            reachedTime: 'N/A'
+                        });
+                    }
+                }
+            }
+        }
+
+        const uniqueDates = [...new Set(records.map(r => r.date))];
+        const uniqueDays = uniqueDates.length;
+
+        // Generate HTML row templates
+        let rowsHtml = '';
+        for (const r of records) {
+            const sourceBadgeClass = r.source === 'LIVE' ? 'badge live' : 'badge est';
+            rowsHtml += `
+                <tr>
+                    <td><strong>${r.date}</strong></td>
+                    <td>${r.busName}</td>
+                    <td><code>${r.busNumber}</code></td>
+                    <td>${r.routeName}</td>
+                    <td>${r.driverName}</td>
+                    <td><span class="${sourceBadgeClass}">${r.source}</span></td>
+                    <td>${r.startTime}</td>
+                    <td>${r.endTime}</td>
+                    <td>${r.stopSeq}</td>
+                    <td>${r.stopName}</td>
+                    <td><strong>${r.reachedTime}</strong></td>
+                </tr>
+            `;
+        }
+
+        const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>${title}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #2D5BFF;
+            --primary-dark: #1A4CFF;
+            --bg: #0D0B14;
+            --surface: #161421;
+            --text: #ffffff;
+            --text-secondary: #a3a3b8;
+            --text-muted: #64748b;
+            --border: rgba(255, 255, 255, 0.06);
+            --accent-live: #00C853;
+            --accent-est: #FFB347;
+        }
+        body {
+            font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 40px 24px;
+            line-height: 1.5;
+            -webkit-print-color-adjust: exact;
+        }
+        .container {
+            max-width: 1280px;
+            margin: 0 auto;
+        }
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 24px;
+            margin-bottom: 32px;
+        }
+        .title h1 {
+            font-size: 24px;
+            font-weight: 800;
+            margin: 0;
+            letter-spacing: -0.5px;
+            background: linear-gradient(135deg, #fff, var(--text-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .title p {
+            color: var(--text-secondary);
+            margin: 6px 0 0 0;
+            font-size: 13px;
+        }
+        .logo {
+            text-align: right;
+        }
+        .logo h2 {
+            margin: 0;
+            color: var(--primary);
+            font-size: 18px;
+            letter-spacing: 3px;
+            font-weight: 900;
+            text-shadow: 0 0 20px rgba(45, 91, 255, 0.2);
+        }
+        .logo p {
+            margin: 4px 0 0 0;
+            font-size: 10px;
+            color: var(--text-muted);
+            font-weight: 700;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .kpi-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 20px;
+            margin-bottom: 36px;
+        }
+        .kpi-card {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 24px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+        }
+        .kpi-card .label {
+            color: var(--text-secondary);
+            font-size: 11px;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            margin-bottom: 8px;
+        }
+        .kpi-card .value {
+            font-size: 28px;
+            font-weight: 800;
+            color: #fff;
+        }
+        .report-table-wrapper {
+            background-color: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            overflow-x: auto;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 13px;
+        }
+        th {
+            background-color: rgba(255, 255, 255, 0.02);
+            color: var(--text-secondary);
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: 9px;
+            letter-spacing: 1.5px;
+            padding: 18px 24px;
+            border-bottom: 1px solid var(--border);
+        }
+        td {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            color: #e2e8f0;
+        }
+        code {
+            font-family: 'JetBrains Mono', monospace;
+            background: rgba(255,255,255,0.05);
+            padding: 2px 6px;
+            border-radius: 6px;
+            color: #2D5BFF;
+            font-weight: bold;
+        }
+        tr:last-child td {
+            border-bottom: none;
+        }
+        tr:hover td {
+            background-color: rgba(255, 255, 255, 0.01);
+        }
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 9px;
+            font-weight: 900;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+        .badge.live {
+            background-color: rgba(0, 200, 83, 0.1);
+            color: var(--accent-live);
+            border: 1px solid rgba(0, 200, 83, 0.2);
+        }
+        .badge.est {
+            background-color: rgba(255, 179, 71, 0.1);
+            color: var(--accent-est);
+            border: 1px solid rgba(255, 179, 71, 0.2);
+        }
+        .actions-bar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .btn {
+            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 14px;
+            font-weight: 700;
+            font-size: 13px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            text-decoration: none;
+            box-shadow: 0 4px 15px rgba(45, 91, 255, 0.3);
+            transition: all 0.2s ease;
+        }
+        .btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(45, 91, 255, 0.45);
+        }
+        
+        @media print {
+            body {
+                background-color: #ffffff;
+                color: #000000;
+                padding: 20px 0;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .kpi-card {
+                background-color: #ffffff !important;
+                border: 1px solid #e2e8f0 !important;
+                box-shadow: none !important;
+                color: #000000 !important;
+            }
+            .kpi-card .value {
+                color: #000000 !important;
+            }
+            .report-table-wrapper {
+                border: 1px solid #e2e8f0 !important;
+                background-color: #ffffff !important;
+                box-shadow: none !important;
+            }
+            th {
+                background-color: #f8fafc !important;
+                color: #334155 !important;
+                border-bottom: 1px solid #cbd5e1 !important;
+            }
+            td {
+                color: #334155 !important;
+                border-bottom: 1px solid #e2e8f0 !important;
+            }
+            code {
+                background: #f1f5f9 !important;
+                color: #0f172a !important;
+                border: 1px solid #cbd5e1 !important;
+            }
+            .badge {
+                border-width: 1px !important;
+                background-color: transparent !important;
+            }
+            .badge.live {
+                border-color: #00C853 !important;
+                color: #00C853 !important;
+            }
+            .badge.est {
+                border-color: #FFB347 !important;
+                color: #FFB347 !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="actions-bar no-print">
+            <button class="btn" onclick="window.print()">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
+                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
+                    <rect x="6" y="14" width="12" height="8"></rect>
+                </svg>
+                Print & Save PDF
+            </button>
+        </div>
+        
+        <div class="header">
+            <div class="title">
+                <h1>${title}</h1>
+                <p>Report window: Last ${lookbackDays} days (weekdays only)</p>
+            </div>
+            <div class="logo">
+                <h2>CHALO CAMPUS</h2>
+                <p>Sagar Group of Institutions</p>
+            </div>
+        </div>
+        
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="label">Scope</div>
+                <div class="value">${scopeType}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Total Operational Rows</div>
+                <div class="value">${records.length}</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Unique Days Covered</div>
+                <div class="value">${uniqueDays} days</div>
+            </div>
+            <div class="kpi-card">
+                <div class="label">Live Tracking Runs</div>
+                <div class="value">${liveCount} logs</div>
+            </div>
+        </div>
+        
+        <div class="report-table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Bus Name</th>
+                        <th>Bus Number</th>
+                        <th>Route Name</th>
+                        <th>Driver</th>
+                        <th>Source</th>
+                        <th>Trip Start</th>
+                        <th>Trip End</th>
+                        <th>Seq</th>
+                        <th>Stop Name</th>
+                        <th>Reached Time</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${rowsHtml}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</body>
+</html>
+        `;
+
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
+        res.status(200).send(html);
+    } catch (err) {
+        console.error('HTML Report Generation Error:', err);
+        res.status(500).send('<h1>Failed to generate report</h1>');
     }
 });
 

@@ -83,42 +83,44 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
           backgroundColor: const Color(0xFF1E1E1E),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
           title: Text('Add New Bus', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: busNumberController,
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Bus Number (e.g. MP04 PA 1234)',
-                  labelStyle: const TextStyle(color: Colors.white38),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: busNumberController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Bus Number (e.g. MP04 PA 1234)',
+                    labelStyle: const TextStyle(color: Colors.white38),
+                    enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                dropdownColor: const Color(0xFF1E1E1E),
-                style: const TextStyle(color: Colors.white),
-                decoration: InputDecoration(
-                  labelText: 'Assigned Route',
-                  labelStyle: const TextStyle(color: Colors.white38),
+                const SizedBox(height: 16),
+                DropdownButtonFormField<String>(
+                  dropdownColor: const Color(0xFF1E1E1E),
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Assigned Route',
+                    labelStyle: const TextStyle(color: Colors.white38),
+                  ),
+                  items: routes.map<DropdownMenuItem<String>>((r) {
+                    return DropdownMenuItem<String>(
+                      value: r['_id'],
+                      child: Text(r['name'] ?? 'Route'),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    final route = routes.firstWhere((r) => r['_id'] == val);
+                    setDialogState(() {
+                      selectedRouteId = val;
+                      selectedRouteName = route['name'];
+                      selectedRouteColor = route['color'];
+                    });
+                  },
                 ),
-                items: routes.map<DropdownMenuItem<String>>((r) {
-                  return DropdownMenuItem<String>(
-                    value: r['_id'],
-                    child: Text(r['name'] ?? 'Route'),
-                  );
-                }).toList(),
-                onChanged: (val) {
-                  final route = routes.firstWhere((r) => r['_id'] == val);
-                  setDialogState(() {
-                    selectedRouteId = val;
-                    selectedRouteName = route['name'];
-                    selectedRouteColor = route['color'];
-                  });
-                },
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
             TextButton(

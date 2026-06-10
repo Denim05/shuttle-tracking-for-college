@@ -76,21 +76,124 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   Future<void> _downloadReport({String? busId}) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Text(
+          'Operational Report',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Select report format to open or print:',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            // Option 1: Printable HTML
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchReportUrl(busId, isHtml: true);
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.blueAccent.withOpacity(0.25)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.12), shape: BoxShape.circle),
+                      child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.blueAccent, size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('HTML (Print / PDF)', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Beautiful styled report, ready to print or save', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            // Option 2: CSV
+            GestureDetector(
+              onTap: () {
+                Navigator.pop(ctx);
+                _launchReportUrl(busId, isHtml: false);
+              },
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.03),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white.withOpacity(0.06)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle),
+                      child: const Icon(Icons.grid_on_rounded, color: Colors.greenAccent, size: 20),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('CSV Spreadsheet', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+                          Text('Raw trip logs for Excel / Google Sheets', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _launchReportUrl(String? busId, {required bool isHtml}) async {
+    final reportPath = isHtml ? 'bus-trip-report/html' : 'bus-trip-report';
     final uri = busId != null 
-        ? '${AppConstants.apiUrl}/manager/reports/bus-trip-report?busId=$busId'
-        : '${AppConstants.apiUrl}/manager/reports/bus-trip-report';
+        ? '${AppConstants.apiUrl}/manager/reports/$reportPath?busId=$busId'
+        : '${AppConstants.apiUrl}/manager/reports/$reportPath';
         
     final url = Uri.parse(uri);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Downloading ${busId != null ? 'Bus' : 'Fleet'} Report...'), backgroundColor: Colors.blueAccent),
+        SnackBar(
+          content: Text(isHtml ? 'Opening Print / PDF Report...' : 'Downloading Spreadsheet Report...'),
+          backgroundColor: Colors.blueAccent,
+        ),
       );
     }
     
     try {
       final success = await launchUrl(url, mode: LaunchMode.externalApplication);
       if (!success) {
-        // Fallback to standard launch
         await launchUrl(url);
       }
     } catch (e) {
@@ -1935,7 +2038,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       const Icon(Icons.download_rounded, color: Colors.blueAccent, size: 16),
                       const SizedBox(width: 6),
-                      Text('CSV',
+                      Text('EXPORT',
                           style: GoogleFonts.plusJakartaSans(
                               color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w900)),
                     ]),
@@ -2017,7 +2120,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 12,
           mainAxisSpacing: 12,
-          childAspectRatio: 1.55,
+          childAspectRatio: 1.32,
           children: [
             _kpiCard('OPERATING\nDAYS',
                 '${summary['totalOperatingDays']}', Icons.calendar_month_rounded, Colors.blueAccent),
@@ -2283,43 +2386,58 @@ class _BusReportSheetState extends State<_BusReportSheet> {
   }
 
   Widget _kpiCard(String label, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: color.withOpacity(0.15)),
-      ),
-      child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                  color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
-              child: Icon(icon, color: color, size: 15),
-            ),
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double pad = constraints.maxHeight < 90 ? 10.0 : 12.0;
+        final double iconSize = constraints.maxHeight < 90 ? 14.0 : 16.0;
+        final double valFontSize = constraints.maxHeight < 90 ? 16.0 : 20.0;
+        return Container(
+          padding: EdgeInsets.all(pad),
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withOpacity(0.15)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(5),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: iconSize),
+              ),
+              const Spacer(),
               FittedBox(
                 fit: BoxFit.scaleDown,
-                child: Text(value,
-                    style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.5)),
-              ),
-              Text(label,
+                child: Text(
+                  value,
                   style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white38,
-                      fontSize: 7.5,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1.2),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
-            ]),
-          ]),
+                    color: Colors.white,
+                    fontSize: valFontSize,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                label,
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white38,
+                  fontSize: 7.5,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 0.8,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        );
+      }
     );
   }
 }

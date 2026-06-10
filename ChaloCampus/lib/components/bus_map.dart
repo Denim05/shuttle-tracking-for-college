@@ -818,7 +818,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           myLocationEnabled:     widget.showMyLocation,
           myLocationButtonEnabled: false,
           zoomControlsEnabled:   false,
-          mapToolbarEnabled:     false,
+          mapToolbarEnabled:     true,
           compassEnabled:        _isDriveMode,
           tiltGesturesEnabled:   true,
           rotateGesturesEnabled: true,
@@ -835,26 +835,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // —— Layers picker ———————————————————
+                // —— Layers picker (Now opens beautiful bottom sheet) ——————————
                 _buildMapBtn(
                   icon:  Icons.layers_rounded,
                   label: 'LAYERS',
                   color: Colors.white70,
-                  isActive: _showLayerSelector,
-                  onTap: () => setState(() => _showLayerSelector = !_showLayerSelector),
+                  onTap: _showLayersSheet,
                 ),
-                if (_showLayerSelector) ...[
-                  const SizedBox(height: 8),
-                  _buildLayerItem(MapType.normal,    Icons.map_rounded,          'STREET'),
-                  const SizedBox(height: 6),
-                  _buildLayerItem(MapType.satellite, Icons.satellite_alt_rounded, 'SATELLITE'),
-                  const SizedBox(height: 6),
-                  _buildLayerItem(MapType.hybrid,    Icons.layers_outlined,       'HYBRID'),
-                  const SizedBox(height: 6),
-                  _buildLayerItem(MapType.terrain,   Icons.terrain_rounded,       'TERRAIN'),
-                  const SizedBox(height: 6),
-                  _buildLayerItem(MapType.none,      Icons.nightlight_round,      'DARK'),
-                ],
                 const SizedBox(height: 10),
 
                 // —— Follow bus ————————————————————
@@ -1103,51 +1090,123 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     return d < 1000 ? '${d.toInt()}M' : '${(d / 1000).toStringAsFixed(1)}KM';
   }
 
-  Widget _buildLayerItem(MapType type, IconData icon, String label) {
+  void _showLayersSheet() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      barrierColor: Colors.black54,
+      isScrollControlled: true,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0B14).withOpacity(0.96),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40, height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'MAP STYLE',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w900,
+                    fontSize: 14,
+                    letterSpacing: 2,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 20),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Center(
+              child: Wrap(
+                spacing: 12,
+                runSpacing: 16,
+                alignment: WrapAlignment.center,
+                children: [
+                  _buildLayerGridItem(MapType.normal, Icons.map_rounded, 'STREET'),
+                  _buildLayerGridItem(MapType.satellite, Icons.satellite_alt_rounded, 'SATELLITE'),
+                  _buildLayerGridItem(MapType.hybrid, Icons.layers_outlined, 'HYBRID'),
+                  _buildLayerGridItem(MapType.terrain, Icons.terrain_rounded, 'TERRAIN'),
+                  _buildLayerGridItem(MapType.none, Icons.nightlight_round, 'DARK'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(height: MediaQuery.of(context).padding.bottom + 16),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLayerGridItem(MapType type, IconData icon, String label) {
     final isSelected = _currentMapType == type;
     return GestureDetector(
       onTap: () {
         setState(() {
           _currentMapType = type;
-          _showLayerSelector = false;
         });
         if (type == MapType.none) {
           _mapController?.setMapStyle(_darkMapStyle);
         } else {
           _mapController?.setMapStyle(null);
         }
+        Navigator.pop(context); // close sheet
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF1A4CFF)
-              : Colors.black.withOpacity(0.72),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected
-                ? Colors.white.withOpacity(0.3)
-                : Colors.white.withOpacity(0.12),
-          ),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+      child: SizedBox(
+        width: 90,
+        child: Column(
           children: [
-            Icon(icon, color: Colors.white, size: 14),
-            const SizedBox(width: 6),
+            AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              width: 80, height: 80,
+              decoration: BoxDecoration(
+                color: isSelected
+                    ? const Color(0xFF1A4CFF)
+                    : const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: isSelected
+                      ? Colors.white.withOpacity(0.4)
+                      : Colors.white.withOpacity(0.08),
+                  width: 1.5,
+                ),
+                boxShadow: isSelected
+                    ? [BoxShadow(color: const Color(0xFF1A4CFF).withOpacity(0.3), blurRadius: 10)]
+                    : [],
+              ),
+              child: Icon(icon, color: Colors.white, size: 28),
+            ),
+            const SizedBox(height: 8),
             Text(
               label,
               style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
+                color: isSelected ? Colors.white : Colors.white60,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 0.5,
               ),
             ),
           ],
         ),
       ),
-    ).animate().slideX(begin: 0.4, end: 0, duration: 180.ms);
+    );
   }
 
   // Icon-only map button — distinct icon + color per action
