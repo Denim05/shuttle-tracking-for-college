@@ -1,4 +1,4 @@
-# May 2026 Bus Routes, Buses, and Drivers Seeding Documentation
+﻿# May 2026 Bus Routes, Buses, and Drivers Seeding Documentation
 
 This document explains the process, heuristics, and architecture behind the **May 2026 Bus Routes update** populated in the MongoDB database for **Sagar Group of Institutions, Ratibad, Bhopal**.
 
@@ -18,7 +18,7 @@ Since `Bus Route And schedule collage.pdf` consisted of scanned paper sheets rat
 
 ## 2. Seeding & Database Linking Structure
 
-The database seeding is performed via the script in [seed_real_routes.js](file:///d:/BUS%20TRACKING/ChaloCampus/backend/seed_real_routes.js).
+The database seeding is performed via the script in [seed_real_routes.js](file:///d:/BUS%20TRACKING/SISTecChalo/backend/seed_real_routes.js).
 
 ### Data Integrity Features:
 1. **Bidirectional Document Linking**: 
@@ -32,17 +32,17 @@ The database seeding is performed via the script in [seed_real_routes.js](file:/
 
 ## 3. Verification
 
-An automated verification script has been added to [verify_db_counts.js](file:///d:/BUS%20TRACKING/ChaloCampus/backend/verify_db_counts.js). Running it connects to the active MongoDB instance and performs count validations and bidirectional link audits.
+An automated verification script has been added to [verify_db_counts.js](file:///d:/BUS%20TRACKING/SISTecChalo/backend/verify_db_counts.js). Running it connects to the active MongoDB instance and performs count validations and bidirectional link audits.
 
 ```bash
-cd ChaloCampus/backend
+cd SISTecChalo/backend
 node verify_db_counts.js
 ```
 
 ### Confirmed Database Counts:
-* **Routes**: 30 / 30 (✅ Match)
-* **Buses**: 30 / 30 (✅ Match)
-* **Drivers**: 30 / 30 (✅ Match)
+* **Routes**: 30 / 30 (âœ… Match)
+* **Buses**: 30 / 30 (âœ… Match)
+* **Drivers**: 30 / 30 (âœ… Match)
 * **Integrity Audit**: 30 / 30 buses linked correctly back and forth.
 
 ---
@@ -83,3 +83,4 @@ All driver accounts have the default password **`123456`**.
 | `drivert4` | Unknown Driver | MP04 PA 4443 (Bus T-4) |
 | `drivert5` | Rahul Vishvkarma | MP04 PA 4442 (Bus T-5) |
 | `drivert6` | Jitendra Prajapati | N/A (Bus T-6) |
+

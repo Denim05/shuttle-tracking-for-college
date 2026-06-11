@@ -1,6 +1,6 @@
-/**
+﻿/**
  * seed_real_routes.js
- * Seeds the ChaloCampus DB with ALL latest real routes parsed from:
+ * Seeds the SISTecChalo DB with ALL latest real routes parsed from:
  * "Bus Route And schedule collage.pdf" (May 2026 Timings)
  * Sagar Group of Institutions, Ratibad, Bhopal
  *
@@ -14,10 +14,10 @@ const Bus      = require('./models/Bus');
 const Driver   = require('./models/Driver');
 const argon2   = require('argon2');
 
-const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/chalocampus';
-const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/chalocampus$1').replace(/^(mongodb(?:\+srv)?:\/\/[^/]+)$/, '$1/chalocampus');
+const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/sistecChalo';
+const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/sistecChalo$1').replace(/^(mongodb(?:\+srv)?:\/\/[^/]+)$/, '$1/sistecChalo');
 
-// ─── Route definitions from PDF (May 2026 Update) ────────────────────────────
+// â”€â”€â”€ Route definitions from PDF (May 2026 Update) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const ROUTES = [
   {
     busNo: '01',
@@ -652,31 +652,31 @@ const ROUTES = [
 const RATIBAD = { lat: 23.1270, lng: 77.3494 };
 
 async function seed() {
-  console.log('🔌 Connecting to MongoDB (chalocampus)...');
-  await mongoose.connect(MONGODB_URI, { dbName: 'chalocampus' });
-  console.log(`✅ Connected to: ${mongoose.connection.name}`);
+  console.log('ðŸ”Œ Connecting to MongoDB (SISTecChalo)...');
+  await mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' });
+  console.log(`âœ… Connected to: ${mongoose.connection.name}`);
 
   // Clear existing routes, buses, and drivers
   await Route.deleteMany({});
   await Bus.deleteMany({});
   await Driver.deleteMany({});
-  console.log('🧹 Cleared existing routes, buses, and drivers');
+  console.log('ðŸ§¹ Cleared existing routes, buses, and drivers');
 
   const defaultPassword = process.env.DEFAULT_SEED_PASSWORD || '123456';
   const hashedPassword = await argon2.hash(defaultPassword);
-  console.log(`🔑 Generated Argon2 hash for driver default password: "${defaultPassword}"`);
+  console.log(`ðŸ”‘ Generated Argon2 hash for driver default password: "${defaultPassword}"`);
 
   for (let ri = 0; ri < ROUTES.length; ri++) {
     const r = ROUTES[ri];
     
-    // Build stops with names only — NO fake coordinates
+    // Build stops with names only â€” NO fake coordinates
     const stopsWithNames = r.stops.map(stop => ({ name: stop.name }));
 
     const route = await Route.create({
       name: r.name,
       color: r.color,
       stops: stopsWithNames,
-      coordinates: [], // Empty — no fake polyline
+      coordinates: [], // Empty â€” no fake polyline
     });
 
     // Create driver
@@ -720,15 +720,17 @@ async function seed() {
     driver.assignedBus = bus._id.toString();
     await driver.save();
 
-    console.log(`✅ Bus & Driver ${r.busNo} (${username}): ${r.name} (${r.stops.length} stops)`);
+    console.log(`âœ… Bus & Driver ${r.busNo} (${username}): ${r.name} (${r.stops.length} stops)`);
   }
 
-  console.log(`\n🎉 Seeded ${ROUTES.length} routes, buses, and drivers successfully!`);
+  console.log(`\nðŸŽ‰ Seeded ${ROUTES.length} routes, buses, and drivers successfully!`);
   await mongoose.disconnect();
 }
 
 seed().catch(err => {
-  console.error('❌ Seed failed:', err);
+  console.error('âŒ Seed failed:', err);
   mongoose.disconnect();
   process.exit(1);
 });
+
+
