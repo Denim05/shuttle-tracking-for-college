@@ -1,6 +1,17 @@
+const path = require('path');
+const fs = require('fs');
+let envPath = path.resolve(__dirname, '.env');
+if (!fs.existsSync(envPath)) {
+    envPath = path.resolve(__dirname, 'SISTecChalo', 'backend', '.env');
+}
+require('dotenv').config({ path: envPath });
 ﻿const mongoose = require('mongoose');
 const Driver = require('./models/Driver');
-const MONGODB_URI = 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/sistecChalo';
+const MONGODB_URI = process.env.MONGODB_URI;
+if (!MONGODB_URI) {
+    console.error('\n❌ ERROR: MONGODB_URI environment variable is not defined!\n');
+    process.exit(1);
+}
 
 async function checkDrivers() {
     try {
@@ -15,5 +26,4 @@ async function checkDrivers() {
 }
 
 checkDrivers();
-
 

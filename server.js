@@ -1,4 +1,10 @@
-require('dotenv').config();
+const path = require('path');
+const fs = require('fs');
+let envPath = path.resolve(__dirname, '.env');
+if (!fs.existsSync(envPath)) {
+    envPath = path.resolve(__dirname, 'SISTecChalo', 'backend', '.env');
+}
+require('dotenv').config({ path: envPath });
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -59,7 +65,12 @@ app.use('/api/', limiter);
 
 // MongoDB Connection
 // Force 'SISTecChalo' database in the URI if it's missing or set to 'test'
-const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/sistecChalo';
+const rawUri = process.env.MONGODB_URI;
+if (!rawUri) {
+    console.error('\n❌ ERROR: MONGODB_URI environment variable is not defined!');
+    console.error('Please configure it in the .env file or environment variables.\n');
+    process.exit(1);
+}
 const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/sistecChalo$1');
 
 console.log(`📡 [DB] Connecting to Cluster... (Target Database: SISTecChalo)`);

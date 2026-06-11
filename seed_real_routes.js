@@ -8,13 +8,24 @@
  * Run: node seed_real_routes.js
  */
 
+const path = require('path');
+const fs = require('fs');
+let envPath = path.resolve(__dirname, '.env');
+if (!fs.existsSync(envPath)) {
+    envPath = path.resolve(__dirname, 'SISTecChalo', 'backend', '.env');
+}
+require('dotenv').config({ path: envPath });
 const mongoose = require('mongoose');
 const Route    = require('./models/Route');
 const Bus      = require('./models/Bus');
 const Driver   = require('./models/Driver');
 const argon2   = require('argon2');
 
-const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/sistecChalo';
+const rawUri = process.env.MONGODB_URI;
+if (!rawUri) {
+    console.error('\n❌ ERROR: MONGODB_URI environment variable is not defined!');
+    process.exit(1);
+}
 const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/sistecChalo$1').replace(/^(mongodb(?:\+srv)?:\/\/[^/]+)$/, '$1/sistecChalo');
 
 // ─── Route definitions from PDF (May 2026 Update) ────────────────────────────
