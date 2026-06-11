@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter/services.dart';
@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _requestInitialPermissions() async {
-    // permission_handler does not work on web â€” browser handles it natively.
+    // permission_handler does not work on web — browser handles it natively.
     if (kIsWeb) return;
     await [
       Permission.location,

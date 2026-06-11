@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -128,7 +128,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       showDialog(context: context, builder: (_) => AlertDialog(
         backgroundColor: Color(0xFF1E1E1E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('âœ… Account Created', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900)),
+        title: Text('✅ Account Created', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900)),
         content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(msg, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, height: 1.5)),
           const SizedBox(height: 16),
@@ -393,7 +393,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(s['name'] ?? '', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-            Text('ID: ${s['studentId'] ?? ''}  â€¢  ðŸ“ž ${s['phone'] ?? ''}',
+            Text('ID: ${s['studentId'] ?? ''}  •  📞 ${s['phone'] ?? ''}',
               style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10)),
           ])),
           Container(
@@ -406,7 +406,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
         Row(children: [
           const Icon(Icons.alt_route_rounded, color: Color(0xFF2D5BFF), size: 13),
           const SizedBox(width: 6),
-          Expanded(child: Text('${s['routeName'] ?? ''}  â†’  ${s['pickupStop'] ?? ''}',
+          Expanded(child: Text('${s['routeName'] ?? ''}  →  ${s['pickupStop'] ?? ''}',
             style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 12))),
         ]),
         if (status == 'approved' && s['generatedUsername'] != null) ...[

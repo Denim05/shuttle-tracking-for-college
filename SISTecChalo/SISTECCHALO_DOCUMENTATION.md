@@ -1,11 +1,11 @@
-﻿# SISTecChalo - Flutter App Documentation
+# SISTecChalo - Flutter App Documentation
 
 Welcome to the comprehensive technical documentation for the **SISTecChalo Flutter Client** (`SISTecChalo`). 
 This app delivers a "Next-Gen Pulse" aesthetic for campus transit, built with modern Dart 3.4+ and Flutter.
 
 ---
 
-## 1. ðŸš€ Project Overview
+## 1. 🚀 Project Overview
 SISTecChalo provides a futuristic shuttle tracking experience with fully native map integrations, robust local storage, and real-time Socket.IO telemetry.
 
 **Key Features:**
@@ -17,7 +17,7 @@ SISTecChalo provides a futuristic shuttle tracking experience with fully native 
 
 ---
 
-## 2. ðŸ› ï¸ Tech Stack & Packages (`pubspec.yaml`)
+## 2. 🛠️ Tech Stack & Packages (`pubspec.yaml`)
 
 - **State Management:** `provider` (v6.1+) using `ChangeNotifier` and `MultiProvider`.
 - **Typography:** `Plus Jakarta Sans` (mandatory global font).
@@ -31,18 +31,18 @@ SISTecChalo provides a futuristic shuttle tracking experience with fully native 
 
 ---
 
-## 3. ðŸ“‚ Architecture & Folder Structure
+## 3. 📂 Architecture & Folder Structure
 
 The application follows a Service-Oriented Provider Architecture.
 
 ```text
 lib/
- â”œâ”€â”€ components/       # Pulse-themed UI components (BusMap, NeonButtons, TelemetryCards)
- â”œâ”€â”€ constants/        # Global constants (Colors, API endpoints, Typography)
- â”œâ”€â”€ models/           # Strongly typed data models (User, Bus, Route)
- â”œâ”€â”€ screens/          # Role-specific Dashboards (Core Architect, Command Center, Captain Command)
- â”œâ”€â”€ services/         # State singletons (AuthService, ApiService, SocketService)
- â””â”€â”€ main.dart         # Entry point and Global Provider tree
+ ├── components/       # Pulse-themed UI components (BusMap, NeonButtons, TelemetryCards)
+ ├── constants/        # Global constants (Colors, API endpoints, Typography)
+ ├── models/           # Strongly typed data models (User, Bus, Route)
+ ├── screens/          # Role-specific Dashboards (Core Architect, Command Center, Captain Command)
+ ├── services/         # State singletons (AuthService, ApiService, SocketService)
+ └── main.dart         # Entry point and Global Provider tree
 ```
 
 ### Flow of Control (`main.dart`)
@@ -53,7 +53,7 @@ lib/
 
 ---
 
-## 4. ðŸ§  Core Services
+## 4. 🧠 Core Services
 
 ### 1. `AuthService`
 Manages the security lifecycle.
@@ -69,7 +69,7 @@ The heartbeat of the "Pulse" system.
 
 ---
 
-## 5. ðŸ—ºï¸ Next-Gen Mapping
+## 5. 🗺️ Next-Gen Mapping
 
 Leverages `flutter_map` with `CartoDB.DarkMatter` tiles to match the dark aesthetic.
 - **Dynamic Markers**: Custom-rendered vectors representing buses with real-time rotation (heading).
@@ -78,7 +78,7 @@ Leverages `flutter_map` with `CartoDB.DarkMatter` tiles to match the dark aesthe
 
 ---
 
-## 6. ðŸ“± Visual Identity: "Next-Gen Pulse"
+## 6. 📱 Visual Identity: "Next-Gen Pulse"
 
 - **Primary**: Purple (`#6C63FF`)
 - **Accent**: Cyan (`#00F0FF`)
@@ -88,7 +88,7 @@ Leverages `flutter_map` with `CartoDB.DarkMatter` tiles to match the dark aesthe
 
 ---
 
-## 7. ðŸšŒ System Lifecycle
+## 7. 🚌 System Lifecycle
 
 1. **Pulse Sync**: App connects to backend and initializes Socket.IO.
 2. **Telemetry Stream**: Buses broadcast location; the backend computes ETA/Status.

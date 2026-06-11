@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -34,7 +34,7 @@ const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed) => {
                 return Math.round(data.rows[0].elements[0].duration.value / 60);
             }
         } catch (err) {
-            console.error('âš ï¸ [Google Maps API] ETA Fetch Error:', err.message);
+            console.error('⚠️ [Google Maps API] ETA Fetch Error:', err.message);
         }
     }
 
@@ -95,38 +95,38 @@ app.use('/api/', limiter);
 const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/sistecChalo';
 const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/sistecChalo$1');
 
-console.log(`ðŸ“¡ [DB] Connecting to Cluster... (Target Database: SISTecChalo)`);
-console.log(`ðŸ“¡ [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****:****@')}`);
+console.log(`📡 [DB] Connecting to Cluster... (Target Database: SISTecChalo)`);
+console.log(`📡 [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****:****@')}`);
 
 mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' })
     .then(async () => {
         const dbName = mongoose.connection.name;
-        process.stdout.write(`\n\x1b[32mâœ… [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
-        process.stdout.write(`\x1b[32mâœ… [DB] ACTIVE DATABASE: ${dbName}\x1b[0m\n`);
-        console.log(`âœ… MongoDB Connected! Database: ${dbName}`);
+        process.stdout.write(`\n\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
+        process.stdout.write(`\x1b[32m✅ [DB] ACTIVE DATABASE: ${dbName}\x1b[0m\n`);
+        console.log(`✅ MongoDB Connected! Database: ${dbName}`);
         // Auto-seed real SGI routes on first boot if DB is empty
         await autoSeedRoutes();
     })
     .catch(err => {
-        console.error('âŒ MongoDB Connection Error:', err);
+        console.error('❌ MongoDB Connection Error:', err);
     });
 
-// â”€â”€â”€ Auto-Seed: Seeds all 17 real Sagar Group of Institutions routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Auto-Seed: Seeds all 17 real Sagar Group of Institutions routes ──────────
 // Only runs if the Route collection is empty (safe to deploy multiple times)
 async function autoSeedRoutes() {
     try {
         const Route = require('./models/Route');
         const count = await Route.countDocuments();
         if (count > 0) {
-            console.log(`ðŸ—‚ï¸  [SEED] ${count} routes already exist â€” skipping auto-seed.`);
+            console.log(`🗂️  [SEED] ${count} routes already exist — skipping auto-seed.`);
             return;
         }
-        console.log('ðŸŒ± [SEED] No routes found â€” seeding real SGI bus routes...');
+        console.log('🌱 [SEED] No routes found — seeding real SGI bus routes...');
         const { seed: seedRealRoutes } = require('./seed_real_routes');
         await seedRealRoutes(false); // false means do not disconnect Mongoose
-        console.log(`ðŸŽ‰ [SEED] Auto-seed completed successfully with 17 unique routes and 30 buses!`);
+        console.log(`🎉 [SEED] Auto-seed completed successfully with 17 unique routes and 30 buses!`);
     } catch (_err) {
-        console.error('âŒ [SEED] Auto-seed failed:', _err.message);
+        console.error('❌ [SEED] Auto-seed failed:', _err.message);
     }
 }
 
@@ -560,7 +560,7 @@ app.get('/delete-account', (req, res) => {
             card.innerHTML = \`
                 <h2>Request Submitted</h2>
                 <div style="color: #4CAF50; font-weight: 600; text-align: center; font-size: 1.2rem; margin-top: 20px; margin-bottom: 20px;">
-                    âœ… Deletion Request Received
+                    ✅ Deletion Request Received
                 </div>
                 <p>Your request to delete the account <strong>\${username}</strong> has been successfully queued.</p>
                 <p>Our administration team will verify your request and permanently delete your account and associated data from our servers within 48 hours.</p>
@@ -600,13 +600,13 @@ const broadcastStats = async () => {
  * @returns {Object} JSON response with JWT token and user details.
  */
 app.post('/api/auth/login', async (req, res) => {
-    console.log(`ðŸ“¡ [Auth] Login request: ${JSON.stringify(req.body)}`);
+    console.log(`📡 [Auth] Login request: ${JSON.stringify(req.body)}`);
     const username = req.body.username?.trim();
     const password = req.body.password;
     const role = req.body.role?.trim();
     
     if (role) {
-        console.log(`ðŸ” [Auth] Role: ${JSON.stringify(role)} (Length: ${role.length})`);
+        console.log(`🔍 [Auth] Role: ${JSON.stringify(role)} (Length: ${role.length})`);
     }
     
     console.time('LoginRequest');
@@ -631,17 +631,17 @@ app.post('/api/auth/login', async (req, res) => {
         // Find user case-insensitively
         const query = { username: { $regex: new RegExp(`^${username}$`, 'i') } };
         user = await Model.findOne(query);
-        console.log(`ðŸ” [Auth] Collection: ${Model.collection.name} | Query: ${JSON.stringify(query)} | Resolved: ${user?.username || 'none'}`);
+        console.log(`🔍 [Auth] Collection: ${Model.collection.name} | Query: ${JSON.stringify(query)} | Resolved: ${user?.username || 'none'}`);
         
         if (!user) {
-            console.log(`âŒ [Auth] User ${username} not found in ${Model.collection.name} collection`);
+            console.log(`❌ [Auth] User ${username} not found in ${Model.collection.name} collection`);
             console.timeEnd('LoginRequest');
             return res.status(400).json({ error: 'User not found' });
         }
 
         // Validate Password
         const isMatch = await argon2.verify(user.password, password);
-        console.log(`ðŸ” [Auth] Password match result for ${username}: ${isMatch}`);
+        console.log(`🔐 [Auth] Password match result for ${username}: ${isMatch}`);
         
         if (!isMatch) {
             console.timeEnd('LoginRequest');
@@ -674,7 +674,7 @@ app.post('/api/auth/login', async (req, res) => {
         console.timeEnd('LoginRequest');
 
     } catch (_err) {
-        console.error('âŒ Login Error:', _err);
+        console.error('❌ Login Error:', _err);
         console.timeEnd('LoginRequest');
         res.status(500).json({ error: 'Server error' });
     }
@@ -895,14 +895,14 @@ app.post('/api/manager/notifications', async (req, res) => {
         // Emit both notification (for history) and systemAlert (for live pop-ups)
         io.emit('notification', newNotification);
         io.emit('systemAlert', { message, type: type || 'info', timestamp: new Date().toISOString() });
-        console.log(`ðŸ“¢ [Manager Broadcast] "${message}"`);
+        console.log(`📢 [Manager Broadcast] "${message}"`);
         res.json({ success: true, notification: newNotification });
     } catch (_err) {
         res.status(500).json({ error: 'Failed to broadcast notification' });
     }
 });
 
-// â”€â”€â”€ MANAGER: LIVE BUS TRIP REPORT (CSV/Excel) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── MANAGER: LIVE BUS TRIP REPORT (CSV/Excel) ──────────────────────────────
 // GET /api/manager/reports/bus-trip-report?busId=<id>&days=<n>
 // Generates a CSV report per bus using REAL live trip log data.
 // Falls back to estimated schedule data for buses with no live GPS data.
@@ -921,7 +921,7 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
         // Helper to format a date as YYYY-MM-DD
         const fmtDate = (d) => new Date(d).toISOString().split('T')[0];
 
-        // â”€â”€ SINGLE BUS REPORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── SINGLE BUS REPORT ────────────────────────────────────────────────
         if (busId) {
             const bus = await Bus.findById(busId);
             if (!bus) return res.status(404).json({ error: 'Bus not found' });
@@ -954,7 +954,7 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                 const dateStr = fmtDate(d);
 
                 if (liveDates.has(dateStr)) {
-                    // â”€â”€ USE REAL LIVE DATA â”€â”€
+                    // ── USE REAL LIVE DATA ──
                     const log = liveLogs.find(l => l.date === dateStr);
                     const startStr = fmtTime(log.startTime);
                     const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
@@ -962,14 +962,14 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                     if (stops.length > 0) {
                         stops.forEach((stop, sIdx) => {
                             const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
-                            const reachedStr = reached ? fmtTime(reached.reachedTime) : 'â€”';
+                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
                             csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
                         });
                     } else {
                         csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
                     }
                 } else {
-                    // â”€â”€ FALLBACK: ESTIMATED DATA â”€â”€
+                    // ── FALLBACK: ESTIMATED DATA ──
                     const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
                     const dayIndex   = d.getDate() + d.getMonth() * 31;
                     const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
@@ -998,7 +998,7 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
             return res.status(200).send(csvContent);
         }
 
-        // â”€â”€ ALL BUSES REPORT (Today + Live Data) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+        // ── ALL BUSES REPORT (Today + Live Data) ─────────────────────────────
         const routes  = await Route.find();
         const buses   = await Bus.find().sort({ name: 1 });
         const drivers = await Driver.find();
@@ -1021,21 +1021,21 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
             const liveLog = todayLiveLogs.find(l => l.busId === bus._id.toString());
 
             if (liveLog) {
-                // â”€â”€ REAL LIVE DATA FOR TODAY â”€â”€
+                // ── REAL LIVE DATA FOR TODAY ──
                 const startStr = fmtTime(liveLog.startTime);
                 const endStr   = liveLog.endTime ? fmtTime(liveLog.endTime) : 'In Progress';
 
                 if (stops.length > 0) {
                     stops.forEach((stop, sIdx) => {
                         const reached = liveLog.reachedStops.find(rs => rs.stopName === stop.name);
-                        const reachedStr = reached ? fmtTime(reached.reachedTime) : 'â€”';
+                        const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
                         csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${liveLog.driverName}","LIVE","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
                     });
                 } else {
                     csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${liveLog.driverName}","LIVE","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
                 }
             } else {
-                // â”€â”€ FALLBACK: ESTIMATED (bus not yet started today) â”€â”€
+                // ── FALLBACK: ESTIMATED (bus not yet started today) ──
                 const startTime = new Date();
                 startTime.setHours(7, 30, 0, 0);
                 const durationMins = 45 + Math.floor(Math.random() * 15);
@@ -1063,7 +1063,7 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
     }
 });
 
-// â”€â”€â”€ MANAGER: PRINTABLE HTML OPERATIONAL REPORT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── MANAGER: PRINTABLE HTML OPERATIONAL REPORT ──────────────────────────────
 // GET /api/manager/reports/bus-trip-report/html?busId=<id>&days=<n>
 // Renders a premium, print-friendly HTML report for SGI Management.
 app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
@@ -1124,7 +1124,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                     if (stops.length > 0) {
                         stops.forEach((stop, sIdx) => {
                             const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
-                            const reachedStr = reached ? fmtTime(reached.reachedTime) : 'â€”';
+                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
                             records.push({
                                 date: dateStr,
                                 busName: bus.name,
@@ -1226,7 +1226,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                     if (stops.length > 0) {
                         stops.forEach((stop, sIdx) => {
                             const reached = liveLog.reachedStops.find(rs => rs.stopName === stop.name);
-                            const reachedStr = reached ? fmtTime(reached.reachedTime) : 'â€”';
+                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
                             records.push({
                                 date: todayStr,
                                 busName: bus.name,
@@ -1777,7 +1777,7 @@ app.put('/api/users/change-password', authMiddleware, async (req, res) => {
         const hashed = await argon2.hash(newPassword);
         await User.findByIdAndUpdate(req.user.id, { password: hashed });
 
-        console.log(`ðŸ”‘ [Password Changed] User: ${user.username}`);
+        console.log(`🔑 [Password Changed] User: ${user.username}`);
         res.json({ success: true, message: 'Password changed successfully.' });
     } catch (err) {
         console.error('Change password error:', err);
@@ -1789,10 +1789,10 @@ app.put('/api/users/change-password', authMiddleware, async (req, res) => {
 app.get('/api/manager/drivers', authMiddleware, async (req, res) => {
     try {
         const drivers = await Driver.find();
-        console.log(`ðŸ“¦ Sending ${drivers.length} drivers to Manager`);
+        console.log(`📦 Sending ${drivers.length} drivers to Manager`);
         res.json(drivers);
     } catch (err) {
-        console.error('âŒ Error fetching manager drivers:', err);
+        console.error('❌ Error fetching manager drivers:', err);
         res.status(500).json({ error: 'Failed to fetch drivers' });
     }
 });
@@ -1852,12 +1852,12 @@ app.put('/api/manager/drivers/:id', async (req, res) => {
         
         res.json(updatedDriver);
     } catch (err) {
-        console.error('âŒ Error updating driver:', err);
+        console.error('❌ Error updating driver:', err);
         res.status(500).json({ error: 'Failed to update driver' });
     }
 });
 
-// â”€â”€â”€ MANAGER: EDIT ROUTE (name, color, stops) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── MANAGER: EDIT ROUTE (name, color, stops) ────────────────────────────────
 // PUT /api/manager/routes/:id
 // Body: { name, color, stops: [{ name, lat, lng }] }
 app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
@@ -1892,7 +1892,7 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
 
         // Notify all clients of the route change
         io.emit('routeUpdated', updatedRoute);
-        console.log(`âœï¸  [Manager] Route updated: ${updatedRoute.name}`);
+        console.log(`✏️  [Manager] Route updated: ${updatedRoute.name}`);
         res.json(updatedRoute);
     } catch (err) {
         console.error('Route update error:', err);
@@ -1900,7 +1900,7 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// â”€â”€â”€ MANAGER: UPDATE BUS NUMBER / BASIC FIELDS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── MANAGER: UPDATE BUS NUMBER / BASIC FIELDS ───────────────────────────────
 // PATCH /api/manager/buses/:id
 // Body: { busNumber, occupancy }
 app.patch('/api/manager/buses/:id', authMiddleware, async (req, res) => {
@@ -1920,7 +1920,7 @@ app.patch('/api/manager/buses/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// â”€â”€â”€ MANAGER: IN-APP PER-BUS DAILY REPORT (JSON) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── MANAGER: IN-APP PER-BUS DAILY REPORT (JSON) ─────────────────────────────
 // GET /api/manager/reports/bus/:busId/summary
 // Returns detailed daily operational records for college management.
 app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, res) => {
@@ -1941,12 +1941,12 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
             if (driver) driverName = driver.name || driver.username;
         }
 
-        // â”€â”€ Seed: fixed daily departure time per bus (7:00â€“7:45 AM based on busNumber) â”€â”€
+        // ── Seed: fixed daily departure time per bus (7:00–7:45 AM based on busNumber) ──
         const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
         const baseDepartureHour   = 7;
-        const baseDepartureMinute = (busNumSeed * 3) % 45; // spreads buses 0â€“44 mins past 7
+        const baseDepartureMinute = (busNumSeed * 3) % 45; // spreads buses 0–44 mins past 7
 
-        // â”€â”€ Build 30-day log (weekdays only) â”€â”€
+        // ── Build 30-day log (weekdays only) ──
         const dailyRecords = [];
         for (let i = 0; i < 30; i++) {
             const tripDate = new Date();
@@ -1963,9 +1963,9 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
             const departM = baseDepartureMinute + jitter;
             const departureTime = `${String(departH).padStart(2,'0')}:${String(departM).padStart(2,'0')} AM`;
 
-            // Trip duration: base 45â€“70 mins depending on stop count
+            // Trip duration: base 45–70 mins depending on stop count
             const baseDuration   = 40 + Math.min(stopNames.length * 2, 30);
-            const actualDuration = baseDuration + ((dayIndex * 3) % 15); // Â±0â€“15 min variation
+            const actualDuration = baseDuration + ((dayIndex * 3) % 15); // ±0–15 min variation
             const isDelayed      = actualDuration > baseDuration + 8;
 
             // Arrival at campus
@@ -1977,7 +1977,7 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
             // Speed & occupancy
             const avgSpeed     = parseFloat((28 + (dayIndex % 10)).toFixed(1));
             const maxSpeed     = parseFloat((avgSpeed + 8 + (dayIndex % 6)).toFixed(1));
-            const studentCount = 25 + ((dayIndex * 3 + busNumSeed) % 35); // 25â€“60
+            const studentCount = 25 + ((dayIndex * 3 + busNumSeed) % 35); // 25–60
 
             // Per-stop pickup timeline (evenly spaced)
             const stopTimeline = stopNames.map((sName, idx) => {
@@ -2017,7 +2017,7 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
             });
         }
 
-        // â”€â”€ Summary KPIs â”€â”€
+        // ── Summary KPIs ──
         const onTimeCount  = dailyRecords.filter(r => r.status === 'On-time').length;
         const totalStudents = dailyRecords.reduce((s, r) => s + r.studentCount, 0);
         const avgSpeedAll  = dailyRecords.length
@@ -2072,13 +2072,13 @@ const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
  * Handles continuous location updates from buses and broadcasts them.
  */
 io.on('connection', (socket) => {
-    console.log('ðŸ”Œ New Client Connected:', socket.id);
+    console.log('🔌 New Client Connected:', socket.id);
 
     // Send initial stats to the newly connected client
     broadcastStats();
 
     socket.on('triggerSOS', async (data) => {
-        console.log('ðŸš¨ \x1b[31mACTIVE SOS EMERGENCY RECEIVED\x1b[0m:', data);
+        console.log('🚨 \x1b[31mACTIVE SOS EMERGENCY RECEIVED\x1b[0m:', data);
         
         try {
             const newAlert = new Alert({
@@ -2114,7 +2114,7 @@ io.on('connection', (socket) => {
             if (!bus) {
                 if (data.driverId) bus = await Bus.findOne({ driverId: data.driverId });
                 if (!bus) {
-                    process.stdout.write('ðŸš« [SIM-BLOCK] Rejected Old/Simulation BusID: ' + incomingBusId + '\r');
+                    process.stdout.write('🚫 [SIM-BLOCK] Rejected Old/Simulation BusID: ' + incomingBusId + '\r');
                     return;
                 }
             }
@@ -2124,9 +2124,9 @@ io.on('connection', (socket) => {
             const speed = data.speed !== undefined ? Number(data.speed) : (bus.speed || 0);
             const heading = data.heading !== undefined ? Number(data.heading) : (bus.heading || 0);
 
-            process.stdout.write(`ðŸ“ [LIVE] Bus: ${bus.busNumber} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Speed: ${speed.toFixed(1)} KM/H\r`);
+            process.stdout.write(`📍 [LIVE] Bus: ${bus.busNumber} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Speed: ${speed.toFixed(1)} KM/H\r`);
 
-            // â”€â”€ LIVE TRIP LOG: Auto-create today's trip if not exists â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── LIVE TRIP LOG: Auto-create today's trip if not exists ──────────────
             const todayStr = new Date().toISOString().split('T')[0];
             let tripLog = await LiveTripLog.findOne({ busId: bus._id.toString(), date: todayStr, status: 'Active' });
             if (!tripLog) {
@@ -2143,7 +2143,7 @@ io.on('connection', (socket) => {
                     startTime:  new Date(),
                     status:     'Active'
                 });
-                console.log(`ðŸš€ [TRIP START] New live trip log created for Bus ${bus.busNumber} on ${todayStr}`);
+                console.log(`🚀 [TRIP START] New live trip log created for Bus ${bus.busNumber} on ${todayStr}`);
             }
 
             // Update DB
@@ -2188,14 +2188,14 @@ io.on('connection', (socket) => {
                                         stopName: stop.name,
                                         minutes: minutes
                                     });
-                                    console.log(`ðŸ”” [GEOFENCE] Bus ${bus.busNumber} reached stop: ${stop.name}`);
+                                    console.log(`🔔 [GEOFENCE] Bus ${bus.busNumber} reached stop: ${stop.name}`);
 
-                                    // â”€â”€ LIVE TRIP LOG: Record actual stop-reached time â”€â”€
+                                    // ── LIVE TRIP LOG: Record actual stop-reached time ──
                                     const alreadyRecorded = tripLog.reachedStops.some(rs => rs.stopName === stop.name);
                                     if (!alreadyRecorded) {
                                         tripLog.reachedStops.push({ stopName: stop.name, reachedTime: new Date() });
                                         await tripLog.save();
-                                        console.log(`âœ… [TRIP LOG] Recorded: Bus ${bus.busNumber} â†’ Stop "${stop.name}" at ${new Date().toLocaleTimeString()}`);
+                                        console.log(`✅ [TRIP LOG] Recorded: Bus ${bus.busNumber} → Stop "${stop.name}" at ${new Date().toLocaleTimeString()}`);
                                     }
                                 }
                             }
@@ -2212,7 +2212,7 @@ io.on('connection', (socket) => {
             io.emit('busLocationUpdate', bus);
 
         } catch (err) {
-            console.error('âŒ [TRACKING ERROR]:', err.message);
+            console.error('❌ [TRACKING ERROR]:', err.message);
         }
     });
 
@@ -2228,10 +2228,10 @@ io.on('connection', (socket) => {
                 await tripLog.save();
                 // Update bus status to Offline
                 await Bus.findByIdAndUpdate(busId, { status: 'Offline' });
-                console.log(`ðŸ [TRIP END] Bus trip completed for busId: ${busId}`);
+                console.log(`🏁 [TRIP END] Bus trip completed for busId: ${busId}`);
             }
         } catch (err) {
-            console.error('âŒ [TRIP END ERROR]:', err.message);
+            console.error('❌ [TRIP END ERROR]:', err.message);
         }
     });
     socket.on('ping', () => socket.emit('pong'));
@@ -2243,7 +2243,7 @@ io.on('connection', (socket) => {
 // --- SEED DATABASE ROUTE ---
 app.post('/api/manager/seed', async (req, res) => {
     try {
-        console.log('ðŸŒ± [Manager API] Seeding real routes and buses from seed_real_routes...');
+        console.log('🌱 [Manager API] Seeding real routes and buses from seed_real_routes...');
         const { seed: seedRealRoutes } = require('./seed_real_routes');
         await seedRealRoutes(false); // pass false so we don't disconnect mongoose!
         
@@ -2255,7 +2255,7 @@ app.post('/api/manager/seed', async (req, res) => {
     }
 });
 
-// â”€â”€â”€ ETA TO MY STOP â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── ETA TO MY STOP ─────────────────────────────────────────────────────────
 // GET /api/eta?routeId=...&stopName=...
 // Returns minutes until the active bus on a route reaches the named stop.
 app.get('/api/eta', async (req, res) => {
@@ -2296,14 +2296,14 @@ app.get('/api/eta', async (req, res) => {
             lastUpdated: bus.lastUpdated,
         });
     } catch (_err) {
-        console.error('âŒ ETA Error:', _err);
+        console.error('❌ ETA Error:', _err);
         res.status(500).json({ error: 'Failed to calculate ETA' });
     }
 });
 
-// â”€â”€â”€ SCHEDULE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// GET  /api/schedule?routeId=...   â†’ all schedule entries for a route
-// POST /api/schedule               â†’ create/upsert schedule entry (admin/manager)
+// ─── SCHEDULE ────────────────────────────────────────────────────────────────
+// GET  /api/schedule?routeId=...   → all schedule entries for a route
+// POST /api/schedule               → create/upsert schedule entry (admin/manager)
 app.get('/api/schedule', async (req, res) => {
     const { routeId } = req.query;
     try {
@@ -2332,10 +2332,10 @@ app.post('/api/schedule', authMiddleware, async (req, res) => {
     }
 });
 
-// â”€â”€â”€ COMPLAINTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-// POST /api/complaints           â†’ user submits a complaint
-// GET  /api/complaints           â†’ manager/admin lists complaints
-// PUT  /api/complaints/:id       â†’ manager updates status
+// ─── COMPLAINTS ──────────────────────────────────────────────────────────────
+// POST /api/complaints           → user submits a complaint
+// GET  /api/complaints           → manager/admin lists complaints
+// PUT  /api/complaints/:id       → manager updates status
 app.post('/api/complaints', authMiddleware, async (req, res) => {
     const { routeId, routeName, driverName, busNumber, category, description } = req.body;
     if (!description) return res.status(400).json({ error: 'description is required' });
@@ -2353,11 +2353,11 @@ app.post('/api/complaints', authMiddleware, async (req, res) => {
 
         // Notify managers via socket
         io.emit('newComplaint', complaint);
-        console.log(`ðŸš¨ [Complaint] New from user ${req.user.id}: "${description.substring(0,60)}..."`);
+        console.log(`🚨 [Complaint] New from user ${req.user.id}: "${description.substring(0,60)}..."`);
 
         res.status(201).json(complaint);
     } catch (_err) {
-        console.error('âŒ Complaint Error:', _err);
+        console.error('❌ Complaint Error:', _err);
         res.status(500).json({ error: 'Failed to submit complaint' });
     }
 });
@@ -2384,7 +2384,7 @@ app.put('/api/complaints/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// â”€â”€â”€ DELAY ALERT SUBSCRIPTION â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── DELAY ALERT SUBSCRIPTION ────────────────────────────────────────────────
 // POST /api/subscribe-delay  { routeId, userId }
 // Stores intent server-side; when manager marks a bus delayed or ETA drift > 5min,
 // the server emits a 'busDelayed' event to all connected sockets (clients filter by routeId).
@@ -2417,19 +2417,19 @@ app.post('/api/notify-delay', authMiddleware, async (req, res) => {
         io.emit('notification', notif);
         io.emit('systemAlert', { message, type: 'critical', timestamp: payload.timestamp });
 
-        console.log(`âš ï¸ [Delay Alert] Route ${routeName}: ${message}`);
+        console.log(`⚠️ [Delay Alert] Route ${routeName}: ${message}`);
         res.json({ success: true });
     } catch (_err) {
         res.status(500).json({ error: 'Failed to send delay alert' });
     }
 });
 
-// â”€â”€â”€ REGISTRATION FORM SYSTEM â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── REGISTRATION FORM SYSTEM ───────────────────────────────────────────────
 
 // Helper to get base URL (used in shareable links)
 const getBaseUrl = (req) => `${req.protocol}://${req.get('host')}`;
 
-// â”€â”€ PUBLIC: Render the registration HTML form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PUBLIC: Render the registration HTML form ─────────────────────────────
 app.get('/register/:formId', async (req, res) => {
     try {
         const form = await RegistrationForm.findById(req.params.formId);
@@ -2439,7 +2439,7 @@ app.get('/register/:formId', async (req, res) => {
             <meta name="viewport" content="width=device-width,initial-scale=1">
             <title>Form Closed</title>
             <style>body{background:#05070E;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:20px}.box{background:#0D121F;border:1px solid rgba(255,255,255,.08);border-radius:24px;padding:40px;max-width:400px}</style>
-            </head><body><div class="box"><h2 style="color:#FF2E63">ðŸ“‹ Registration Closed</h2><p style="color:#aaa">This form is no longer accepting submissions.</p><p style="margin-top:20px;color:#666">Contact your college transport department for assistance.</p></div></body></html>
+            </head><body><div class="box"><h2 style="color:#FF2E63">📋 Registration Closed</h2><p style="color:#aaa">This form is no longer accepting submissions.</p><p style="margin-top:20px;color:#666">Contact your college transport department for assistance.</p></div></body></html>
         `);
 
         const routes = form.routeOptions || [];
@@ -2629,7 +2629,7 @@ app.get('/register/:formId', async (req, res) => {
           </select>
         </div>
         <div class="info-box">
-          <strong>â„¹ï¸ Note:</strong> Your route and stop are assigned by the transport manager and may be adjusted after registration is reviewed.
+          <strong>ℹ️ Note:</strong> Your route and stop are assigned by the transport manager and may be adjusted after registration is reviewed.
         </div>
       </div>
 
@@ -2638,7 +2638,7 @@ app.get('/register/:formId', async (req, res) => {
 
     <div class="success" id="successBox">
       <div class="card">
-        <div class="success-icon">âœ…</div>
+        <div class="success-icon">✅</div>
         <h2>Registration Submitted!</h2>
         <p>Your details have been sent to the transport manager for review. You will receive your login credentials once approved.</p>
         <div class="info-box" style="margin-top: 24px">
@@ -2649,7 +2649,7 @@ app.get('/register/:formId', async (req, res) => {
       </div>
     </div>
 
-    <div class="footer">SISTecChalo â€” SGI Transport Management System</div>
+    <div class="footer">SISTecChalo — SGI Transport Management System</div>
   </div>
 
   <script>
@@ -2720,7 +2720,7 @@ app.get('/register/:formId', async (req, res) => {
     }
 });
 
-// â”€â”€ PUBLIC: Handle form submission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── PUBLIC: Handle form submission ────────────────────────────────────────
 app.post('/api/public/register/:formId', async (req, res) => {
     const { name, studentId, phone, email, routeId, routeName, pickupStop } = req.body;
     if (!name || !studentId || !phone || !routeId || !pickupStop) {
@@ -2749,7 +2749,7 @@ app.post('/api/public/register/:formId', async (req, res) => {
             name, studentId, routeName, pickupStop,
             submittedAt: submission.submittedAt,
         });
-        console.log(`ðŸ“ [Registration] New submission: ${name} (${studentId}) â†’ ${routeName}`);
+        console.log(`📝 [Registration] New submission: ${name} (${studentId}) → ${routeName}`);
         res.status(201).json({ success: true });
     } catch (_err) {
         console.error('Registration submission error:', _err);
@@ -2757,7 +2757,7 @@ app.post('/api/public/register/:formId', async (req, res) => {
     }
 });
 
-// â”€â”€ MANAGER: Create a new registration form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MANAGER: Create a new registration form ───────────────────────────────
 app.post('/api/manager/registration-form', authMiddleware, async (req, res) => {
     const { title, description, routeOptions, stopOptions } = req.body;
     try {
@@ -2774,14 +2774,14 @@ app.post('/api/manager/registration-form', authMiddleware, async (req, res) => {
         });
 
         const shareUrl = `${getBaseUrl(req)}/register/${form._id}`;
-        console.log(`ðŸ“‹ [Form Created] ID: ${form._id} | URL: ${shareUrl}`);
+        console.log(`📋 [Form Created] ID: ${form._id} | URL: ${shareUrl}`);
         res.status(201).json({ form, shareUrl });
     } catch (_err) {
         res.status(500).json({ error: 'Failed to create form' });
     }
 });
 
-// â”€â”€ MANAGER: Get active form + share link â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MANAGER: Get active form + share link ─────────────────────────────────
 app.get('/api/manager/registration-form', authMiddleware, async (req, res) => {
     try {
         const form = await RegistrationForm.findOne({ isActive: true }).sort({ createdAt: -1 });
@@ -2793,7 +2793,7 @@ app.get('/api/manager/registration-form', authMiddleware, async (req, res) => {
     }
 });
 
-// â”€â”€ MANAGER: Close a form â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MANAGER: Close a form ─────────────────────────────────────────────────
 app.put('/api/manager/registration-form/:id/close', authMiddleware, async (req, res) => {
     try {
         const form = await RegistrationForm.findByIdAndUpdate(
@@ -2805,7 +2805,7 @@ app.put('/api/manager/registration-form/:id/close', authMiddleware, async (req, 
     }
 });
 
-// â”€â”€ MANAGER: List all submissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MANAGER: List all submissions ─────────────────────────────────────────
 app.get('/api/manager/registrations', authMiddleware, async (req, res) => {
     try {
         const { status } = req.query;
@@ -2819,14 +2819,14 @@ app.get('/api/manager/registrations', authMiddleware, async (req, res) => {
     }
 });
 
-// â”€â”€ MANAGER: Approve â†’ auto-create user account â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MANAGER: Approve → auto-create user account ───────────────────────────
 app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, res) => {
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
         if (!submission) return res.status(404).json({ error: 'Submission not found' });
         if (submission.status === 'approved') return res.status(400).json({ error: 'Already approved' });
 
-        // USERNAME = Enrollment Number (studentId) â€” student logs in with their ID
+        // USERNAME = Enrollment Number (studentId) — student logs in with their ID
         const username = submission.studentId.trim();
 
         // Check if account already exists with this enrollment number
@@ -2836,7 +2836,7 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
         }
 
         // PASSWORD = SGI@<EnrollmentNumber>  (college-standard, easy to remember)
-        // e.g. studentId = "SGI2024001"  â†’ password = "SGI@SGI2024001"
+        // e.g. studentId = "SGI2024001"  → password = "SGI@SGI2024001"
         const rawPassword = `SGI@${username}`;
         const hashedPassword = await argon2.hash(rawPassword);
 
@@ -2856,7 +2856,7 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
         await RegistrationSubmission.findByIdAndUpdate(req.params.id, {
             status: 'approved',
             generatedUsername: username,
-            generatedPassword: rawPassword,        // plain â€” manager can share it once
+            generatedPassword: rawPassword,        // plain — manager can share it once
             createdUserId: newUser._id.toString(),
             reviewedAt: new Date(),
         });
@@ -2876,7 +2876,7 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
     }
 });
 
-// â”€â”€ MANAGER: Reject a submission â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── MANAGER: Reject a submission ──────────────────────────────────────────
 app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res) => {
     try {
         const updated = await RegistrationSubmission.findByIdAndUpdate(
@@ -2892,22 +2892,22 @@ app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\nðŸš€ Server running on port ${PORT}`);
-    console.log(`ðŸ“¡ Socket.io ready for connections`);
+    console.log(`\n🚀 Server running on port ${PORT}`);
+    console.log(`📡 Socket.io ready for connections`);
 
-    // â”€â”€â”€ Keep-Alive: Prevent Render free tier from sleeping â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ─── Keep-Alive: Prevent Render free tier from sleeping ───────────────────
     // Pings itself every 14 minutes (Render sleeps after 15 min of inactivity)
     if (process.env.NODE_ENV === 'production') {
         const https = require('https');
         const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
         setInterval(() => {
             https.get(`${SELF_URL}/`, (res) => {
-                console.log(`ðŸ“ [Keep-Alive] Self-ping OK â€” status: ${res.statusCode}`);
+                console.log(`🏓 [Keep-Alive] Self-ping OK — status: ${res.statusCode}`);
             }).on('error', (err) => {
-                console.warn(`âš ï¸ [Keep-Alive] Self-ping failed: ${err.message}`);
+                console.warn(`⚠️ [Keep-Alive] Self-ping failed: ${err.message}`);
             });
         }, 14 * 60 * 1000); // every 14 minutes
-        console.log(`ðŸ“ [Keep-Alive] Self-ping scheduled every 14 min â†’ ${SELF_URL}`);
+        console.log(`🏓 [Keep-Alive] Self-ping scheduled every 14 min → ${SELF_URL}`);
     }
 });
 

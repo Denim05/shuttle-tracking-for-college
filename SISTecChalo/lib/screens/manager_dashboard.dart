@@ -49,7 +49,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   void _initSocket() {
-    // âš ï¸ Do NOT call listenToBusUpdates here â€” that would overwrite BusStore's
+    // ⚠️ Do NOT call listenToBusUpdates here — that would overwrite BusStore's
     // listener and break real-time updates across all dashboards.
     // The fleet tab reads from BusStore via Consumer<BusStore> instead.
 
@@ -334,7 +334,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       color: Colors.redAccent.withOpacity(0.8),
                       child: Center(
                         child: Text(
-                          'ðŸ“¡ Connecting...',
+                          '📡 Connecting...',
                           style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                         ),
                       ),
@@ -586,7 +586,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         ),
                                       ),
                                     ),
-                                    // â”€â”€ Live speed badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+                                    // ── Live speed badge ───────────────────────────
                                     if (bus.status != 'Offline')
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -845,7 +845,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         return ListView(
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 40),
           children: [
-            // â”€â”€ Broadcast Composer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Broadcast Composer ─────────────────────────────────────
             Text('Broadcast Message', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1)),
             const SizedBox(height: 8),
             Text('Send notifications to all app users.', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w500)),
@@ -923,7 +923,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               ),
             ),
 
-            // â”€â”€ Live Notification Feed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // ── Live Notification Feed ──────────────────────────────────
             const SizedBox(height: 32),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1653,9 +1653,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
   // ROUTES TAB
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
   Widget _buildRoutesTab() {
     if (_routes.isEmpty) return _buildEmptyState('No routes configured', Icons.route_rounded);
     return RefreshIndicator(
@@ -1714,12 +1714,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
   // ROUTE EDIT BOTTOM SHEET
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
   void _showRouteEditSheet(RouteModel route) {
     final nameCtrl = TextEditingController(text: route.name);
-    // Mutable stops list â€“ copies the current stops
+    // Mutable stops list – copies the current stops
     final stops = route.stops
         .map((s) => {'name': s['name'] as String, 'lat': s['lat'].toString(), 'lng': s['lng'].toString()})
         .toList();
@@ -1853,7 +1853,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
                                   decoration: InputDecoration(
                                     border: InputBorder.none,
-                                    hintText: 'Stop nameâ€¦',
+                                    hintText: 'Stop name…',
                                     hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12),
                                     isDense: true,
                                     contentPadding: EdgeInsets.zero,
@@ -1944,9 +1944,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
   // IN-APP BUS REPORT BOTTOM SHEET
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─────────────────────────────────────────────────────────────────────────
   void _showBusReportSheet(Bus bus) async {
     // Show loading sheet immediately
     showModalBottomSheet(

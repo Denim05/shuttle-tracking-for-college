@@ -1,10 +1,10 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/constants.dart';
 
-// â”€â”€â”€ Custom Exception â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Custom Exception ─────────────────────────────────────────────────────────
 
 class ApiException implements Exception {
   final int    statusCode;
@@ -26,7 +26,7 @@ class ApiException implements Exception {
   bool get isServerError  => statusCode >= 500;
 }
 
-// â”€â”€â”€ API Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── API Service ──────────────────────────────────────────────────────────────
 
 /// Robust HTTP client with:
 /// - Auto-injected bearer token
@@ -45,7 +45,7 @@ class ApiService {
     ),
   );
 
-  // â”€â”€â”€ Headers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Headers ──────────────────────────────────────────────────────────────
 
   Future<Map<String, String>> _headers({bool requiresAuth = true}) async {
     final headers = <String, String>{
@@ -64,7 +64,7 @@ class ApiService {
   Uri _uri(String endpoint) =>
       Uri.parse('${AppConstants.apiUrl}/$endpoint');
 
-  // â”€â”€â”€ Retry Wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Retry Wrapper ────────────────────────────────────────────────────────
 
   Future<dynamic> _withRetry(Future<http.Response> Function() call) async {
     int attempt = 0;
@@ -99,7 +99,7 @@ class ApiService {
     }
   }
 
-  // â”€â”€â”€ Response Processor â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Response Processor ───────────────────────────────────────────────────
 
   dynamic _process(http.Response response) {
     if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -123,7 +123,7 @@ class ApiService {
     throw ApiException(statusCode: response.statusCode, message: message);
   }
 
-  // â”€â”€â”€ Public Methods â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Public Methods ───────────────────────────────────────────────────────
 
   Future<dynamic> get(String endpoint, {bool requiresAuth = true}) =>
       _withRetry(() async => http.get(

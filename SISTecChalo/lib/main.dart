@@ -1,4 +1,4 @@
-﻿import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -14,15 +14,15 @@ import 'screens/manager_dashboard.dart';
 import 'screens/driver_dashboard.dart';
 
 
-// â”€â”€â”€ Global Navigator Key (for SnackBars from outside Widget tree) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Global Navigator Key (for SnackBars from outside Widget tree) ───────────
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
-// â”€â”€â”€ Entry Point â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Entry Point ─────────────────────────────────────────────────────────────
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  // No dart:io override needed â€” Render uses valid HTTPS certificates.
+  // No dart:io override needed — Render uses valid HTTPS certificates.
 
   // Lock portrait orientation (only on mobile, not web)
   if (!kIsWeb) {
@@ -45,7 +45,7 @@ void main() async {
   runApp(const SISTecChaloApp());
 }
 
-// â”€â”€â”€ Root Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Root Widget ─────────────────────────────────────────────────────────────
 
 class SISTecChaloApp extends StatelessWidget {
   const SISTecChaloApp({super.key});
@@ -54,12 +54,12 @@ class SISTecChaloApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        // AuthService â€” drives authentication state (login / logout / role)
+        // AuthService — drives authentication state (login / logout / role)
         ChangeNotifierProvider<AuthService>(
           create: (_) => AuthService(),
         ),
 
-        // SocketService â€” real-time socket with ChangeNotifier
+        // SocketService — real-time socket with ChangeNotifier
         //   Must be ChangeNotifierProvider so widgets can react via Consumer
         ChangeNotifierProvider<SocketService>(
           create: (_) {
@@ -69,7 +69,7 @@ class SISTecChaloApp extends StatelessWidget {
           },
         ),
 
-        // BusStore â€” depends on SocketService, created after it
+        // BusStore — depends on SocketService, created after it
         ChangeNotifierProxyProvider<SocketService, BusStore>(
           create: (ctx) => BusStore(
             ctx.read<SocketService>(),
@@ -90,7 +90,7 @@ class SISTecChaloApp extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€ Smooth Scroll Behavior â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Smooth Scroll Behavior ───────────────────────────────────────────────────
 
 class _SmoothScrollBehavior extends ScrollBehavior {
   const _SmoothScrollBehavior();
@@ -99,7 +99,7 @@ class _SmoothScrollBehavior extends ScrollBehavior {
       const BouncingScrollPhysics();
 }
 
-// â”€â”€â”€ Auth Wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Auth Wrapper ─────────────────────────────────────────────────────────────
 
 class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
@@ -135,7 +135,7 @@ class AuthWrapper extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€ Splash Screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Splash Screen ─────────────────────────────────────────────────────────────
 
 class _SplashScreen extends StatelessWidget {
   const _SplashScreen();

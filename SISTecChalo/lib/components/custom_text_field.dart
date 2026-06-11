@@ -1,8 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../theme/app_theme.dart';
 
-// â”€â”€â”€ AppTextField (SISTecChalo) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── AppTextField (SISTecChalo) ───────────────────────────────────────────────
 //
 // Professional, animated input field:
 // - Focus-driven animated border
@@ -194,7 +194,7 @@ class _AppTextFieldState extends State<AppTextField> {
   }
 }
 
-// â”€â”€â”€ Backward-compat alias â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Backward-compat alias ───────────────────────────────────────────────────
 
 @Deprecated('Use AppTextField instead')
 typedef CustomTextField = AppTextField;

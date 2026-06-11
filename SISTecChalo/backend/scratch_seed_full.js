@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const mongoose = require('mongoose');
 const Driver = require('./models/Driver');
 const Bus = require('./models/Bus');
@@ -9,13 +9,13 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_use
 async function seedData() {
     try {
         await mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' });
-        console.log('âœ… Connected to MongoDB');
+        console.log('✅ Connected to MongoDB');
 
         // 1. Clear existing data
         await Route.deleteMany({});
         await Bus.deleteMany({});
         await Driver.deleteMany({});
-        console.log('ðŸ—‘ï¸  Cleared old data');
+        console.log('🗑️  Cleared old data');
 
         // 2. Create Routes
         const route1 = new Route({
@@ -28,7 +28,7 @@ async function seedData() {
             ]
         });
         await route1.save();
-        console.log('ðŸ›£ï¸  Route created');
+        console.log('🛣️  Route created');
 
         // 3. Create Driver
         const hashedPassword = await argon2.hash('driver123');
@@ -40,7 +40,7 @@ async function seedData() {
             status: 'Active'
         });
         await driver.save();
-        console.log('ðŸ‘¨â€âœˆï¸ Driver created: driver1 / driver123');
+        console.log('👨‍✈️ Driver created: driver1 / driver123');
 
         // 4. Create Bus and link to driver
         const bus = new Bus({
@@ -62,11 +62,11 @@ async function seedData() {
         driver.assignedBus = bus._id.toString();
         await driver.save();
         
-        console.log('ðŸšŒ Bus created and linked to driver');
-        console.log('âœ… Seeding complete!');
+        console.log('🚌 Bus created and linked to driver');
+        console.log('✅ Seeding complete!');
         process.exit(0);
     } catch (err) {
-        console.error('âŒ Error during seeding:', err);
+        console.error('❌ Error during seeding:', err);
         process.exit(1);
     }
 }

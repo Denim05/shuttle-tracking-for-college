@@ -1,21 +1,21 @@
-﻿import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:socket_io_client/socket_io_client.dart' as io;
 import '../constants/constants.dart';
 
-// â”€â”€â”€ Connection Status Enum â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Connection Status Enum ───────────────────────────────────────────────────
 
 enum SocketStatus { connecting, connected, disconnected, error }
 
-// â”€â”€â”€ Socket Service â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Socket Service ───────────────────────────────────────────────────────────
 
 /// ChangeNotifier-backed Socket.io wrapper for SISTecChalo.
 ///
 /// - [status]           enum for richer UI reactions
 /// - [connectionStatus] ValueNotifier for backward compatibility
 /// - [lastDataReceived] ValueNotifier for pulse animation
-/// - [lastSOSAlert]     ValueNotifier â€” any widget can react to SOS
-/// - [lastPingMs]       ValueNotifier â€” real-time latency display
+/// - [lastSOSAlert]     ValueNotifier — any widget can react to SOS
+/// - [lastPingMs]       ValueNotifier — real-time latency display
 /// - [connectionQuality] derived string: Excellent / Good / Poor / Offline
 /// - SOS listener is permanent (set up in initSocket, not replaceable)
 /// - [pingServer] emits custom ping and measures pong round-trip
@@ -23,19 +23,19 @@ class SocketService with ChangeNotifier {
   io.Socket? _socket;
   SocketStatus _status = SocketStatus.disconnected;
 
-  // â”€â”€â”€ Public ValueNotifiers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Public ValueNotifiers ───────────────────────────────────────────────
 
   final ValueNotifier<bool>                  connectionStatus = ValueNotifier<bool>(false);
   final ValueNotifier<DateTime?>             lastDataReceived = ValueNotifier<DateTime?>(null);
   final ValueNotifier<Map<String, dynamic>?> lastSOSAlert     = ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<int?>                  lastPingMs       = ValueNotifier<int?>(null);
 
-  // â”€â”€â”€ Internal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Internal ────────────────────────────────────────────────────────────
 
   int _pingStartMs = 0;
   final List<Function(dynamic)> _sosCallbacks = [];
 
-  // â”€â”€â”€ Getters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Getters ─────────────────────────────────────────────────────────────
 
   SocketStatus get status      => _status;
   bool         get isConnected => _status == SocketStatus.connected;
@@ -59,16 +59,16 @@ class SocketService with ChangeNotifier {
     }
   }
 
-  // â”€â”€â”€ Init â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Init ────────────────────────────────────────────────────────────────
 
   void initSocket() {
     if (_socket != null && _socket!.connected) {
-      debugPrint('âš ï¸ Socket already connected â€” reusing.');
+      debugPrint('⚠️ Socket already connected — reusing.');
       return;
     }
 
     _setStatus(SocketStatus.connecting);
-    debugPrint('ðŸ”Œ SISTecChalo: connecting to ${AppConstants.baseUrl}');
+    debugPrint('🔌 SISTecChalo: connecting to ${AppConstants.baseUrl}');
 
     _socket = io.io(AppConstants.baseUrl, <String, dynamic>{
       'transports'           : ['websocket', 'polling'],
@@ -87,17 +87,17 @@ class SocketService with ChangeNotifier {
       ..on('disconnect',        _onDisconnect)
       ..on('connect_error',     _onConnectError)
       ..on('reconnect_attempt', (_) => _setStatus(SocketStatus.connecting))
-      ..on('error',  (data) => debugPrint('âŒ Socket error: $data'))
-      // â”€â”€ Permanent SOS listener â€” not replaceable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      ..on('error',  (data) => debugPrint('❌ Socket error: $data'))
+      // ── Permanent SOS listener — not replaceable ──────────────────────
       ..on('sosAlert', _onSOSAlertInternal)
-      // â”€â”€ Pong for latency measurement â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // ── Pong for latency measurement ──────────────────────────────────
       ..on('pong', (_) {
           lastPingMs.value = DateTime.now().millisecondsSinceEpoch - _pingStartMs;
-          debugPrint('ðŸ“ Ping: ${lastPingMs.value} ms');
+          debugPrint('🏓 Ping: ${lastPingMs.value} ms');
         });
   }
 
-  // â”€â”€â”€ SOS Internal Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── SOS Internal Handler ────────────────────────────────────────────────
 
   void _onSOSAlertInternal(dynamic data) {
     try {
@@ -105,7 +105,7 @@ class SocketService with ChangeNotifier {
           ? data
           : Map<String, dynamic>.from(data as Map);
       lastSOSAlert.value = parsed;
-      debugPrint('ðŸ†˜ SOS Alert received: $parsed');
+      debugPrint('🆘 SOS Alert received: $parsed');
       for (final cb in _sosCallbacks) {
         cb(parsed);
       }
@@ -114,32 +114,32 @@ class SocketService with ChangeNotifier {
     }
   }
 
-  // â”€â”€â”€ Event Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Event Handlers ──────────────────────────────────────────────────────
 
   void _onConnect(_) {
     connectionStatus.value = true;
     _setStatus(SocketStatus.connected);
-    debugPrint('âœ… SISTecChalo: Socket connected (id: ${_socket?.id})');
+    debugPrint('✅ SISTecChalo: Socket connected (id: ${_socket?.id})');
     pingServer(); // measure initial latency
   }
 
   void _onReconnect(_) {
     connectionStatus.value = true;
     _setStatus(SocketStatus.connected);
-    debugPrint('â™»ï¸ SISTecChalo: Socket reconnected');
+    debugPrint('♻️ SISTecChalo: Socket reconnected');
     pingServer();
   }
 
   void _onDisconnect(dynamic reason) {
     connectionStatus.value = false;
     _setStatus(SocketStatus.disconnected);
-    debugPrint('âš ï¸ SISTecChalo: Disconnected. Reason: $reason');
+    debugPrint('⚠️ SISTecChalo: Disconnected. Reason: $reason');
   }
 
   void _onConnectError(dynamic data) {
     connectionStatus.value = false;
     _setStatus(SocketStatus.error);
-    debugPrint('âŒ SISTecChalo: Connect error: $data');
+    debugPrint('❌ SISTecChalo: Connect error: $data');
   }
 
   void _setStatus(SocketStatus s) {
@@ -148,7 +148,7 @@ class SocketService with ChangeNotifier {
     notifyListeners();
   }
 
-  // â”€â”€â”€ Manual Reconnect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Manual Reconnect ────────────────────────────────────────────────────
 
   void reconnect() {
     if (_socket == null) {
@@ -158,7 +158,7 @@ class SocketService with ChangeNotifier {
     }
   }
 
-  // â”€â”€â”€ Ping / Latency â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Ping / Latency ──────────────────────────────────────────────────────
 
   void pingServer() {
     if (!isConnected) return;
@@ -166,7 +166,7 @@ class SocketService with ChangeNotifier {
     _socket?.emit('ping');
   }
 
-  // â”€â”€â”€ Listener Registration (idempotent) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Listener Registration (idempotent) ─────────────────────────────────
 
   void _on(String event, Function(dynamic) callback) {
     _socket?.off(event);
@@ -186,7 +186,7 @@ class SocketService with ChangeNotifier {
 
   /// Registers an additional SOS callback.
   /// The permanent internal SOS listener (which updates [lastSOSAlert])
-  /// is always active â€” this adds a supplementary callback on top.
+  /// is always active — this adds a supplementary callback on top.
   void listenToSOSAlerts(Function(dynamic) callback) {
     _sosCallbacks
       ..clear()
@@ -208,42 +208,42 @@ class SocketService with ChangeNotifier {
 
   void off(String event) => _socket?.off(event);
 
-  // â”€â”€â”€ Emit Methods â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Emit Methods ────────────────────────────────────────────────────────
 
   void emitLocationUpdate(Map<String, dynamic> data) {
     if (_socket == null || !_socket!.connected) {
-      debugPrint('âš ï¸ Cannot emit: Socket not connected');
+      debugPrint('⚠️ Cannot emit: Socket not connected');
       reconnect();
       return;
     }
     _socket?.emit('locationUpdate', data);
-    debugPrint('ðŸ“¡ BROADCAST: Lat=${data['latitude']}, Lng=${data['longitude']}, Speed=${data['speed']} KM/H');
+    debugPrint('📡 BROADCAST: Lat=${data['latitude']}, Lng=${data['longitude']}, Speed=${data['speed']} KM/H');
   }
 
   void emitSOSAlert(Map<String, dynamic> data) {
     if (!isConnected) { 
-      debugPrint('âš ï¸ SOS Emit failed: Reconnecting...');
+      debugPrint('⚠️ SOS Emit failed: Reconnecting...');
       reconnect(); 
       return; 
     }
     _socket?.emitWithAck('triggerSOS', data, ack: (response) {
-      debugPrint('ðŸ†˜ SOS ACK: $response');
+      debugPrint('🆘 SOS ACK: $response');
     });
   }
 
   void emitTripEnd(String busId) {
     if (_socket == null || !_socket!.connected) {
-      debugPrint('âš ï¸ Cannot emit tripEnd: Socket not connected');
+      debugPrint('⚠️ Cannot emit tripEnd: Socket not connected');
       return;
     }
     _socket?.emit('tripEnd', {'busId': busId});
-    debugPrint('ðŸ Emitted tripEnd for Bus $busId');
+    debugPrint('🏁 Emitted tripEnd for Bus $busId');
   }
 
   void emitNotification(Map<String, dynamic> data) =>
       _socket?.emit('managerBroadcast', data);
 
-  // â”€â”€â”€ Cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Cleanup ─────────────────────────────────────────────────────────────
 
   @override
   void dispose() {

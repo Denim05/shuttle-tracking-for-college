@@ -1,10 +1,10 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/bus_model.dart';
 import 'socket_service.dart';
 import 'notification_service.dart';
 
-// â”€â”€â”€ Notification Model â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Notification Model ──────────────────────────────────────────────────────
 
 class LiveNotification {
   final String id;
@@ -33,15 +33,15 @@ class LiveNotification {
   }
 }
 
-// â”€â”€â”€ Bus Store â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Bus Store ───────────────────────────────────────────────────────────────
 
 /// Central real-time bus state for SISTecChalo.
 ///
 /// - Holds `Map<String, Bus>` keyed by bus ID
 /// - Listens to socket `busLocationUpdate` events
-/// - Merges updates â€” no full-list replacement, zero UI flicker
-/// - Auto-purges stale buses (no update > 120s) â†’ marked Offline
-/// - Exposes [activeBuses] â€” online buses updated recently
+/// - Merges updates — no full-list replacement, zero UI flicker
+/// - Auto-purges stale buses (no update > 120s) → marked Offline
+/// - Exposes [activeBuses] — online buses updated recently
 /// - Emits geofence approach events via [approachStream]
 /// - Holds live [notifications] list with [unreadCount] badge
 class BusStore extends ChangeNotifier {
@@ -52,7 +52,7 @@ class BusStore extends ChangeNotifier {
     _startStalePurge();
   }
 
-  // â”€â”€â”€ State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── State ──────────────────────────────────────────────────────────────
 
   final Map<String, Bus> _buses = {};
   final List<LiveNotification> _notifications = [];
@@ -64,7 +64,7 @@ class BusStore extends ChangeNotifier {
   static const int _staleSecs = 120;
   static const int _maxNotifications = 100;
 
-  // â”€â”€â”€ Public Getters â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Public Getters ─────────────────────────────────────────────────────
 
   List<Bus> get allBuses => _buses.values.toList();
 
@@ -124,7 +124,7 @@ class BusStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  // â”€â”€â”€ Seeding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Seeding ────────────────────────────────────────────────────────────
 
   void seedBuses(List<dynamic> json) {
     for (final item in json) {
@@ -136,7 +136,7 @@ class BusStore extends ChangeNotifier {
     notifyListeners();
   }
 
-  // â”€â”€â”€ Socket Listeners â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Socket Listeners ────────────────────────────────────────────────────
 
   void _initListeners() {
     _socketService.listenToBusUpdates(_onBusUpdate);
@@ -196,7 +196,7 @@ class BusStore extends ChangeNotifier {
         _notifications.removeRange(_maxNotifications, _notifications.length);
       }
       
-      // ðŸš¨ Trigger local notification for broadcast message
+      // 🚨 Trigger local notification for broadcast message
       NotificationService().showNotification(
         title: 'New Update',
         body: n.message,
@@ -208,7 +208,7 @@ class BusStore extends ChangeNotifier {
     }
   }
 
-  // â”€â”€â”€ Stale Purge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Stale Purge ────────────────────────────────────────────────────────
 
   void _startStalePurge() {
     _purgeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
@@ -244,7 +244,7 @@ class BusStore extends ChangeNotifier {
     });
   }
 
-  // â”€â”€â”€ Cleanup â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ─── Cleanup ─────────────────────────────────────────────────────────────
 
   @override
   void dispose() {
@@ -254,7 +254,7 @@ class BusStore extends ChangeNotifier {
   }
 }
 
-// â”€â”€â”€ Approach Event â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Approach Event ──────────────────────────────────────────────────────────
 
 class BusApproachEvent {
   final String   busId;

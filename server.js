@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
@@ -62,23 +62,23 @@ app.use('/api/', limiter);
 const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/sistecChalo';
 const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/sistecChalo$1');
 
-console.log(`ðŸ“¡ [DB] Connecting to Cluster... (Target Database: SISTecChalo)`);
-console.log(`ðŸ“¡ [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****:****@')}`);
+console.log(`📡 [DB] Connecting to Cluster... (Target Database: SISTecChalo)`);
+console.log(`📡 [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****:****@')}`);
 
 mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' })
     .then(async () => {
         const dbName = mongoose.connection.name;
-        process.stdout.write(`\n\x1b[32mâœ… [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
-        process.stdout.write(`\x1b[32mâœ… [DB] ACTIVE DATABASE: ${dbName}\x1b[0m\n`);
-        console.log(`âœ… MongoDB Connected! Database: ${dbName}`);
+        process.stdout.write(`\n\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
+        process.stdout.write(`\x1b[32m✅ [DB] ACTIVE DATABASE: ${dbName}\x1b[0m\n`);
+        console.log(`✅ MongoDB Connected! Database: ${dbName}`);
         // Auto-seed real SGI routes on first boot if DB is empty
         await autoSeedRoutes();
     })
     .catch(err => {
-        console.error('âŒ MongoDB Connection Error:', err);
+        console.error('❌ MongoDB Connection Error:', err);
     });
 
-// â”€â”€â”€ Auto-Seed: Seeds all 13 real Sagar Group of Institutions routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Auto-Seed: Seeds all 13 real Sagar Group of Institutions routes ──────────
 // Only runs if the Route collection is empty (safe to deploy multiple times)
 async function autoSeedRoutes() {
     try {
@@ -86,10 +86,10 @@ async function autoSeedRoutes() {
         const Bus   = require('./models/Bus');
         const count = await Route.countDocuments();
         if (count > 0) {
-            console.log(`ðŸ—‚ï¸  [SEED] ${count} routes already exist â€” skipping auto-seed.`);
+            console.log(`🗂️  [SEED] ${count} routes already exist — skipping auto-seed.`);
             return;
         }
-        console.log('ðŸŒ± [SEED] No routes found â€” seeding real SGI bus routes...');
+        console.log('🌱 [SEED] No routes found — seeding real SGI bus routes...');
 
         const SGI_ROUTES = [
             { busNo:'01', vehicle:'MP04 PA 3497', name:'Gandinagar Route',              color:'#6C63FF', driver:'Ghanshyam Nagar',       stops:['Gandinagar','Pul Bogda','Roshanpura','Manavseva Square','Bharat Mata Square','Ashoka Garden Chouraha','Nehru Nagar','Ratibad Campus'] },
@@ -128,11 +128,11 @@ async function autoSeedRoutes() {
                 etas: [],
                 lastUpdated: new Date(),
             });
-            console.log(`  âœ… [SEED] Bus ${r.busNo}: ${r.name}`);
+            console.log(`  ✅ [SEED] Bus ${r.busNo}: ${r.name}`);
         }
-        console.log(`ðŸŽ‰ [SEED] Done! Seeded ${SGI_ROUTES.length} routes & buses.`);
+        console.log(`🎉 [SEED] Done! Seeded ${SGI_ROUTES.length} routes & buses.`);
     } catch (err) {
-        console.error('âŒ [SEED] Auto-seed failed:', err.message);
+        console.error('❌ [SEED] Auto-seed failed:', err.message);
     }
 }
 
@@ -183,13 +183,13 @@ const broadcastStats = async () => {
  * @returns {Object} JSON response with JWT token and user details.
  */
 app.post('/api/auth/login', async (req, res) => {
-    console.log(`ðŸ“¡ [Auth] Login request: ${JSON.stringify(req.body)}`);
+    console.log(`📡 [Auth] Login request: ${JSON.stringify(req.body)}`);
     const username = req.body.username?.trim();
     const password = req.body.password;
     const role = req.body.role?.trim();
     
     if (role) {
-        console.log(`ðŸ” [Auth] Role: ${JSON.stringify(role)} (Length: ${role.length})`);
+        console.log(`🔍 [Auth] Role: ${JSON.stringify(role)} (Length: ${role.length})`);
     }
     
     console.time('LoginRequest');
@@ -214,17 +214,17 @@ app.post('/api/auth/login', async (req, res) => {
         // Find user case-insensitively
         const query = { username: { $regex: new RegExp(`^${username}$`, 'i') } };
         user = await Model.findOne(query);
-        console.log(`ðŸ” [Auth] Collection: ${Model.collection.name} | Query: ${JSON.stringify(query)} | Resolved: ${user?.username || 'none'}`);
+        console.log(`🔍 [Auth] Collection: ${Model.collection.name} | Query: ${JSON.stringify(query)} | Resolved: ${user?.username || 'none'}`);
         
         if (!user) {
-            console.log(`âŒ [Auth] User ${username} not found in ${Model.collection.name} collection`);
+            console.log(`❌ [Auth] User ${username} not found in ${Model.collection.name} collection`);
             console.timeEnd('LoginRequest');
             return res.status(400).json({ error: 'User not found' });
         }
 
         // Validate Password
         const isMatch = await argon2.verify(user.password, password);
-        console.log(`ðŸ” [Auth] Password match result for ${username}: ${isMatch}`);
+        console.log(`🔐 [Auth] Password match result for ${username}: ${isMatch}`);
         
         if (!isMatch) {
             console.timeEnd('LoginRequest');
@@ -257,7 +257,7 @@ app.post('/api/auth/login', async (req, res) => {
         console.timeEnd('LoginRequest');
 
     } catch (err) {
-        console.error('âŒ Login Error:', err);
+        console.error('❌ Login Error:', err);
         console.timeEnd('LoginRequest');
         res.status(500).json({ error: 'Server error' });
     }
@@ -478,7 +478,7 @@ app.post('/api/manager/notifications', async (req, res) => {
         // Emit both notification (for history) and systemAlert (for live pop-ups)
         io.emit('notification', newNotification);
         io.emit('systemAlert', { message, type: type || 'info', timestamp: new Date().toISOString() });
-        console.log(`ðŸ“¢ [Manager Broadcast] "${message}"`);
+        console.log(`📢 [Manager Broadcast] "${message}"`);
         res.json({ success: true, notification: newNotification });
     } catch (_err) {
         res.status(500).json({ error: 'Failed to broadcast notification' });
@@ -509,10 +509,10 @@ app.get('/api/alerts', async (req, res) => {
 app.get('/api/manager/users', authMiddleware, async (req, res) => {
     try {
         const users = await User.find().select('-password');
-        console.log(`ðŸ“¦ Sending ${users.length} users to Manager`);
+        console.log(`📦 Sending ${users.length} users to Manager`);
         res.json(users);
     } catch (err) {
-        console.error('âŒ Error fetching manager users:', err);
+        console.error('❌ Error fetching manager users:', err);
         res.status(500).json({ error: 'Failed to fetch users' });
     }
 });
@@ -542,10 +542,10 @@ app.put('/api/users/profile', authMiddleware, async (req, res) => {
 app.get('/api/manager/drivers', authMiddleware, async (req, res) => {
     try {
         const drivers = await Driver.find();
-        console.log(`ðŸ“¦ Sending ${drivers.length} drivers to Manager`);
+        console.log(`📦 Sending ${drivers.length} drivers to Manager`);
         res.json(drivers);
     } catch (err) {
-        console.error('âŒ Error fetching manager drivers:', err);
+        console.error('❌ Error fetching manager drivers:', err);
         res.status(500).json({ error: 'Failed to fetch drivers' });
     }
 });
@@ -581,13 +581,13 @@ const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
  * Handles continuous location updates from buses and broadcasts them.
  */
 io.on('connection', (socket) => {
-    console.log('ðŸ”Œ New Client Connected:', socket.id);
+    console.log('🔌 New Client Connected:', socket.id);
 
     // Send initial stats to the newly connected client
     broadcastStats();
 
     socket.on('triggerSOS', async (data) => {
-        console.log('ðŸš¨ \x1b[31mACTIVE SOS EMERGENCY RECEIVED\x1b[0m:', data);
+        console.log('🚨 \x1b[31mACTIVE SOS EMERGENCY RECEIVED\x1b[0m:', data);
         
         try {
             const newAlert = new Alert({
@@ -612,15 +612,15 @@ io.on('connection', (socket) => {
     });
 
     socket.on('locationUpdate', async (data) => {
-        // â”€â”€ Immediate arrival log (always visible, even on DB error) â”€â”€
+        // ── Immediate arrival log (always visible, even on DB error) ──
         const incomingBusId = (data.busId || data.id || data._id || '').toString();
         const incomingSpeed = (data.speed !== undefined ? Number(data.speed) : 0).toFixed(1);
-        console.log(`\nðŸ“ [LOCATION RECEIVED] BusID: ${incomingBusId} | Driver: ${data.driverId || 'N/A'} | Lat: ${data.latitude} | Lng: ${data.longitude} | Speed: ${incomingSpeed} KM/H`);
+        console.log(`\n📍 [LOCATION RECEIVED] BusID: ${incomingBusId} | Driver: ${data.driverId || 'N/A'} | Lat: ${data.latitude} | Lng: ${data.longitude} | Speed: ${incomingSpeed} KM/H`);
 
         try {
             let busId = incomingBusId;
             if (!busId) {
-                console.log('âš ï¸ [LOCATION] No busId in payload â€” ignoring.');
+                console.log('⚠️ [LOCATION] No busId in payload — ignoring.');
                 return;
             }
 
@@ -631,7 +631,7 @@ io.on('connection', (socket) => {
                 bus = await Bus.findOne({ driverId: data.driverId });
                 if (bus) {
                     busId = bus._id.toString();
-                    console.log(`ðŸ”„ Fallback: Matched Driver ${data.driverId} to Bus ${busId}`);
+                    console.log(`🔄 Fallback: Matched Driver ${data.driverId} to Bus ${busId}`);
                 }
             }
 
@@ -686,7 +686,7 @@ io.on('connection', (socket) => {
                                     minutes: minutes,
                                     message: alertMessage
                                 });
-                                console.log(`ðŸ“ Geofence Alert: ${alertMessage}`);
+                                console.log(`📍 Geofence Alert: ${alertMessage}`);
                             }
                         }
                         etas.push({ stopName: stop.name, minutes: minutes });
@@ -718,13 +718,13 @@ io.on('connection', (socket) => {
             };
 
             socket.broadcast.emit('busLocationUpdate', broadcastData);
-            console.log(`âœ… [TRACKING SAVED] Bus ${bus.busNumber || bus.routeName || busId} | ${bus.status} | Speed: ${speed.toFixed(1)} KM/H | Route: ${bus.routeName || 'None'}`);
+            console.log(`✅ [TRACKING SAVED] Bus ${bus.busNumber || bus.routeName || busId} | ${bus.status} | Speed: ${speed.toFixed(1)} KM/H | Route: ${bus.routeName || 'None'}`);
         } catch (err) {
-            console.error('âŒ [TRACKING ERROR] locationUpdate handler failed:', err.message);
+            console.error('❌ [TRACKING ERROR] locationUpdate handler failed:', err.message);
         }
     });
 
-    // â”€â”€ Manager Broadcast via socket â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Manager Broadcast via socket ─────────────────────────────────────────
     socket.on('managerBroadcast', async (data) => {
         const message = data?.message || data?.toString() || '';
         if (!message) return;
@@ -733,13 +733,13 @@ io.on('connection', (socket) => {
             await newNotification.save();
             socket.broadcast.emit('notification', newNotification);
             socket.broadcast.emit('systemAlert', { message, type: data.type || 'info', timestamp: new Date().toISOString() });
-            console.log(`ðŸ“¢ [Socket Broadcast] "${message}"`);
+            console.log(`📢 [Socket Broadcast] "${message}"`);
         } catch (_e) {
             socket.broadcast.emit('systemAlert', { message, type: 'info', timestamp: new Date().toISOString() });
         }
     });
 
-    // â”€â”€ Latency ping/pong â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Latency ping/pong ────────────────────────────────────────────────────
     socket.on('ping', () => socket.emit('pong'));
 
     socket.on('disconnect', () => {
@@ -815,8 +815,8 @@ app.post('/api/manager/seed', async (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\nðŸš€ Server running on port ${PORT}`);
-    console.log(`ðŸ“¡ Socket.io ready for connections`);
+    console.log(`\n🚀 Server running on port ${PORT}`);
+    console.log(`📡 Socket.io ready for connections`);
 });
 
 

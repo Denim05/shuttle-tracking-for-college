@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -40,7 +40,7 @@ class _UserDashboardState extends State<UserDashboard> {
   final List<Map<String, dynamic>> _alertHistory = [];
   bool _isSosActive = false;
 
-  // â”€â”€ New Feature State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── New Feature State ──────────────────────────────────────────────────────
   int? _etaMinutes;          // ETA to user's assigned pickup stop
   bool _etaLoading = false;
   bool _delaySubscribed = false; // Whether user subscribed to delay alerts
@@ -125,7 +125,7 @@ class _UserDashboardState extends State<UserDashboard> {
       }
     });
 
-    // â”€â”€ Delay alert listener (new) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    // ── Delay alert listener (new) ──────────────────────────────────────────
     socketService.listenToBusDelayed((data) {
       if (!mounted) return;
       final auth = Provider.of<AuthService>(context, listen: false);
@@ -135,7 +135,7 @@ class _UserDashboardState extends State<UserDashboard> {
       if (data['routeId'] == myRouteId) {
         final msg = data['message'] ?? 'Your bus is running late.';
         NotificationService().showNotification(
-          title: 'âš ï¸ Bus Delay Alert',
+          title: '⚠️ Bus Delay Alert',
           body: msg,
         );
         ScaffoldMessenger.of(context).showSnackBar(
@@ -190,7 +190,7 @@ class _UserDashboardState extends State<UserDashboard> {
         setState(() => _delaySubscribed = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('âœ… You will be notified if the bus is late!'),
+            content: const Text('✅ You will be notified if the bus is late!'),
             backgroundColor: const Color(0xFF2D5BFF),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -224,7 +224,7 @@ class _UserDashboardState extends State<UserDashboard> {
     
     return Consumer<BusStore>(
       builder: (context, busStore, _) {
-        // Compute active bus inline â€” always fresh on every BusStore rebuild
+        // Compute active bus inline — always fresh on every BusStore rebuild
         if (_selectedRoute != null) {
           final busesOnRoute = busStore.allBuses
               .where((b) => b.routeId == _selectedRoute!.id)
@@ -256,7 +256,7 @@ class _UserDashboardState extends State<UserDashboard> {
                         color: Colors.redAccent.withOpacity(0.8),
                         child: Center(
                           child: Text(
-                            'ðŸ“¡ SYNCHRONIZING Tracker...',
+                            '📡 SYNCHRONIZING Tracker...',
                             style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                           ),
                         ),
@@ -410,7 +410,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       const SizedBox(width: 5),
                       Flexible(
                         child: Text(
-                          _selectedRoute?.name ?? 'Tap â‡„ to select route',
+                          _selectedRoute?.name ?? 'Tap ⇄ to select route',
                           style: GoogleFonts.plusJakartaSans(
                             color: _selectedRoute != null ? Colors.blueAccent : Colors.white30,
                             fontSize: 10,
@@ -443,7 +443,7 @@ class _UserDashboardState extends State<UserDashboard> {
               onTap: () {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('âš ï¸ Hold down to send Emergency SOS!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                    content: Text('⚠️ Hold down to send Emergency SOS!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
                     backgroundColor: Colors.redAccent,
                     behavior: SnackBarBehavior.floating,
                     duration: const Duration(seconds: 2),
@@ -1054,7 +1054,7 @@ class _UserDashboardState extends State<UserDashboard> {
         ]),
         if (!auth.isGuest) ...[
           const SizedBox(height: 24),
-          // â”€â”€ Account / Security â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Account / Security ─────────────────────────────────────────────
           _buildProfileSection('ACCOUNT', [
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -1131,7 +1131,7 @@ class _UserDashboardState extends State<UserDashboard> {
               if (mounted) {
                 nav.pop();
                 messenger.showSnackBar(SnackBar(
-                  content: const Text('âœ… Password changed successfully!'),
+                  content: const Text('✅ Password changed successfully!'),
                   backgroundColor: const Color(0xFF38EF7D),
                   behavior: SnackBarBehavior.floating,
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),

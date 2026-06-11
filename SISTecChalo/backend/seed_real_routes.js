@@ -1,4 +1,4 @@
-﻿/**
+/**
  * seed_real_routes.js
  * Seeds the SISTecChalo DB with ALL latest real routes parsed from:
  * "Bus Route And schedule collage.pdf" (May 2026 Timings)
@@ -17,7 +17,7 @@ const argon2   = require('argon2');
 const rawUri = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_user:Denim123@cluster0.xn7pkoa.mongodb.net/sistecChalo';
 const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/sistecChalo$1').replace(/^(mongodb(?:\+srv)?:\/\/[^/]+)$/, '$1/sistecChalo');
 
-// â”€â”€â”€ Route definitions from PDF (May 2026 Update) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─── Route definitions from PDF (May 2026 Update) ────────────────────────────
 const ROUTES = [
   {
     busNo: '01',
@@ -653,22 +653,22 @@ const RATIBAD = { lat: 23.1270, lng: 77.3494 };
 
 async function seed(shouldDisconnect = true) {
   if (mongoose.connection.readyState !== 1) {
-    console.log('ðŸ”Œ Connecting to MongoDB (SISTecChalo)...');
+    console.log('🔌 Connecting to MongoDB (SISTecChalo)...');
     await mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' });
-    console.log(`âœ… Connected to: ${mongoose.connection.name}`);
+    console.log(`✅ Connected to: ${mongoose.connection.name}`);
   } else {
-    console.log('ðŸ”Œ MongoDB is already connected, reusing connection...');
+    console.log('🔌 MongoDB is already connected, reusing connection...');
   }
 
   // Clear existing routes, buses, and drivers
   await Route.deleteMany({});
   await Bus.deleteMany({});
   await Driver.deleteMany({});
-  console.log('ðŸ§¹ Cleared existing routes, buses, and drivers');
+  console.log('🧹 Cleared existing routes, buses, and drivers');
 
   const defaultPassword = process.env.DEFAULT_SEED_PASSWORD || '123456';
   const hashedPassword = await argon2.hash(defaultPassword);
-  console.log(`ðŸ”‘ Generated Argon2 hash for driver default password: "${defaultPassword}"`);
+  console.log(`🔑 Generated Argon2 hash for driver default password: "${defaultPassword}"`);
 
   // Sort the raw ROUTES array by bus number before seeding
   ROUTES.sort((a, b) => {
@@ -722,7 +722,7 @@ async function seed(shouldDisconnect = true) {
       name: finalRouteName,
       color: r.color,
       stops: stopsWithNames,
-      coordinates: [], // Empty â€” no fake polyline
+      coordinates: [], // Empty — no fake polyline
     });
 
     // Create driver
@@ -766,19 +766,19 @@ async function seed(shouldDisconnect = true) {
     driver.assignedBus = bus._id.toString();
     await driver.save();
 
-    console.log(`âœ… Bus, Driver & Dedicated Route ${r.busNo} (${username}): ${route.name} (${r.stops.length} stops)`);
+    console.log(`✅ Bus, Driver & Dedicated Route ${r.busNo} (${username}): ${route.name} (${r.stops.length} stops)`);
   }
 
-  console.log(`\nðŸŽ‰ Seeded ${ROUTES.length} unique routes, buses and drivers successfully!`);
+  console.log(`\n🎉 Seeded ${ROUTES.length} unique routes, buses and drivers successfully!`);
   if (shouldDisconnect) {
     await mongoose.disconnect();
-    console.log('ðŸ”Œ Disconnected from MongoDB');
+    console.log('🔌 Disconnected from MongoDB');
   }
 }
 
 if (require.main === module) {
   seed(true).catch(err => {
-    console.error('âŒ Seed failed:', err);
+    console.error('❌ Seed failed:', err);
     mongoose.disconnect();
     process.exit(1);
   });

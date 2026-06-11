@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const mongoose = require('mongoose');
 const argon2 = require('argon2');
 
@@ -148,7 +148,7 @@ async function seedAll() {
     console.log('Connected to MongoDB');
 
     // 1. CLEAR DATABASE
-    console.log('ðŸ§¹ Clearing existing data...');
+    console.log('🧹 Clearing existing data...');
     await Promise.all([
       Admin.deleteMany({}),
       Manager.deleteMany({}),
@@ -160,7 +160,7 @@ async function seedAll() {
     ]);
 
     // 2. CREATE ADMINS/MANAGERS/DRIVERS
-    console.log('ðŸ‘¤ Creating Administrative Users...');
+    console.log('👤 Creating Administrative Users...');
     const passwordHash = await argon2.hash('123456');
 
     await Admin.create({ username: 'admin', password: passwordHash, email: 'admin@SISTecChalo.edu' });
@@ -182,11 +182,11 @@ async function seedAll() {
     ]);
 
     // 3. CREATE ROUTES
-    console.log('ðŸ›£ï¸ Creating Routes...');
+    console.log('🛣️ Creating Routes...');
     const routeDocs = await Route.insertMany(MOCK_ROUTES);
     
     // 4. CREATE USERS
-    console.log('ðŸ‘¤ Creating Users...');
+    console.log('👤 Creating Users...');
     // Assign specific route to 'student' for testing notifications
     const firstRoute = routeDocs[0];
     await User.create({
@@ -224,7 +224,7 @@ async function seedAll() {
     const getRouteId = (name) => routeDocs.find(r => r.name === name)?._id;
 
     // 4. CREATE BUSES
-    console.log('ðŸšŒ Creating Buses...');
+    console.log('🚌 Creating Buses...');
     const drivers = await Driver.find({});
     const busesWithIds = MOCK_BUSES.map((bus, index) => ({
       ...bus,
@@ -234,7 +234,7 @@ async function seedAll() {
     await Bus.insertMany(busesWithIds);
 
     // 5. CREATE STUDENTS
-    console.log('ðŸŽ“ Creating Students...');
+    console.log('🎓 Creating Students...');
     // Assign random route to students
     const studentsWithRoutes = MOCK_STUDENTS.map(s => ({
       ...s,
@@ -242,7 +242,7 @@ async function seedAll() {
     }));
     await Student.insertMany(studentsWithRoutes);
 
-    console.log('âœ¨ Seed All Complete!');
+    console.log('✨ Seed All Complete!');
     console.log('   - Admin: admin / 123456');
     console.log('   - Manager: manager / 123456');
     console.log('   - Driver: driver / 123456');
@@ -250,7 +250,7 @@ async function seedAll() {
 
     process.exit(0);
   } catch (err) {
-    console.error('âŒ Seeding Failed:', err);
+    console.error('❌ Seeding Failed:', err);
     process.exit(1);
   }
 }

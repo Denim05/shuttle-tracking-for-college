@@ -1,4 +1,4 @@
-﻿require('dotenv').config();
+require('dotenv').config();
 const mongoose = require('mongoose');
 const Route = require('./models/Route');
 const Bus = require('./models/Bus');
@@ -42,16 +42,16 @@ const MOCK_ROUTES = [
 
 mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' })
   .then(async () => {
-    console.log('âœ… Connected to MongoDB for Pulse Seeding...');
+    console.log('✅ Connected to MongoDB for Pulse Seeding...');
 
     // Clear existing data
     await Route.deleteMany({});
     await Bus.deleteMany({});
-    console.log('ðŸ—‘ï¸  Cleared old data');
+    console.log('🗑️  Cleared old data');
 
     // Insert Routes
     const seededRoutes = await Route.insertMany(MOCK_ROUTES);
-    console.log(`ðŸŒ± Seeded ${seededRoutes.length} Pulse Routes successfully!`);
+    console.log(`🌱 Seeded ${seededRoutes.length} Pulse Routes successfully!`);
 
     // Insert Mock Buses for the first few routes
     const mockBuses = seededRoutes.map(route => ({
@@ -67,12 +67,12 @@ mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' })
     }));
 
     await Bus.insertMany(mockBuses);
-    console.log(`ðŸšŒ Seeded ${mockBuses.length} Pulse Buses successfully!`);
+    console.log(`🚌 Seeded ${mockBuses.length} Pulse Buses successfully!`);
 
     mongoose.connection.close();
   })
   .catch(err => {
-    console.error('âŒ Error seeding database:', err);
+    console.error('❌ Error seeding database:', err);
     mongoose.connection.close();
   });
 

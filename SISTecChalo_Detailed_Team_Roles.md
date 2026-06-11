@@ -1,11 +1,11 @@
-﻿# ðŸ› ï¸ SISTecChalo: Technical Roles & Responsibilities Matrix
-## ðŸ“‹ Detailed 7-Member Team Execution Guide
+# 🛠️ SISTecChalo: Technical Roles & Responsibilities Matrix
+## 📋 Detailed 7-Member Team Execution Guide
 
 This document provides a granular breakdown of the project modules (Frontend, Backend, Connectivity, and Mapping) assigned to each of the 7 team members.
 
 ---
 
-## 1. ðŸ‘‘ Project Manager & Full-Stack Team Leader
+## 1. 👑 Project Manager & Full-Stack Team Leader
 **Primary Module: Architectural Oversight & Integration**
 
 *   **Frontend Contribution:** Approves the UI/UX design tokens and ensures the Flutter widget tree is optimized for scalability.
@@ -16,7 +16,7 @@ This document provides a granular breakdown of the project modules (Frontend, Ba
 
 ---
 
-## 2. ðŸ“± Lead Frontend Developer (Flutter Architect)
+## 2. 📱 Lead Frontend Developer (Flutter Architect)
 **Primary Module: Core App Logic & State Management**
 
 *   **Frontend Tasks:** 
@@ -28,7 +28,7 @@ This document provides a granular breakdown of the project modules (Frontend, Ba
 
 ---
 
-## 3. âš™ï¸ Lead Backend Developer (Server Architect)
+## 3. ⚙️ Lead Backend Developer (Server Architect)
 **Primary Module: REST API & Business Logic**
 
 *   **Backend Tasks:**
@@ -40,7 +40,7 @@ This document provides a granular breakdown of the project modules (Frontend, Ba
 
 ---
 
-## 4. ðŸ—„ï¸ Database & Security Engineer
+## 4. 🗄️ Database & Security Engineer
 **Primary Module: Data Integrity & Cybersecurity**
 
 *   **Backend Tasks:**
@@ -52,7 +52,7 @@ This document provides a granular breakdown of the project modules (Frontend, Ba
 
 ---
 
-## 5. ðŸŽ¨ UI/UX Designer & Animation Specialist
+## 5. 🎨 UI/UX Designer & Animation Specialist
 **Primary Module: Visual Design & Interactive Elements**
 
 *   **Frontend Tasks:**
@@ -64,7 +64,7 @@ This document provides a granular breakdown of the project modules (Frontend, Ba
 
 ---
 
-## 6. ðŸ”Œ Connectivity & Real-Time Specialist
+## 6. 🔌 Connectivity & Real-Time Specialist
 **Primary Module: Socket.IO & Telemetry Stream**
 
 *   **Connectivity Tasks:**
@@ -76,7 +76,7 @@ This document provides a granular breakdown of the project modules (Frontend, Ba
 
 ---
 
-## 7. ðŸ—ºï¸ Mapping & GIS Engineer
+## 7. 🗺️ Mapping & GIS Engineer
 **Primary Module: Geospatial Visualization & Precision**
 
 *   **Mapping Tasks:**
@@ -88,7 +88,7 @@ This document provides a granular breakdown of the project modules (Frontend, Ba
 
 ---
 
-## ðŸ“Š Summary of Technical Coverage
+## 📊 Summary of Technical Coverage
 
 | Feature | Primary Responsible Member | Secondary Support |
 | :--- | :--- | :--- |

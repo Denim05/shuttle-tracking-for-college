@@ -1,4 +1,4 @@
-﻿# ðŸ“¡ SISTecChalo Connectivity & Data Flow Guide
+# 📡 SISTecChalo Connectivity & Data Flow Guide
 
 This document provides a comprehensive technical overview of how the **SISTecChalo** ecosystem connects, synchronizes, and manages real-time transit telemetry across its Distributed Architecture.
 
@@ -25,11 +25,11 @@ The tracking engine relies on a persistent TCP connection between the Flutter cl
 ### B. Core Socket Events
 | Event Name | Direction | Payload Description |
 | :--- | :--- | :--- |
-| `locationUpdate` | Driver â†’ Server â†’ User | Lat/Lng, Heading, Speed, BusID |
-| `busApproach` | Server â†’ User | Triggered when a bus is within 500m of user stop |
-| `systemAlert` | Manager â†’ Server â†’ All | High-priority text broadcast from management |
-| `sosAlert` | User/Driver â†’ Server â†’ Manager | Emergency coordinates and user details |
-| `busDelayed` | Server â†’ User | Triggered if a bus falls behind its scheduled ETA |
+| `locationUpdate` | Driver → Server → User | Lat/Lng, Heading, Speed, BusID |
+| `busApproach` | Server → User | Triggered when a bus is within 500m of user stop |
+| `systemAlert` | Manager → Server → All | High-priority text broadcast from management |
+| `sosAlert` | User/Driver → Server → Manager | Emergency coordinates and user details |
+| `busDelayed` | Server → User | Triggered if a bus falls behind its scheduled ETA |
 
 ---
 
@@ -63,7 +63,7 @@ Tracking is mission-critical; the app includes several guards against connectivi
 
 1.  **Connection Monitor**: `SocketService` uses a `ValueNotifier<bool>` to alert the UI when the internet drops.
 2.  **Auto-Reconnect**: Socket.io is configured with an exponential backoff strategy to reconnect as soon as signal returns.
-3.  **Synchronizing Overlay**: Users are visually notified when data is stale via a "ðŸ“¡ SYNCHRONIZING" banner.
+3.  **Synchronizing Overlay**: Users are visually notified when data is stale via a "📡 SYNCHRONIZING" banner.
 4.  **Heartbeat**: The Driver App sends a keep-alive pulse even when stationary to prevent the session from timing out.
 
 ---

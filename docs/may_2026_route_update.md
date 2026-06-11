@@ -1,4 +1,4 @@
-﻿# May 2026 Bus Routes, Buses, and Drivers Seeding Documentation
+# May 2026 Bus Routes, Buses, and Drivers Seeding Documentation
 
 This document explains the process, heuristics, and architecture behind the **May 2026 Bus Routes update** populated in the MongoDB database for **Sagar Group of Institutions, Ratibad, Bhopal**.
 
@@ -40,9 +40,9 @@ node verify_db_counts.js
 ```
 
 ### Confirmed Database Counts:
-* **Routes**: 30 / 30 (âœ… Match)
-* **Buses**: 30 / 30 (âœ… Match)
-* **Drivers**: 30 / 30 (âœ… Match)
+* **Routes**: 30 / 30 (✅ Match)
+* **Buses**: 30 / 30 (✅ Match)
+* **Drivers**: 30 / 30 (✅ Match)
 * **Integrity Audit**: 30 / 30 buses linked correctly back and forth.
 
 ---

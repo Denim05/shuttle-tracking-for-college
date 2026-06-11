@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'package:provider/provider.dart';
@@ -41,9 +41,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
   Timer? _heartbeatTimer;
   final ValueNotifier<DateTime?> _lastEmitTime = ValueNotifier<DateTime?>(null);
 
-  // â”€â”€ Speed smoothing constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Speed smoothing constants ──────────────────────────────────────────────
   static const double _emaAlpha = 0.3; // Exponential Moving Average factor
-  static const double _speedThresholdMps = 0.5; // min GPS speed to trust (0.5 m/s â‰ˆ 1.8 km/h)
+  static const double _speedThresholdMps = 0.5; // min GPS speed to trust (0.5 m/s ≈ 1.8 km/h)
 
   @override
   void initState() {
@@ -257,25 +257,25 @@ class _DriverDashboardState extends State<DriverDashboard> {
       (Position position) {
         if (!mounted) return;
         setState(() {
-          // â”€â”€ Session distance accumulation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Session distance accumulation ─────────────────────────────────
           double distMeters = 0;
           if (_prevPosition != null) {
             distMeters = Geolocator.distanceBetween(
               _prevPosition!.latitude, _prevPosition!.longitude,
               position.latitude, position.longitude,
             );
-            // Only count movement â‰¥ 2m to avoid GPS drift noise
+            // Only count movement ≥ 2m to avoid GPS drift noise
             if (distMeters >= 2.0) {
               _sessionDistanceKm += distMeters / 1000.0;
             }
           }
 
-          // â”€â”€ Speed calculation with multi-source fallback â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Speed calculation with multi-source fallback ──────────────────
           double rawSpeedKmH = 0.0;
 
           // Source 1: GPS chip speed (most accurate when moving)
           if (position.speed >= _speedThresholdMps) {
-            rawSpeedKmH = position.speed * 3.6; // m/s â†’ km/h
+            rawSpeedKmH = position.speed * 3.6; // m/s → km/h
           }
           // Source 2: Computed from distance/time delta (fallback)
           else if (distMeters >= 2.0 && _prevPosition != null && _prevPositionTime != null) {
@@ -290,12 +290,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
           // Clamp to realistic bus speeds (0 to 120 km/h)
           rawSpeedKmH = rawSpeedKmH.clamp(0.0, 120.0);
 
-          // â”€â”€ Exponential Moving Average smoothing â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Exponential Moving Average smoothing ──────────────────────────
           // Smooths out GPS jitter while staying responsive to speed changes
           _smoothedSpeedKmH = (_emaAlpha * rawSpeedKmH) + ((1 - _emaAlpha) * _smoothedSpeedKmH);
           _speedKmH = _smoothedSpeedKmH;
 
-          // â”€â”€ Update circular speed history buffer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+          // ── Update circular speed history buffer ──────────────────────────
           _recentSpeeds[_recentSpeedIndex % 15] = _speedKmH;
           _recentSpeedIndex++;
 
@@ -308,7 +308,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         _emitLocation();
       },
       onError: (dynamic err) {
-        debugPrint('âš ï¸ GPS stream error: $err');
+        debugPrint('⚠️ GPS stream error: $err');
       },
     );
 
@@ -328,7 +328,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         final socketService = Provider.of<SocketService>(context, listen: false);
         socketService.emitTripEnd(_selectedBusId!);
       } catch (e) {
-        debugPrint('âš ï¸ Could not emit tripEnd: $e');
+        debugPrint('⚠️ Could not emit tripEnd: $e');
       }
     }
 
@@ -370,7 +370,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       'timestamp': DateTime.now().toIso8601String(),
     });
     
-    debugPrint('ðŸ“¡ Emitted: Lat=${_currentPosition!.latitude.toStringAsFixed(5)}, Lng=${_currentPosition!.longitude.toStringAsFixed(5)}, Speed=${_speedKmH.toStringAsFixed(1)} KM/H');
+    debugPrint('📡 Emitted: Lat=${_currentPosition!.latitude.toStringAsFixed(5)}, Lng=${_currentPosition!.longitude.toStringAsFixed(5)}, Speed=${_speedKmH.toStringAsFixed(1)} KM/H');
   }
 
   @override
@@ -384,7 +384,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         builder: (context, isConnected, child) {
           return Stack(
             children: [
-              // Background Map â€” always visible, centered on driver GPS
+              // Background Map — always visible, centered on driver GPS
               _selectedRoute != null
                   ? BusMap(
                       buses: _buses.map((b) {
@@ -430,7 +430,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     color: Colors.redAccent.withOpacity(0.8),
                     child: Center(
                       child: Text(
-                        'ðŸ“¡ SYNCHRONIZING WITH COMMAND...',
+                        '📡 SYNCHRONIZING WITH COMMAND...',
                         style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
                       ),
                     ),
@@ -687,7 +687,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                             Icon(Icons.gps_fixed_rounded, color: Colors.white24, size: 10),
                             const SizedBox(width: 4),
                             Text(
-                              'GPS Â±${_currentPosition!.accuracy.toStringAsFixed(0)}m',
+                              'GPS ±${_currentPosition!.accuracy.toStringAsFixed(0)}m',
                               style: GoogleFonts.plusJakartaSans(
                                 color: _currentPosition!.accuracy < 10 ? const Color(0xFF00C853) : Colors.orangeAccent,
                                 fontSize: 9,
@@ -705,7 +705,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
             ],
           ),
           const SizedBox(height: 20),
-          // Speed history bars â€” fixed sorted order, most recent on right
+          // Speed history bars — fixed sorted order, most recent on right
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [

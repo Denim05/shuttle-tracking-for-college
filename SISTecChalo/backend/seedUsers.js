@@ -1,4 +1,4 @@
-﻿
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 const argon2 = require('argon2');
@@ -12,14 +12,14 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://denimhajare_db_use
 
 async function seedUsers() {
     try {
-        // ðŸ›¡ï¸ Safety Check: Prevent running in Production
+        // 🛡️ Safety Check: Prevent running in Production
         if (process.env.NODE_ENV === 'production') {
-            console.error('âŒ STOP! You are attempting to seed data in production. This will wipe the database.');
+            console.error('❌ STOP! You are attempting to seed data in production. This will wipe the database.');
             process.exit(1);
         }
 
         await mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' });
-        console.log('âœ… Connected to MongoDB');
+        console.log('✅ Connected to MongoDB');
 
         // Default Password Hash
         const defaultPassword = process.env.DEFAULT_SEED_PASSWORD || '123456';
@@ -34,7 +34,7 @@ async function seedUsers() {
             });
             await Admin.deleteMany({});
             await admin.save();
-            console.log(`ðŸ‘¤ Admin created: admin / ${defaultPassword}`);
+            console.log(`👤 Admin created: admin / ${defaultPassword}`);
         })();
 
         // 2. Create Manager
@@ -49,7 +49,7 @@ async function seedUsers() {
             });
             await Manager.deleteMany({});
             await manager.save();
-            console.log(`ðŸ‘¤ Manager created: manager / ${defaultPassword}`);
+            console.log(`👤 Manager created: manager / ${defaultPassword}`);
         })();
 
 
@@ -83,17 +83,17 @@ async function seedUsers() {
 
             await Promise.all(userPromises);
 
-            console.log(`ðŸ‘¤ Created ${allUsersData.length} Users with proper Pulse UIDs.`);
+            console.log(`👤 Created ${allUsersData.length} Users with proper Pulse UIDs.`);
         })();
 
         // Await all parallel operations
         await Promise.all([adminRequest, managerRequest, usersRequest]);
 
-        console.log('âœ¨ Seeding Complete!');
+        console.log('✨ Seeding Complete!');
         process.exit(0);
 
     } catch (err) {
-        console.error('âŒ Seeding Failed:', err);
+        console.error('❌ Seeding Failed:', err);
         process.exit(1);
     }
 }
