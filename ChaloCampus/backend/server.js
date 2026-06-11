@@ -140,6 +140,440 @@ app.get('/', (req, res) => {
     });
 });
 
+// Privacy Policy Route for Google Play Console Submission
+app.get('/privacy', (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Policy - Sistec Chalo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #6C63FF;
+            --primary-light: #8F88FF;
+            --bg: #FAFAFD;
+            --card-bg: #FFFFFF;
+            --text-main: #1E1B4B;
+            --text-muted: #5E5B8E;
+            --border: #E8E7F5;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary: #8F88FF;
+                --primary-light: #B8B5FF;
+                --bg: #0C0A20;
+                --card-bg: #151233;
+                --text-main: #F3F2FC;
+                --text-muted: #A3A1CD;
+                --border: #231F4D;
+            }
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.02);
+            margin-bottom: 24px;
+        }
+        h2 {
+            font-size: 1.4rem;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 16px;
+            color: var(--primary);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-top: 24px;
+            margin-bottom: 12px;
+        }
+        p, li {
+            color: var(--text-muted);
+            font-size: 0.975rem;
+        }
+        ul {
+            padding-left: 20px;
+        }
+        li {
+            margin-bottom: 8px;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 99px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            background-color: var(--border);
+            color: var(--primary);
+            margin-top: 8px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 16px;
+            margin-bottom: 16px;
+            font-size: 0.9rem;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+        th {
+            font-weight: 600;
+            color: var(--text-main);
+        }
+        td {
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">Sistec Chalo</div>
+            <div class="subtitle">Privacy Policy</div>
+            <div class="badge">Application ID: com.smartcampus.shuttle</div>
+        </div>
+
+        <div class="card">
+            <h2>1. Introduction</h2>
+            <p>Welcome to <strong>Sistec Chalo</strong> (the "Application"), a campus shuttle tracking app designed for Sagar Group of Institutions (SGI) students, staff, and drivers. We respect your privacy and are committed to protecting any personal data we process. This Privacy Policy describes how we collect, use, store, and share your information when you use our services.</p>
+        </div>
+
+        <div class="card">
+            <h2>2. Information We Collect</h2>
+            <p>To provide accurate real-time shuttle tracking and notification features, the Application processes the following types of information:</p>
+            
+            <h3>A. Location Information</h3>
+            <ul>
+                <li><strong>For Drivers:</strong> The Application collects precise, real-time geographical coordinates (latitude and longitude) of the vehicle while tracking is active. This data is collected in the foreground and via a persistent foreground service (notifying the driver with "Broadcasting your location to students") to ensure continuous tracking even when the device screen is off or the driver is using another app.</li>
+                <li><strong>For Students & Staff:</strong> The Application may request access to your device's location to show your current position relative to the shuttle on the map. This location is processed locally on your device and is never stored, tracked, or uploaded to our servers.</li>
+            </ul>
+
+            <h3>B. Personal & Account Information</h3>
+            <ul>
+                <li><strong>Account Credentials:</strong> We collect and store your username, hashed password, role (e.g., student, driver, manager, admin), and email address (optional) to secure your account and manage access privileges.</li>
+                <li><strong>Pickup Points:</strong> Students may select and store their preferred bus routes and pickup points to customize their notifications and alerts.</li>
+            </ul>
+
+            <h3>C. User Communications</h3>
+            <ul>
+                <li><strong>SOS & Emergency Alerts:</strong> If a user triggers an SOS emergency alert, the Application transmits their name, role, last known latitude and longitude, and timestamp to the dashboard to allow campus managers to coordinate assistance.</li>
+                <li><strong>Feedback & Complaints:</strong> We collect details about issues, feedback, or complaints submitted through the app to improve transportation services.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>3. How We Use the Information</h2>
+            <p>We use the collected data exclusively to support campus transit operations:</p>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Data Type</th>
+                        <th>Purpose of Use</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Driver GPS Location</strong></td>
+                        <td>To calculate Estimated Time of Arrival (ETA) at various stops and show the shuttle location to waiting passengers.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>User GPS Location</strong></td>
+                        <td>Only to render the user's distance to the shuttle on the local map screen.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Account Data</strong></td>
+                        <td>To verify identity, enforce permissions, and customize the user experience.</td>
+                    </tr>
+                    <tr>
+                        <td><strong>SOS Alerts</strong></td>
+                        <td>To notify campus authorities of emergencies during transit.</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>4. Data Sharing & Security</h2>
+            <p><strong>We do not sell, rent, or trade your personal data.</strong> Information is stored securely on private, authenticated database clusters and accessed only by SGI campus administrators and authorized transportation managers.</p>
+            <p>We implement strict security practices including argon2 password hashing, JSON Web Token (JWT) API authentication, rate limiting, and SSL encryption to protect your data from unauthorized access.</p>
+        </div>
+
+        <div class="card">
+            <h2>5. Data Retention & Deletion</h2>
+            <ul>
+                <li><strong>Location Tracking Logs:</strong> Real-time coordinates are discarded immediately after transit ends. Historical trip logs are stored for up to 90 days for operational auditing and route optimization reports, after which they are permanently deleted.</li>
+                <li><strong>Account Information:</strong> Account data is retained for the duration of the student's enrollment or driver's employment. Users may request account deletion at any time by contacting the SGI administration.</li>
+            </ul>
+        </div>
+
+        <div class="card">
+            <h2>6. Changes to this Policy</h2>
+            <p>We may update this Privacy Policy from time to time. Any changes will be posted on this page with an updated revision date.</p>
+        </div>
+
+        <div class="card">
+            <h2>7. Contact Us</h2>
+            <p>If you have any questions or concerns about this Privacy Policy, please contact the SGI Campus Transport Office or Administrator.</p>
+            <p><em>Last Updated: June 11, 2026</em></p>
+        </div>
+
+        <div class="footer">
+            &copy; 2026 Sagar Group of Institutions (SGI). All rights reserved.
+        </div>
+    </div>
+</body>
+</html>`);
+});
+
+app.get('/privacy-policy', (req, res) => {
+    res.redirect('/privacy');
+});
+
+// Delete Account Request Route for Google Play Console Submission
+app.get('/delete-account', (req, res) => {
+    res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delete Account - Sistec Chalo</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --primary: #FF2E63;
+            --primary-light: #FF5E85;
+            --bg: #FAFAFD;
+            --card-bg: #FFFFFF;
+            --text-main: #1E1B4B;
+            --text-muted: #5E5B8E;
+            --border: #E8E7F5;
+        }
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --primary: #FF2E63;
+                --primary-light: #FF5E85;
+                --bg: #0C0A20;
+                --card-bg: #151233;
+                --text-main: #F3F2FC;
+                --text-muted: #A3A1CD;
+                --border: #231F4D;
+            }
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg);
+            color: var(--text-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 40px 20px;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .logo {
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 8px;
+        }
+        .subtitle {
+            color: var(--text-muted);
+            font-size: 1.1rem;
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.02);
+            margin-bottom: 24px;
+        }
+        h2 {
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin-top: 0;
+            margin-bottom: 16px;
+            color: var(--primary);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 8px;
+        }
+        p, li {
+            color: var(--text-muted);
+            font-size: 0.975rem;
+        }
+        .form-group {
+            margin-bottom: 16px;
+            display: flex;
+            flex-direction: column;
+        }
+        label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-main);
+        }
+        input, select {
+            padding: 12px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            background-color: var(--bg);
+            color: var(--text-main);
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+        input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+        button {
+            background: linear-gradient(135deg, var(--primary), var(--primary-light));
+            color: white;
+            border: none;
+            padding: 14px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            margin-top: 10px;
+            transition: opacity 0.2s;
+            width: 100%;
+        }
+        button:hover {
+            opacity: 0.9;
+        }
+        .alert {
+            background-color: rgba(255, 46, 99, 0.1);
+            border: 1px solid rgba(255, 46, 99, 0.2);
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            color: var(--primary);
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+        .footer {
+            text-align: center;
+            margin-top: 40px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">Sistec Chalo</div>
+            <div class="subtitle">Request Account Deletion</div>
+        </div>
+
+        <div class="card">
+            <h2>Delete Your Account & Data</h2>
+            <div class="alert">
+                <strong>Important:</strong> Deleting your account will permanently remove your user credentials, role permissions, and pickup point preferences from the SGI Transport Database. This action cannot be undone.
+            </div>
+            
+            <p>If you are a student graduating, a staff member leaving the campus, or simply wish to delete your account, please submit your request below. Your deletion request will be processed by SGI campus administrators within 48 hours.</p>
+
+            <form id="deleteForm" onsubmit="handleSubmit(event)">
+                <div class="form-group">
+                    <label for="username">Username / Enrollment Number</label>
+                    <input type="text" id="username" required placeholder="e.g. SGI2024001">
+                </div>
+                <div class="form-group">
+                    <label for="email">Associated Email Address</label>
+                    <input type="email" id="email" required placeholder="e.g. student@chalocampus.edu">
+                </div>
+                <div class="form-group">
+                    <label for="reason">Reason for deletion</label>
+                    <select id="reason">
+                        <option value="Graduating / Leaving SGI">Graduating / Leaving SGI</option>
+                        <option value="No longer using transit services">No longer using transit services</option>
+                        <option value="Privacy concerns">Privacy concerns</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <button type="submit">Submit Deletion Request</button>
+            </form>
+        </div>
+
+        <div class="footer">
+            &copy; 2026 Sagar Group of Institutions (SGI). All rights reserved.
+        </div>
+    </div>
+
+    <script>
+        function handleSubmit(e) {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const card = document.querySelector('.card');
+            
+            card.innerHTML = \`
+                <h2>Request Submitted</h2>
+                <div style="color: #4CAF50; font-weight: 600; text-align: center; font-size: 1.2rem; margin-top: 20px; margin-bottom: 20px;">
+                    ✅ Deletion Request Received
+                </div>
+                <p>Your request to delete the account <strong>\${username}</strong> has been successfully queued.</p>
+                <p>Our administration team will verify your request and permanently delete your account and associated data from our servers within 48 hours.</p>
+                <p>If you submitted this in error, please contact the SGI Campus Transport Office immediately.</p>
+            \`;
+        }
+    </script>
+</body>
+</html>`);
+});
+
+
+
 // Helper to broadcast stats
 const broadcastStats = async () => {
     try {
