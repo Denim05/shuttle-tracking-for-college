@@ -1,11 +1,11 @@
 {
-    "name": "shuttle_tracking_flutter",
-    "short_name": "shuttle_tracking_flutter",
+    "name": "SISTecChalo",
+    "short_name": "SISTecChalo",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
     "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "description": "SISTecChalo - SmartCampus Shuttle Tracking.",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [
