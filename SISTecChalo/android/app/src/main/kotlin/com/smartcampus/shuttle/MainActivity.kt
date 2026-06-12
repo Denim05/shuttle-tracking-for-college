@@ -1,4 +1,4 @@
-package com.example.shuttle_tracking_flutter
+package com.smartcampus.shuttle
 
 import io.flutter.embedding.android.FlutterActivity
 
