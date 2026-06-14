@@ -16,19 +16,31 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 
-// Load Firebase service account key
-const serviceAccountPath = path.resolve(__dirname, 'firebase-service-account.json');
-if (fs.existsSync(serviceAccountPath)) {
+// Load Firebase service account credentials
+if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     try {
+        const credentials = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
         admin.initializeApp({
-            credential: admin.credential.cert(require(serviceAccountPath))
+            credential: admin.credential.cert(credentials)
         });
-        console.log('🔥 [Firebase] SDK Initialized successfully.');
+        console.log('🔥 [Firebase] SDK Initialized successfully via environment variable.');
     } catch (err) {
-        console.error('❌ [Firebase] SDK Initialization failed:', err.message);
+        console.error('❌ [Firebase] SDK Initialization via env failed:', err.message);
     }
 } else {
-    console.log('⚠️ [Firebase] Service Account JSON file not found at:', serviceAccountPath);
+    const serviceAccountPath = path.resolve(__dirname, 'firebase-service-account.json');
+    if (fs.existsSync(serviceAccountPath)) {
+        try {
+            admin.initializeApp({
+                credential: admin.credential.cert(require(serviceAccountPath))
+            });
+            console.log('🔥 [Firebase] SDK Initialized successfully via file.');
+        } catch (err) {
+            console.error('❌ [Firebase] SDK Initialization via file failed:', err.message);
+        }
+    } else {
+        console.log('⚠️ [Firebase] Service Account JSON not found (no env var or file). Background push notifications will be inactive.');
+    }
 }
 
 /**
