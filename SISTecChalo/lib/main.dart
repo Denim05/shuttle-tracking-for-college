@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'services/auth_service.dart';
 import 'services/socket_service.dart';
 import 'services/bus_store.dart';
@@ -18,6 +20,18 @@ import 'screens/driver_dashboard.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
+// ─── Background FCM Handler ──────────────────────────────────────────────────
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp();
+  } catch (e) {
+    debugPrint('⚠️ Error initializing Firebase in background: $e');
+  }
+  debugPrint('📩 Background message received: ${message.notification?.title}');
+}
+
 // ─── Entry Point ─────────────────────────────────────────────────────────────
 
 void main() async {
@@ -30,6 +44,14 @@ void main() async {
       DeviceOrientation.portraitUp,
       DeviceOrientation.portraitDown,
     ]);
+    
+    // Initialize Firebase
+    try {
+      await Firebase.initializeApp();
+      FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+    } catch (e) {
+      debugPrint('⚠️ Error initializing Firebase: $e');
+    }
   }
 
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(

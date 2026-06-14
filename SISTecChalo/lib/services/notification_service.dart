@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -41,6 +42,45 @@ class NotificationService {
     await flutterLocalNotificationsPlugin
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
         ?.createNotificationChannel(channel);
+
+    // Set up foreground message handler for FCM
+    FirebaseMessaging.onMessage.listen((RemoteMessage message) {
+      debugPrint('📩 Foreground FCM message: ${message.notification?.title}');
+      if (message.notification != null) {
+        showNotification(
+          id: message.hashCode,
+          title: message.notification!.title ?? 'SISTecChalo Alert',
+          body: message.notification!.body ?? '',
+        );
+      }
+    });
+  }
+
+  /// Request permissions and retrieve FCM token
+  Future<String?> getDeviceToken() async {
+    if (kIsWeb) return null;
+    try {
+      final NotificationSettings settings = await FirebaseMessaging.instance.requestPermission(
+        alert: true,
+        announcement: false,
+        badge: true,
+        carPlay: false,
+        criticalAlert: false,
+        provisional: false,
+        sound: true,
+      );
+
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        final String? token = await FirebaseMessaging.instance.getToken();
+        debugPrint('🔑 FCM Token retrieved: $token');
+        return token;
+      } else {
+        debugPrint('⚠️ FCM Notification permission denied or not granted.');
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error retrieving FCM Token: $e');
+    }
+    return null;
   }
 
   Future<void> showNotification({
