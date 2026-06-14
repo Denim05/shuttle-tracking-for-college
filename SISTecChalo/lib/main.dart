@@ -40,7 +40,11 @@ void main() async {
     systemNavigationBarIconBrightness: Brightness.light,
   ));
 
-  await NotificationService().init();
+  try {
+    await NotificationService().init();
+  } catch (e) {
+    debugPrint('⚠️ Error initializing NotificationService: $e');
+  }
 
   runApp(const SISTecChaloApp());
 }

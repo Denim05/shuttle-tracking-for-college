@@ -38,7 +38,7 @@ class ApiService {
   static const int _timeoutSecs = 20;
 
   final _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(encryptedSharedPreferences: false),
     webOptions: WebOptions(
       dbName: 'SISTecChalo_db',
       publicKey: 'SISTecChalo_key',
