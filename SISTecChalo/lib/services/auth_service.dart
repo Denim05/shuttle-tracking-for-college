@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -8,7 +8,7 @@ import '../models/user_model.dart';
 
 class AuthService with ChangeNotifier {
   final _storage = const FlutterSecureStorage(
-    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+    aOptions: AndroidOptions(encryptedSharedPreferences: false),
     webOptions: WebOptions(
       dbName: 'SISTecChalo_db',
       publicKey: 'SISTecChalo_key',
