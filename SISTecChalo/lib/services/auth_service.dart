@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/constants.dart';
 import '../models/user_model.dart';
+import 'notification_service.dart';
 
 class AuthService with ChangeNotifier {
   final _storage = const FlutterSecureStorage(
@@ -55,6 +56,9 @@ class AuthService with ChangeNotifier {
         
         await _storage.write(key: 'auth_token', value: _token);
         await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+        
+        // Background FCM Token Upload
+        _uploadFcmToken();
         
         _isAuthenticating = false;
         notifyListeners();
@@ -118,6 +122,9 @@ class AuthService with ChangeNotifier {
         _token = token;
         _currentUser = User.fromJson(jsonDecode(userDataStr));
         _isAuthenticated = true;
+        
+        // Background FCM Token Upload
+        _uploadFcmToken();
       }
     } catch (e) {
       // Ignored
@@ -168,6 +175,31 @@ class AuthService with ChangeNotifier {
       String msg = 'Failed to change password.';
       try { msg = jsonDecode(response.body)['error'] ?? msg; } catch (_) {}
       throw Exception(msg);
+    }
+  }
+
+  Future<void> _uploadFcmToken() async {
+    if (_token == null) return;
+    try {
+      final fcmToken = await NotificationService().getDeviceToken();
+      if (fcmToken == null) return;
+
+      final response = await http.post(
+        Uri.parse('${AppConstants.apiUrl}/users/fcm-token'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'token': fcmToken}),
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        debugPrint('🔑 [FCM] Token uploaded successfully.');
+      } else {
+        debugPrint('⚠️ [FCM] Failed to upload Token: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('⚠️ [FCM] Error uploading Token: $e');
     }
   }
 }

@@ -14,6 +14,22 @@ const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const admin = require('firebase-admin');
+
+// Load Firebase service account key
+const serviceAccountPath = path.resolve(__dirname, 'firebase-service-account.json');
+if (fs.existsSync(serviceAccountPath)) {
+    try {
+        admin.initializeApp({
+            credential: admin.credential.cert(require(serviceAccountPath))
+        });
+        console.log('🔥 [Firebase] SDK Initialized successfully.');
+    } catch (err) {
+        console.error('❌ [Firebase] SDK Initialization failed:', err.message);
+    }
+} else {
+    console.log('⚠️ [Firebase] Service Account JSON file not found at:', serviceAccountPath);
+}
 
 /**
  * Calculates real-time Estimated Time of Arrival (ETA) using Google Maps Distance Matrix API.
@@ -804,6 +820,30 @@ app.get('/api/users', async (req, res) => {
         res.json(users);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch users' });
+    }
+});
+
+// POST /api/users/fcm-token
+// Updates or stores the FCM push notification token for the logged-in user
+app.post('/api/users/fcm-token', authMiddleware, async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) {
+            return res.status(400).json({ error: 'Token is required' });
+        }
+        const updatedUser = await User.findByIdAndUpdate(
+            req.user.id,
+            { fcmToken: token },
+            { new: true }
+        );
+        if (!updatedUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        console.log(`🔑 [Firebase] FCM Token updated for user: ${updatedUser.username}`);
+        res.json({ success: true, user: { id: updatedUser.id, username: updatedUser.username } });
+    } catch (err) {
+        console.error('❌ FCM Token update error:', err);
+        res.status(500).json({ error: 'Failed to update FCM token' });
     }
 });
 
@@ -2200,6 +2240,53 @@ io.on('connection', (socket) => {
                                         minutes: minutes
                                     });
                                     console.log(`🔔 [GEOFENCE] Bus ${bus.busNumber} reached stop: ${stop.name}`);
+
+                                    // Send FCM push notifications to all users registered for this route
+                                    (async () => {
+                                        if (admin.apps.length > 0) {
+                                            try {
+                                                const targetUsers = await User.find({
+                                                    routeId: bus.routeId ? bus.routeId.toString() : null,
+                                                    proximityAlertsEnabled: true,
+                                                    fcmToken: { $ne: null }
+                                                });
+                                                const tokens = targetUsers.map(u => u.fcmToken).filter(Boolean);
+                                                if (tokens.length > 0) {
+                                                    const messagePayload = {
+                                                        notification: {
+                                                            title: `Bus Approaching: ${bus.routeName || 'Shuttle'}`,
+                                                            body: `Shuttle is approaching ${stop.name}. Estimated arrival: ${minutes} min.`
+                                                        },
+                                                        android: {
+                                                            priority: 'high',
+                                                            notification: {
+                                                                channelId: 'SISTecChalo_pulse_alerts',
+                                                                color: '#00F0FF',
+                                                                sound: 'default'
+                                                            }
+                                                        },
+                                                        tokens: tokens
+                                                    };
+                                                    const response = await admin.messaging().sendEachForMulticast(messagePayload);
+                                                    console.log(`🔥 [Firebase] Sent ${response.successCount} push notifications successfully.`);
+                                                    
+                                                    // Clean up invalid tokens
+                                                    response.responses.forEach((resp, idx) => {
+                                                        if (!resp.success) {
+                                                            const error = resp.error;
+                                                            if (error && (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered')) {
+                                                                const failedToken = tokens[idx];
+                                                                User.updateOne({ fcmToken: failedToken }, { $set: { fcmToken: null } }).exec()
+                                                                    .catch(err => console.error('Error cleaning stale token:', err.message));
+                                                            }
+                                                        }
+                                                    });
+                                                }
+                                            } catch (err) {
+                                                console.error('❌ [Firebase] Failed to send push notifications:', err.message);
+                                            }
+                                        }
+                                    })();
 
                                     // ── LIVE TRIP LOG: Record actual stop-reached time ──
                                     const alreadyRecorded = tripLog.reachedStops.some(rs => rs.stopName === stop.name);
