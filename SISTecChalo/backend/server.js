@@ -174,7 +174,7 @@ app.get('/', (req, res) => {
     res.json({
         status: 'SISTecChalo Backend Online',
         database: mongoose.connection.name,
-        version: '2.2.0-MAP-OPTIMIZED',
+        version: '2.4.0-RELEASE',
         timestamp: new Date().toISOString()
     });
 });
@@ -2926,6 +2926,90 @@ app.get('/api/manager/registrations', authMiddleware, async (req, res) => {
         res.json(submissions);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch registrations' });
+    }
+});
+
+// ── MANAGER: Bulk registration uploads ────────────────────────────────────
+app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => {
+    const { submissions } = req.body;
+    if (!submissions || !Array.isArray(submissions)) {
+        return res.status(400).json({ error: 'Submissions array is required.' });
+    }
+
+    try {
+        // Find or create active form
+        let form = await RegistrationForm.findOne({ isActive: true });
+        if (!form) {
+            form = await RegistrationForm.create({
+                title: 'Bulk Upload Form',
+                description: 'Auto-generated form for bulk uploaded manager registrations',
+                isActive: true,
+                createdBy: req.user.id
+            });
+        }
+
+        const routes = await Route.find({});
+        const results = [];
+        const errors = [];
+
+        for (let i = 0; i < submissions.length; i++) {
+            const item = submissions[i];
+            const { name, studentId, phone, email, routeName, pickupStop } = item;
+
+            if (!name || !studentId || !phone || !pickupStop) {
+                errors.push(`Row ${i + 1}: Name, Student ID, Phone, and Pickup Stop are required.`);
+                continue;
+            }
+
+            const cleanId = studentId.toString().trim();
+            // Check duplicates in submissions or users
+            const dupSub = await RegistrationSubmission.findOne({ studentId: cleanId });
+            const dupUser = await User.findOne({ username: cleanId });
+            if (dupSub || dupUser) {
+                errors.push(`Row ${i + 1} (${cleanId}): Record already exists in pending list or active users.`);
+                continue;
+            }
+
+            // Route matching: search for route name containing search text case-insensitively
+            let matchedRoute = null;
+            if (routeName) {
+                const search = routeName.toString().toLowerCase().replace(/[^a-z0-9]/g, '');
+                matchedRoute = routes.find(r => 
+                    r.name.toLowerCase().replace(/[^a-z0-9]/g, '').includes(search)
+                );
+            }
+
+            const finalRouteId = matchedRoute ? matchedRoute._id.toString() : (routes[0]?._id?.toString() || 'placeholder');
+            const finalRouteName = matchedRoute ? matchedRoute.name : (routeName || 'Unassigned');
+
+            const sub = await RegistrationSubmission.create({
+                formId: form._id,
+                name: name.toString().trim(),
+                studentId: cleanId,
+                phone: phone.toString().trim(),
+                email: email ? email.toString().trim() : undefined,
+                routeId: finalRouteId,
+                routeName: finalRouteName,
+                pickupStop: pickupStop.toString().trim(),
+                status: 'pending'
+            });
+
+            results.push(sub);
+        }
+
+        console.log(`🌱 [Bulk Upload] Imported ${results.length} registrations. Errors: ${errors.length}`);
+        
+        // Broadcast updates
+        await broadcastStats();
+
+        res.status(201).json({
+            success: true,
+            importedCount: results.length,
+            errors
+        });
+    } catch (err) {
+        console.error('Bulk upload processing failed:', err);
+        res.status(500).json({ error: 'Server error processing bulk upload' });
     }
 });
 

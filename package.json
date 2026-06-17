@@ -1,7 +1,7 @@
 {
   "name": "sistec-chalo",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "scripts": {
     "start": "expo start",
     "server": "node SISTecChalo/backend/server.js",
@@ -21,6 +21,7 @@
     "expo": "~54.0.33",
     "expo-asset": "~12.0.12",
     "expo-constants": "~18.0.12",
+    "expo-document-picker": "~14.0.8",
     "expo-file-system": "~19.0.21",
     "expo-font": "~14.0.10",
     "expo-haptics": "~15.0.8",

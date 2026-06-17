@@ -187,6 +187,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
         const newBus: Bus = {
             id: `bus-${busNumber}`,
+            busNumber: `Pvt ${busNumber}`,
             routeId: `route-${busNumber}`, // Placeholder or can be linked to dynamic route later
             routeName: `Bus ${busNumber}`,
             routeColor: busColor,
@@ -252,6 +253,7 @@ export const useAppStore = create<AppState>((set, get) => ({
                 
                 const mappedBuses: Bus[] = busesData.map((b: any) => ({
                     id: b._id,
+                    busNumber: b.busNumber || 'N/A',
                     routeId: b.routeId,
                     routeName: b.routeName,
                     routeColor: b.routeColor,
@@ -309,16 +311,39 @@ export const useAppStore = create<AppState>((set, get) => ({
                     set({ socketConnected: false });
                 });
 
-                socket.on('busLocationUpdate', (busData: Bus) => {
+                socket.on('busLocationUpdate', (busData: any) => {
                     set((state) => {
+                        const busId = busData._id || busData.id;
+                        if (!busId) return state;
+
                         // Check if bus exists
-                        const existingBusIndex = state.buses.findIndex(b => b.id === busData.id);
+                        const existingBusIndex = state.buses.findIndex(b => b.id === busId);
                         let newBuses = [...state.buses];
 
+                        const mappedBus: Bus = {
+                            id: busId,
+                            busNumber: busData.busNumber || 'N/A',
+                            routeId: busData.routeId,
+                            routeName: busData.routeName,
+                            routeColor: busData.routeColor,
+                            currentLat: busData.currentLat || busData.latitude,
+                            currentLng: busData.currentLng || busData.longitude,
+                            occupancyLevel: busData.occupancy || busData.occupancyLevel || 'Low',
+                            status: busData.status || 'On-time',
+                            heading: busData.heading || 0,
+                            nextStopId: busData.nextStopId || '',
+                            speed: busData.speed
+                        };
+
+                        // If driver mode is active, don't let incoming socket update overwrite our local driver bus representation with standard offline/seeded values
+                        if (state.isDriverMode && state.driverBus && busId === state.driverBus.id) {
+                            return state;
+                        }
+
                         if (existingBusIndex >= 0) {
-                            newBuses[existingBusIndex] = { ...newBuses[existingBusIndex], ...busData };
+                            newBuses[existingBusIndex] = { ...newBuses[existingBusIndex], ...mappedBus };
                         } else {
-                            newBuses.push(busData);
+                            newBuses.push(mappedBus);
                         }
 
                         return { buses: newBuses };
