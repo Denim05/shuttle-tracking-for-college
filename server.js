@@ -278,11 +278,7 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/guest/routes', async (req, res) => {
     try {
         const routes = await Route.find();
-        res.json({ 
-            version: '1.0.10-VERIFY',
-            database: mongoose.connection.name,
-            routes 
-        });
+        res.json(routes);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch routes' });
     }

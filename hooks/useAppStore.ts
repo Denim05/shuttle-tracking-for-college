@@ -238,9 +238,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             const response = await fetch(`${getApiUrl()}/api/guest/routes`);
             const data = await response.json();
             
-            if (data.routes && Array.isArray(data.routes)) {
+            const rawRoutes = Array.isArray(data) ? data : (data && data.routes && Array.isArray(data.routes) ? data.routes : null);
+            if (rawRoutes) {
                 // Map DB routes to app format
-                const mappedRoutes: Route[] = data.routes.map((r: any) => ({
+                const mappedRoutes: Route[] = rawRoutes.map((r: any) => ({
                     id: r._id,
                     name: r.name,
                     color: r.color,
@@ -268,7 +269,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
                 // Extract and flatten stops from routes
                 const stopsMap: { [key: string]: Stop } = {};
-                data.routes.forEach((r: any) => {
+                rawRoutes.forEach((r: any) => {
                     if (r.stops && Array.isArray(r.stops)) {
                         r.stops.forEach((s: any) => {
                             if (!stopsMap[s.name]) {
