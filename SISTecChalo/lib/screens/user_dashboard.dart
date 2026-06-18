@@ -56,7 +56,7 @@ class _UserDashboardState extends State<UserDashboard> {
     final auth = Provider.of<AuthService>(context, listen: false);
     final endpoint = auth.isGuest ? 'guest/routes' : 'routes';
     try {
-      final List<dynamic> data = await _apiService.get(endpoint);
+      final List<dynamic> data = await _apiService.get(endpoint, requiresAuth: !auth.isGuest);
       if (!mounted) return;
       setState(() {
         _routes = data.map((r) => RouteModel.fromJson(r)).toList();
@@ -65,13 +65,15 @@ class _UserDashboardState extends State<UserDashboard> {
         if (auth.currentUser?.routeId != null) {
           _selectedRoute = _routes.firstWhere(
             (r) => r.id == auth.currentUser!.routeId,
-            orElse: () => _routes.first,
+            orElse: () => _routes.isNotEmpty ? _routes.first : null,
           );
+        } else if (_routes.isNotEmpty) {
+          _selectedRoute = _routes.first;
         }
       });
       
       final busEndpoint = auth.isGuest ? 'guest/buses' : 'buses';
-      final List<dynamic> busData = await _apiService.get(busEndpoint);
+      final List<dynamic> busData = await _apiService.get(busEndpoint, requiresAuth: !auth.isGuest);
       if (!mounted) return;
       
       final busStore = Provider.of<BusStore>(context, listen: false);

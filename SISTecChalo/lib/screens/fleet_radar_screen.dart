@@ -8,6 +8,7 @@ import '../models/bus_model.dart';
 import '../services/api_service.dart';
 import '../services/bus_store.dart';
 import '../services/socket_service.dart';
+import '../services/auth_service.dart';
 import '../theme/app_theme.dart';
 import '../components/bus_map.dart';
 
@@ -68,7 +69,9 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
 
   Future<void> _loadAndSeedBuses() async {
     try {
-      final data = await _apiService.get('buses');
+      final auth = context.read<AuthService>();
+      final endpoint = auth.isGuest ? 'guest/buses' : 'buses';
+      final data = await _apiService.get(endpoint, requiresAuth: !auth.isGuest);
       if (mounted) {
         context.read<BusStore>().seedBuses(data as List);
         setState(() => _isLoading = false);
