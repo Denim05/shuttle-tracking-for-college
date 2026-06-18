@@ -3,7 +3,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import AdminUserModal from '../../components/AdminUserModal';
@@ -11,6 +11,7 @@ import BusMap from '../../components/BusMap';
 import ProfileModal from '../../components/ProfileModal';
 import { COLORS, SPACING } from '../../constants/theme';
 import { API_URL, useAppStore } from '../../hooks/useAppStore';
+import { Bus } from '../../constants/mockData';
 
 // Temporary type interfaces for UI
 interface Entity { id: string; name: string; type: string; }
@@ -60,8 +61,29 @@ export default function AdminDashboard() {
       }
   };
 
-  const delayedBuses = buses.filter(b => b.status === 'Delayed');
-  const onTimePercentage = Math.round(((buses.length - delayedBuses.length) / buses.length) * 100) || 100;
+  const uniqueBuses = useMemo(() => {
+    const seen = new Map<string, Bus>();
+    for (const bus of buses) {
+      const key = (bus.busNumber && bus.busNumber !== 'N/A')
+        ? bus.busNumber
+        : (bus.routeName.match(/Bus no:\s*([^\s)]+)/)?.[1] 
+           || bus.routeName.match(/Bus\s+(\d+)/)?.[1] 
+           || bus.id);
+
+      const existing = seen.get(key);
+      if (!existing) {
+        seen.set(key, bus);
+      } else {
+        if (bus.status !== 'Offline' && existing.status === 'Offline') {
+          seen.set(key, bus);
+        }
+      }
+    }
+    return Array.from(seen.values());
+  }, [buses]);
+
+  const delayedBuses = uniqueBuses.filter(b => b.status === 'Delayed');
+  const onTimePercentage = Math.round(((uniqueBuses.length - delayedBuses.length) / uniqueBuses.length) * 100) || 100;
 
   const renderStatCard = (title: string, value: string | number, sub: string, color: string = 'rgba(255,255,255,0.1)') => (
     <View style={[styles.statCard, { backgroundColor: color }]}>
@@ -135,7 +157,7 @@ export default function AdminDashboard() {
 
         {/* Stats Grid */}
         <View style={styles.statsGrid}>
-            {renderStatCard('Active Buses', buses.length, 'Running now')}
+            {renderStatCard('Active Buses', uniqueBuses.length, 'Running now')}
             {renderStatCard('On-Time', `${onTimePercentage}%`, 'Performance')}
             {renderStatCard('Delays', delayedBuses.length, 'Alerts', delayedBuses.length > 0 ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.1)')}
             {renderStatCard('Passenger Load', 'High', 'Peak Hour', 'rgba(56, 239, 125, 0.15)')}
@@ -161,7 +183,7 @@ export default function AdminDashboard() {
         {/* Bus List */}
         <View style={styles.section}>
             <Text style={styles.sectionTitle}>Fleet Status</Text>
-            {buses.map(bus => (
+            {uniqueBuses.map(bus => (
                 <View key={bus.id} style={styles.busItem}>
                     <View style={[styles.busIcon, { backgroundColor: bus.routeColor }]}>
                         <Ionicons name="bus-outline" size={20} color="#FFF" />

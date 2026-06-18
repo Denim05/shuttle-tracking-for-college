@@ -6,10 +6,11 @@ export interface Bus {
   currentLat: number;
   currentLng: number;
   occupancyLevel: "Low" | "Medium" | "High";
-  status: "On-time" | "Delayed";
+  status: "On-time" | "Delayed" | "Offline";
   heading: number; // 0-360 degrees for icon rotation
   nextStopId: string;
   speed?: number; // Speed in m/s
+  busNumber?: string;
 }
 
 export interface Stop {
