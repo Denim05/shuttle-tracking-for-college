@@ -984,27 +984,40 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
         // Helper to format a date as YYYY-MM-DD
         const fmtDate = (d) => new Date(d).toISOString().split('T')[0];
 
+        // Fetch all routes, buses, and drivers to build a map
+        const routes = await Route.find();
+        const buses = await Bus.find().sort({ name: 1 });
+        const drivers = await Driver.find();
+
+        const sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - lookbackDays);
+
         // ── SINGLE BUS REPORT ────────────────────────────────────────────────
         if (busId) {
             const bus = await Bus.findById(busId);
             if (!bus) return res.status(404).json({ error: 'Bus not found' });
 
-            const route = await Route.findById(bus.routeId);
+            const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
             const routeName = route ? route.name : (bus.routeName || 'Unassigned');
             const stops = route ? route.stops : [];
 
-            const driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() });
+            const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
             const driverName = driverDoc ? driverDoc.name : 'Unassigned';
 
             // Fetch real live logs for this bus in lookback window
-            const sinceDate = new Date();
-            sinceDate.setDate(sinceDate.getDate() - lookbackDays);
             const liveLogs = await LiveTripLog.find({
                 busId: bus._id.toString(),
                 startTime: { $gte: sinceDate }
             }).sort({ startTime: -1 });
 
-            let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Stop Sequence,Stop Name,Reached Time\n';
+            // Build headers with pivoted stops
+            let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Status,Stops Reached';
+            if (stops.length > 0) {
+                stops.forEach((stop, index) => {
+                    csvContent += `,Stop ${index + 1} (${stop.name})`;
+                });
+            }
+            csvContent += '\n';
 
             // Build a set of dates covered by live logs
             const liveDates = new Set(liveLogs.map(l => l.date));
@@ -1021,16 +1034,19 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                     const log = liveLogs.find(l => l.date === dateStr);
                     const startStr = fmtTime(log.startTime);
                     const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
+                    const reachedCount = log.reachedStops ? log.reachedStops.length : 0;
+                    const status = log.endTime ? 'Completed' : 'In Progress';
+
+                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}"`;
 
                     if (stops.length > 0) {
-                        stops.forEach((stop, sIdx) => {
+                        stops.forEach(stop => {
                             const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
                             const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
-                            csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
+                            csvContent += `,"${reachedStr}"`;
                         });
-                    } else {
-                        csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
                     }
+                    csvContent += '\n';
                 } else {
                     // ── FALLBACK: ESTIMATED DATA ──
                     const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
@@ -1044,14 +1060,15 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                     const startStr = fmtTime(startBase);
                     const endStr   = fmtTime(endBase);
 
+                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}"`;
+
                     if (stops.length > 0) {
                         stops.forEach((stop, sIdx) => {
                             const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
-                            csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${fmtTime(stopTime)}"\n`;
+                            csvContent += `,"${fmtTime(stopTime)}"`;
                         });
-                    } else {
-                        csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
                     }
+                    csvContent += '\n';
                 }
             }
 
@@ -1061,16 +1078,19 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
             return res.status(200).send(csvContent);
         }
 
-        // ── ALL BUSES REPORT (Today + Live Data) ─────────────────────────────
-        const routes  = await Route.find();
-        const buses   = await Bus.find().sort({ name: 1 });
-        const drivers = await Driver.find();
-        const todayStr = fmtDate(new Date());
+        // ── ALL BUSES REPORT (N Days lookback + Live Data) ───────────────────
+        // Fetch all live logs in lookback window in a single query for optimal performance
+        const liveLogs = await LiveTripLog.find({
+            startTime: { $gte: sinceDate }
+        }).sort({ startTime: -1 });
 
-        // Fetch all live logs for today
-        const todayLiveLogs = await LiveTripLog.find({ date: todayStr });
+        // Build a cache map of live logs by key: busId_date
+        const logMap = new Map();
+        liveLogs.forEach(log => {
+            logMap.set(`${log.busId}_${log.date}`, log);
+        });
 
-        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Stop Sequence,Stop Name,Reached Time\n';
+        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Status,Stops Reached,Stops Timeline\n';
 
         for (const bus of buses) {
             const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
@@ -1080,45 +1100,61 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
             const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
             const driverName = driverDoc ? driverDoc.name : 'Unassigned';
 
-            // Check for today's live log
-            const liveLog = todayLiveLogs.find(l => l.busId === bus._id.toString());
+            // Generate daily records for each bus
+            for (let i = 0; i < lookbackDays; i++) {
+                const d = new Date();
+                d.setDate(d.getDate() - i);
+                if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
+                const dateStr = fmtDate(d);
 
-            if (liveLog) {
-                // ── REAL LIVE DATA FOR TODAY ──
-                const startStr = fmtTime(liveLog.startTime);
-                const endStr   = liveLog.endTime ? fmtTime(liveLog.endTime) : 'In Progress';
+                const logKey = `${bus._id.toString()}_${dateStr}`;
+                const hasLive = logMap.has(logKey);
 
-                if (stops.length > 0) {
-                    stops.forEach((stop, sIdx) => {
-                        const reached = liveLog.reachedStops.find(rs => rs.stopName === stop.name);
-                        const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
-                        csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${liveLog.driverName}","LIVE","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${reachedStr}"\n`;
-                    });
+                if (hasLive) {
+                    // ── REAL LIVE DATA ──
+                    const log = logMap.get(logKey);
+                    const startStr = fmtTime(log.startTime);
+                    const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
+                    const reachedCount = log.reachedStops ? log.reachedStops.length : 0;
+                    const status = log.endTime ? 'Completed' : 'In Progress';
+
+                    // Generate a timeline string
+                    const timelineStr = stops.length > 0 
+                        ? stops.map((stop, sIdx) => {
+                            const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
+                            return `${sIdx + 1}. ${stop.name} (${reached ? fmtTime(reached.reachedTime) : '—'})`;
+                          }).join(' -> ')
+                        : 'No Stops';
+
+                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}","${timelineStr}"\n`;
                 } else {
-                    csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${liveLog.driverName}","LIVE","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
-                }
-            } else {
-                // ── FALLBACK: ESTIMATED (bus not yet started today) ──
-                const startTime = new Date();
-                startTime.setHours(7, 30, 0, 0);
-                const durationMins = 45 + Math.floor(Math.random() * 15);
-                const endTime = new Date(startTime.getTime() + durationMins * 60000);
-                const startStr = fmtTime(startTime);
-                const endStr   = fmtTime(endTime);
+                    // ── FALLBACK: ESTIMATED ──
+                    const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
+                    const dayIndex   = d.getDate() + d.getMonth() * 31;
+                    const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
+                    const startH = 7, startM = (busNumSeed * 3 % 45) + jitter;
+                    const startBase = new Date(d);
+                    startBase.setHours(startH, startM, 0, 0);
+                    const durationMins = 45 + Math.min(stops.length * 2, 25) + ((dayIndex * 3) % 10);
+                    const endBase = new Date(startBase.getTime() + durationMins * 60000);
+                    const startStr = fmtTime(startBase);
+                    const endStr   = fmtTime(endBase);
 
-                if (stops.length > 0) {
-                    stops.forEach((stop, sIdx) => {
-                        const stopTime = new Date(startTime.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
-                        csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","${sIdx + 1}","${stop.name}","${fmtTime(stopTime)}"\n`;
-                    });
-                } else {
-                    csvContent += `"${todayStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","N/A","No Stops","N/A"\n`;
+                    // Generate a timeline string
+                    const timelineStr = stops.length > 0 
+                        ? stops.map((stop, sIdx) => {
+                            const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
+                            return `${sIdx + 1}. ${stop.name} (${fmtTime(stopTime)})`;
+                          }).join(' -> ')
+                        : 'No Stops';
+
+                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}","${timelineStr}"\n`;
                 }
             }
         }
 
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', 'attachment; filename="bus_fleet_trip_report.csv"');
+        res.setHeader('Content-Disposition', 'attachment; filename="all_buses_fleet_report.csv"');
         res.status(200).send(csvContent);
     } catch (err) {
         console.error('Report Generation Error:', err);
@@ -1128,7 +1164,7 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
 
 // ─── MANAGER: PRINTABLE HTML OPERATIONAL REPORT ──────────────────────────────
 // GET /api/manager/reports/bus-trip-report/html?busId=<id>&days=<n>
-// Renders a premium, print-friendly HTML report for SGI Management.
+// Renders a premium, print-friendly interactive HTML dashboard report for SGI Management.
 app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
     try {
         const { busId, days } = req.query;
@@ -1144,80 +1180,79 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
         // Helper to format a date as YYYY-MM-DD
         const fmtDate = (d) => new Date(d).toISOString().split('T')[0];
 
-        const records = [];
-        let title = 'SGI FLEET OPERATIONAL REPORT';
-        let scopeType = 'Full Fleet';
-        let liveCount = 0;
+        // Fetch all routes, buses, and drivers to build a map
+        const routes = await Route.find();
+        const buses = await Bus.find().sort({ name: 1 });
+        const drivers = await Driver.find();
 
+        const sinceDate = new Date();
+        sinceDate.setDate(sinceDate.getDate() - lookbackDays);
+
+        // Fetch live logs for lookback window
+        let liveLogsQuery = { startTime: { $gte: sinceDate } };
         if (busId) {
-            const bus = await Bus.findById(busId);
-            if (!bus) return res.status(404).send('<h1>Bus not found</h1>');
+            liveLogsQuery.busId = busId;
+        }
+        const liveLogs = await LiveTripLog.find(liveLogsQuery).sort({ startTime: -1 });
 
-            const route = await Route.findById(bus.routeId);
+        // Build a cache map of live logs by key: busId_date
+        const logMap = new Map();
+        liveLogs.forEach(log => {
+            logMap.set(`${log.busId}_${log.date}`, log);
+        });
+
+        // Determine which buses to generate report records for
+        const targetBuses = busId ? buses.filter(b => b._id.toString() === busId) : buses;
+
+        if (busId && targetBuses.length === 0) {
+            return res.status(404).send('<h1>Bus not found</h1>');
+        }
+
+        const records = [];
+
+        for (const bus of targetBuses) {
+            const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
             const routeName = route ? route.name : (bus.routeName || 'Unassigned');
             const stops = route ? route.stops : [];
 
-            const driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() });
+            const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
             const driverName = driverDoc ? driverDoc.name : 'Unassigned';
 
-            title = `SGI OPERATIONAL REPORT: ${bus.name.toUpperCase()}`;
-            scopeType = `Bus ${bus.busNumber}`;
-
-            const sinceDate = new Date();
-            sinceDate.setDate(sinceDate.getDate() - lookbackDays);
-            const liveLogs = await LiveTripLog.find({
-                busId: bus._id.toString(),
-                startTime: { $gte: sinceDate }
-            }).sort({ startTime: -1 });
-
-            const liveDates = new Set(liveLogs.map(l => l.date));
-
+            // Generate daily records
             for (let i = 0; i < lookbackDays; i++) {
                 const d = new Date();
                 d.setDate(d.getDate() - i);
-                if (d.getDay() === 0 || d.getDay() === 6) continue;
+                if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
                 const dateStr = fmtDate(d);
 
-                if (liveDates.has(dateStr)) {
-                    liveCount++;
-                    const log = liveLogs.find(l => l.date === dateStr);
+                const logKey = `${bus._id.toString()}_${dateStr}`;
+                const hasLive = logMap.has(logKey);
+
+                if (hasLive) {
+                    const log = logMap.get(logKey);
                     const startStr = fmtTime(log.startTime);
                     const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
+                    const reachedList = log.reachedStops ? log.reachedStops.map(rs => ({
+                        stopName: rs.stopName,
+                        reachedTime: fmtTime(rs.reachedTime)
+                    })) : [];
 
-                    if (stops.length > 0) {
-                        stops.forEach((stop, sIdx) => {
-                            const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
-                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
-                            records.push({
-                                date: dateStr,
-                                busName: bus.name,
-                                busNumber: bus.busNumber,
-                                routeName: routeName,
-                                driverName: log.driverName,
-                                source: 'LIVE',
-                                startTime: startStr,
-                                endTime: endStr,
-                                stopSeq: sIdx + 1,
-                                stopName: stop.name,
-                                reachedTime: reachedStr
-                            });
-                        });
-                    } else {
-                        records.push({
-                            date: dateStr,
-                            busName: bus.name,
-                            busNumber: bus.busNumber,
-                            routeName: routeName,
-                            driverName: log.driverName,
-                            source: 'LIVE',
-                            startTime: startStr,
-                            endTime: endStr,
-                            stopSeq: 'N/A',
-                            stopName: 'No Stops',
-                            reachedTime: 'N/A'
-                        });
-                    }
+                    records.push({
+                        date: dateStr,
+                        busId: bus._id.toString(),
+                        busName: bus.name,
+                        busNumber: bus.busNumber,
+                        routeName: routeName,
+                        driverName: log.driverName,
+                        source: 'LIVE',
+                        startTime: startStr,
+                        endTime: endStr,
+                        status: log.endTime ? 'Completed' : 'In Progress',
+                        reachedStops: reachedList,
+                        stops: stops.map(s => ({ name: s.name, lat: s.lat, lng: s.lng }))
+                    });
                 } else {
+                    // Fallback to estimated data
                     const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
                     const dayIndex   = d.getDate() + d.getMonth() * 31;
                     const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
@@ -1229,162 +1264,30 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                     const startStr = fmtTime(startBase);
                     const endStr   = fmtTime(endBase);
 
-                    if (stops.length > 0) {
-                        stops.forEach((stop, sIdx) => {
-                            const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
-                            records.push({
-                                date: dateStr,
-                                busName: bus.name,
-                                busNumber: bus.busNumber,
-                                routeName: routeName,
-                                driverName: driverName,
-                                source: 'ESTIMATED',
-                                startTime: startStr,
-                                endTime: endStr,
-                                stopSeq: sIdx + 1,
-                                stopName: stop.name,
-                                reachedTime: fmtTime(stopTime)
-                            });
-                        });
-                    } else {
-                        records.push({
-                            date: dateStr,
-                            busName: bus.name,
-                            busNumber: bus.busNumber,
-                            routeName: routeName,
-                            driverName: driverName,
-                            source: 'ESTIMATED',
-                            startTime: startStr,
-                            endTime: endStr,
-                            stopSeq: 'N/A',
-                            stopName: 'No Stops',
-                            reachedTime: 'N/A'
-                        });
-                    }
+                    const reachedList = stops.map((stop, sIdx) => {
+                        const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
+                        return {
+                            stopName: stop.name,
+                            reachedTime: fmtTime(stopTime)
+                        };
+                    });
+
+                    records.push({
+                        date: dateStr,
+                        busId: bus._id.toString(),
+                        busName: bus.name,
+                        busNumber: bus.busNumber,
+                        routeName: routeName,
+                        driverName: driverName,
+                        source: 'ESTIMATED',
+                        startTime: startStr,
+                        endTime: endStr,
+                        status: 'Completed',
+                        reachedStops: reachedList,
+                        stops: stops.map(s => ({ name: s.name, lat: s.lat, lng: s.lng }))
+                    });
                 }
             }
-        } else {
-            const routes  = await Route.find();
-            const buses   = await Bus.find().sort({ name: 1 });
-            const drivers = await Driver.find();
-            const todayStr = fmtDate(new Date());
-
-            const todayLiveLogs = await LiveTripLog.find({ date: todayStr });
-
-            for (const bus of buses) {
-                const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
-                const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-                const stops = route ? route.stops : [];
-
-                const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
-                const driverName = driverDoc ? driverDoc.name : 'Unassigned';
-
-                const liveLog = todayLiveLogs.find(l => l.busId === bus._id.toString());
-
-                if (liveLog) {
-                    liveCount++;
-                    const startStr = fmtTime(liveLog.startTime);
-                    const endStr   = liveLog.endTime ? fmtTime(liveLog.endTime) : 'In Progress';
-
-                    if (stops.length > 0) {
-                        stops.forEach((stop, sIdx) => {
-                            const reached = liveLog.reachedStops.find(rs => rs.stopName === stop.name);
-                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
-                            records.push({
-                                date: todayStr,
-                                busName: bus.name,
-                                busNumber: bus.busNumber,
-                                routeName: routeName,
-                                driverName: liveLog.driverName,
-                                source: 'LIVE',
-                                startTime: startStr,
-                                endTime: endStr,
-                                stopSeq: sIdx + 1,
-                                stopName: stop.name,
-                                reachedTime: reachedStr
-                            });
-                        });
-                    } else {
-                        records.push({
-                            date: todayStr,
-                            busName: bus.name,
-                            busNumber: bus.busNumber,
-                            routeName: routeName,
-                            driverName: liveLog.driverName,
-                            source: 'LIVE',
-                            startTime: startStr,
-                            endTime: endStr,
-                            stopSeq: 'N/A',
-                            stopName: 'No Stops',
-                            reachedTime: 'N/A'
-                        });
-                    }
-                } else {
-                    const startTime = new Date();
-                    startTime.setHours(7, 30, 0, 0);
-                    const durationMins = 45 + Math.floor(Math.random() * 15);
-                    const endTime = new Date(startTime.getTime() + durationMins * 60000);
-                    const startStr = fmtTime(startTime);
-                    const endStr   = fmtTime(endTime);
-
-                    if (stops.length > 0) {
-                        stops.forEach((stop, sIdx) => {
-                            const stopTime = new Date(startTime.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
-                            records.push({
-                                date: todayStr,
-                                busName: bus.name,
-                                busNumber: bus.busNumber,
-                                routeName: routeName,
-                                driverName: driverName,
-                                source: 'ESTIMATED',
-                                startTime: startStr,
-                                endTime: endStr,
-                                stopSeq: sIdx + 1,
-                                stopName: stop.name,
-                                reachedTime: fmtTime(stopTime)
-                            });
-                        });
-                    } else {
-                        records.push({
-                            date: todayStr,
-                            busName: bus.name,
-                            busNumber: bus.busNumber,
-                            routeName: routeName,
-                            driverName: driverName,
-                            source: 'ESTIMATED',
-                            startTime: startStr,
-                            endTime: endStr,
-                            stopSeq: 'N/A',
-                            stopName: 'No Stops',
-                            reachedTime: 'N/A'
-                        });
-                    }
-                }
-            }
-        }
-
-        const uniqueDates = [...new Set(records.map(r => r.date))];
-        const uniqueDays = uniqueDates.length;
-
-        // Generate HTML row templates
-        let rowsHtml = '';
-        for (const r of records) {
-            const sourceBadgeClass = r.source === 'LIVE' ? 'badge live' : 'badge est';
-            rowsHtml += `
-                <tr>
-                    <td><strong>${r.date}</strong></td>
-                    <td>${r.busName}</td>
-                    <td><code>${r.busNumber}</code></td>
-                    <td>${r.routeName}</td>
-                    <td>${r.driverName}</td>
-                    <td><span class="${sourceBadgeClass}">${r.source}</span></td>
-                    <td>${r.startTime}</td>
-                    <td>${r.endTime}</td>
-                    <td>${r.stopSeq}</td>
-                    <td>${r.stopName}</td>
-                    <td><strong>${r.reachedTime}</strong></td>
-                </tr>
-            `;
         }
 
         const html = `
@@ -1393,35 +1296,140 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>${title}</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>SGI Fleet Operational Report</title>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --primary: #2D5BFF;
-            --primary-dark: #1A4CFF;
-            --bg: #0D0B14;
-            --surface: #161421;
-            --text: #ffffff;
-            --text-secondary: #a3a3b8;
+            --bg: #09080e;
+            --surface: #12101e;
+            --surface-card: #1c192e;
+            --text: #f3f4f6;
+            --text-secondary: #94a3b8;
             --text-muted: #64748b;
             --border: rgba(255, 255, 255, 0.06);
-            --accent-live: #00C853;
-            --accent-est: #FFB347;
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --primary-gradient: linear-gradient(135deg, #6366f1, #3b82f6);
+            --accent-live: #10b981;
+            --accent-est: #f59e0b;
+            --accent-completed: #10b981;
+            --accent-progress: #3b82f6;
         }
+
+        .light-theme {
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-card: #f1f5f9;
+            --text: #0f172a;
+            --text-secondary: #475569;
+            --text-muted: #94a3b8;
+            --border: #e2e8f0;
+            --primary: #4f46e5;
+            --primary-dark: #3730a3;
+            --primary-gradient: linear-gradient(135deg, #4f46e5, #2563eb);
+            --accent-live: #059669;
+            --accent-est: #d97706;
+            --accent-completed: #059669;
+            --accent-progress: #2563eb;
+        }
+
+        * {
+            box-sizing: border-box;
+            transition: background-color 0.3s ease, border-color 0.3s ease;
+        }
+
         body {
             font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
             background-color: var(--bg);
             color: var(--text);
             margin: 0;
-            padding: 40px 24px;
+            padding: 0;
             line-height: 1.5;
-            -webkit-print-color-adjust: exact;
+            min-height: 100vh;
+            overflow-x: hidden;
         }
-        .container {
-            max-width: 1280px;
+
+        /* Layout */
+        .app-wrapper {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background-color: var(--surface);
+            border-right: 1px solid var(--border);
+            padding: 24px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            position: sticky;
+            top: 0;
+            height: 100vh;
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex-grow: 1;
+            padding: 40px;
+            overflow-y: auto;
+            max-width: 1400px;
             margin: 0 auto;
+            width: calc(100% - 280px);
         }
-        .header {
+
+        /* Sidebar Styling */
+        .sidebar-title {
+            font-size: 11px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            margin-bottom: 8px;
+        }
+
+        .sidebar-menu {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .sidebar-item {
+            padding: 12px 16px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 700;
+            font-size: 13px;
+            color: var(--text-secondary);
+            border: 1px solid transparent;
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .sidebar-item:hover {
+            background-color: var(--surface-card);
+            color: var(--text);
+        }
+
+        .sidebar-item.active {
+            background: var(--primary-gradient);
+            color: white;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
+        }
+
+        .sidebar-item .subtext {
+            font-size: 10px;
+            opacity: 0.8;
+            font-weight: 500;
+        }
+
+        /* Header */
+        .header-panel {
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -1429,52 +1437,89 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             padding-bottom: 24px;
             margin-bottom: 32px;
         }
-        .title h1 {
-            font-size: 24px;
+
+        .header-title h1 {
+            font-size: 28px;
             font-weight: 800;
             margin: 0;
             letter-spacing: -0.5px;
-            background: linear-gradient(135deg, #fff, var(--text-secondary));
+            background: var(--primary-gradient);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
-        .title p {
+
+        .header-title p {
             color: var(--text-secondary);
             margin: 6px 0 0 0;
-            font-size: 13px;
+            font-size: 14px;
         }
-        .logo {
-            text-align: right;
+
+        .actions-bar {
+            display: flex;
+            gap: 12px;
         }
-        .logo h2 {
-            margin: 0;
-            color: var(--primary);
-            font-size: 18px;
-            letter-spacing: 3px;
-            font-weight: 900;
-            text-shadow: 0 0 20px rgba(45, 91, 255, 0.2);
-        }
-        .logo p {
-            margin: 4px 0 0 0;
-            font-size: 10px;
-            color: var(--text-muted);
+
+        /* Buttons */
+        .btn {
+            background: var(--surface-card);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 10px 20px;
+            border-radius: 12px;
             font-weight: 700;
-            letter-spacing: 1px;
-            text-transform: uppercase;
+            font-size: 13px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s ease;
         }
+
+        .btn:hover {
+            transform: translateY(-1px);
+            border-color: var(--primary);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+        }
+
+        .btn-primary {
+            background: var(--primary-gradient);
+            color: white;
+            border: none;
+            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+        }
+
+        /* KPI Cards */
         .kpi-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 20px;
             margin-bottom: 36px;
         }
+
         .kpi-card {
             background-color: var(--surface);
             border: 1px solid var(--border);
             border-radius: 20px;
             padding: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            position: relative;
+            overflow: hidden;
         }
+
+        .kpi-card::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; width: 4px; height: 100%;
+            background: var(--primary);
+        }
+
+        .kpi-card.kpi-live::before { background: var(--accent-live); }
+        .kpi-card.kpi-est::before { background: var(--accent-est); }
+
         .kpi-card .label {
             color: var(--text-secondary);
             font-size: 11px;
@@ -1483,219 +1528,881 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             letter-spacing: 1.5px;
             margin-bottom: 8px;
         }
+
         .kpi-card .value {
-            font-size: 28px;
+            font-size: 32px;
             font-weight: 800;
-            color: #fff;
+            color: var(--text);
         }
-        .report-table-wrapper {
-            background-color: var(--surface);
+
+        /* Filter Panel */
+        .filter-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 24px;
+            margin-bottom: 30px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .filter-panel .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            flex-grow: 1;
+            min-width: 200px;
+        }
+
+        .filter-group-label {
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .search-input {
+            width: 100%;
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 12px 16px;
+            color: var(--text);
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .filter-btn-group {
+            display: flex;
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 4px;
+            gap: 4px;
+        }
+
+        .filter-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .filter-btn:hover {
+            color: var(--text);
+        }
+
+        .filter-btn.active {
+            background: var(--surface);
+            color: var(--primary);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+
+        /* View Toggle */
+        .view-toggle {
+            display: flex;
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 4px;
+            margin-left: auto;
+        }
+
+        .view-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 10px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .view-btn.active {
+            background: var(--surface);
+            color: var(--primary);
+            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+        }
+
+        /* Trip Cards View */
+        .trips-list {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .trip-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .trip-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 16px;
+        }
+
+        .trip-date {
+            font-size: 18px;
+            font-weight: 800;
+            color: var(--text);
+        }
+
+        .trip-bus {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .trip-bus code {
+            font-family: 'JetBrains Mono', monospace;
+            background: var(--surface-card);
+            color: var(--primary);
+            padding: 2px 6px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-left: 6px;
+        }
+
+        .trip-badges {
+            display: flex;
+            gap: 8px;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 8px;
+            font-size: 10px;
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+
+        .badge-live {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--accent-live);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .badge-est {
+            background-color: rgba(245, 158, 11, 0.1);
+            color: var(--accent-est);
+            border: 1px solid rgba(245, 158, 11, 0.2);
+        }
+
+        .badge-completed {
+            background-color: rgba(16, 185, 129, 0.1);
+            color: var(--accent-completed);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .badge-progress {
+            background-color: rgba(59, 130, 246, 0.1);
+            color: var(--accent-progress);
+            border: 1px solid rgba(59, 130, 246, 0.2);
+        }
+
+        .trip-details-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            background: var(--surface-card);
+            border-radius: 16px;
+            padding: 16px 20px;
+        }
+
+        .detail-item {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .detail-label {
+            font-size: 9px;
+            font-weight: 800;
+            color: var(--text-muted);
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+        }
+
+        .detail-val {
+            font-size: 13px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .font-mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Stops Grid Timeline */
+        .timeline-track-wrapper {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .timeline-stop {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: var(--surface-card);
+            padding: 8px 14px;
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            flex-grow: 1;
+            min-width: 170px;
+        }
+
+        .timeline-stop.reached {
+            border-color: rgba(16, 185, 129, 0.25);
+            background: rgba(16, 185, 129, 0.03);
+        }
+
+        .stop-dot {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 10px;
+            font-weight: 800;
+            color: var(--text-secondary);
+            flex-shrink: 0;
+        }
+
+        .timeline-stop.reached .stop-dot {
+            background: var(--primary-gradient);
+            border-color: transparent;
+            color: white;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+
+        .stop-details {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .stop-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .stop-time {
+            font-size: 10px;
+            color: var(--text-muted);
+            margin-top: 1px;
+            font-weight: 600;
+        }
+
+        .timeline-stop.reached .stop-time {
+            color: var(--accent-live);
+            font-weight: 700;
+        }
+
+        /* Table View */
+        .table-container {
+            background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 24px;
             overflow-x: auto;
-            margin-bottom: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
             text-align: left;
             font-size: 13px;
         }
+
         th {
-            background-color: rgba(255, 255, 255, 0.02);
+            background: rgba(255,255,255,0.01);
             color: var(--text-secondary);
             font-weight: 700;
             text-transform: uppercase;
-            font-size: 9px;
-            letter-spacing: 1.5px;
-            padding: 18px 24px;
+            font-size: 10px;
+            letter-spacing: 1px;
+            padding: 16px 20px;
             border-bottom: 1px solid var(--border);
         }
+
         td {
-            padding: 16px 24px;
+            padding: 14px 20px;
             border-bottom: 1px solid var(--border);
-            color: #e2e8f0;
+            color: var(--text);
+            max-width: 300px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
-        code {
-            font-family: 'JetBrains Mono', monospace;
-            background: rgba(255,255,255,0.05);
-            padding: 2px 6px;
-            border-radius: 6px;
-            color: #2D5BFF;
-            font-weight: bold;
-        }
+
         tr:last-child td {
             border-bottom: none;
         }
+
         tr:hover td {
-            background-color: rgba(255, 255, 255, 0.01);
+            background-color: rgba(255,255,255,0.01);
         }
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 10px;
-            border-radius: 8px;
-            font-size: 9px;
-            font-weight: 900;
-            letter-spacing: 1px;
-            text-transform: uppercase;
+
+        .timeline-summary {
+            font-size: 11px;
+            color: var(--text-secondary);
         }
-        .badge.live {
-            background-color: rgba(0, 200, 83, 0.1);
-            color: var(--accent-live);
-            border: 1px solid rgba(0, 200, 83, 0.2);
+
+        /* Empty State */
+        .empty-state {
+            padding: 60px 40px;
+            text-align: center;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 24px;
+            color: var(--text-muted);
         }
-        .badge.est {
-            background-color: rgba(255, 179, 71, 0.1);
-            color: var(--accent-est);
-            border: 1px solid rgba(255, 179, 71, 0.2);
+
+        .empty-state svg {
+            margin-bottom: 16px;
+            opacity: 0.5;
         }
-        .actions-bar {
-            display: flex;
-            justify-content: flex-end;
-            gap: 12px;
-            margin-bottom: 24px;
+
+        .empty-state h3 {
+            color: var(--text);
+            margin: 0 0 8px 0;
+            font-size: 16px;
         }
-        .btn {
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 14px;
-            font-weight: 700;
-            font-size: 13px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            text-decoration: none;
-            box-shadow: 0 4px 15px rgba(45, 91, 255, 0.3);
-            transition: all 0.2s ease;
-        }
-        .btn:hover {
-            transform: translateY(-1px);
-            box-shadow: 0 6px 20px rgba(45, 91, 255, 0.45);
-        }
-        
+
+        /* Print Override */
         @media print {
             body {
-                background-color: #ffffff;
-                color: #000000;
-                padding: 20px 0;
+                background: #ffffff !important;
+                color: #000000 !important;
             }
-            .no-print {
+            .sidebar, .filter-panel, .actions-bar {
                 display: none !important;
             }
-            .kpi-card {
-                background-color: #ffffff !important;
-                border: 1px solid #e2e8f0 !important;
+            .main-content {
+                width: 100% !important;
+                padding: 0 !important;
+                margin: 0 !important;
+            }
+            .trip-card {
+                background: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
                 box-shadow: none !important;
+                page-break-inside: avoid;
+                margin-bottom: 24px !important;
+            }
+            .trip-details-grid {
+                background: #f8fafc !important;
+                border: 1px solid #cbd5e1 !important;
+            }
+            .detail-val, .stop-name, .stop-time {
                 color: #000000 !important;
             }
-            .kpi-card .value {
+            .badge {
+                border: 1px solid #000000 !important;
+                color: #000000 !important;
+                background: transparent !important;
+            }
+            .timeline-stop {
+                background: #ffffff !important;
+                border: 1px solid #cbd5e1 !important;
+            }
+            .stop-dot {
+                border-color: #cbd5e1 !important;
+                background: #f1f5f9 !important;
                 color: #000000 !important;
             }
-            .report-table-wrapper {
-                border: 1px solid #e2e8f0 !important;
-                background-color: #ffffff !important;
+            .timeline-stop.reached .stop-dot {
+                background: #000000 !important;
+                color: #ffffff !important;
+            }
+            .table-container {
+                border: 1px solid #cbd5e1 !important;
                 box-shadow: none !important;
             }
             th {
-                background-color: #f8fafc !important;
-                color: #334155 !important;
-                border-bottom: 1px solid #cbd5e1 !important;
+                background: #f8fafc !important;
+                color: #000000 !important;
+                border-bottom: 2px solid #cbd5e1 !important;
             }
             td {
-                color: #334155 !important;
-                border-bottom: 1px solid #e2e8f0 !important;
+                color: #000000 !important;
+                border-bottom: 1px solid #cbd5e1 !important;
             }
-            code {
-                background: #f1f5f9 !important;
-                color: #0f172a !important;
-                border: 1px solid #cbd5e1 !important;
+        }
+
+        @media (max-width: 992px) {
+            .app-wrapper {
+                flex-direction: column;
             }
-            .badge {
-                border-width: 1px !important;
-                background-color: transparent !important;
+            .sidebar {
+                width: 100%;
+                height: auto;
+                position: relative;
+                border-right: none;
+                border-bottom: 1px solid var(--border);
             }
-            .badge.live {
-                border-color: #00C853 !important;
-                color: #00C853 !important;
-            }
-            .badge.est {
-                border-color: #FFB347 !important;
-                color: #FFB347 !important;
+            .main-content {
+                width: 100%;
+                padding: 24px;
             }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="actions-bar no-print">
-            <button class="btn" onclick="window.print()">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="6 9 6 2 18 2 18 9"></polyline>
-                    <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path>
-                    <rect x="6" y="14" width="12" height="8"></rect>
-                </svg>
-                Print & Save PDF
-            </button>
-        </div>
-        
-        <div class="header">
-            <div class="title">
-                <h1>${title}</h1>
-                <p>Report window: Last ${lookbackDays} days (weekdays only)</p>
+    <div class="app-wrapper">
+        <!-- Sidebar -->
+        <div class="sidebar">
+            <div>
+                <div class="sidebar-title">NAVIGATION</div>
+                <ul class="sidebar-menu">
+                    <li class="sidebar-item active" id="sidebar-all" onclick="selectBus('')">
+                        <span>All Fleet Reports</span>
+                        <span class="subtext">Overview of all active units</span>
+                    </li>
+                </ul>
             </div>
-            <div class="logo">
-                <h2>CHALO CAMPUS</h2>
-                <p>Sagar Group of Institutions</p>
+            <div>
+                <div class="sidebar-title">ACTIVE BUS UNITS</div>
+                <ul class="sidebar-menu" id="bus-list">
+                    <!-- Loaded dynamically -->
+                </ul>
             </div>
         </div>
-        
-        <div class="kpi-grid">
-            <div class="kpi-card">
-                <div class="label">Scope</div>
-                <div class="value">${scopeType}</div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Header -->
+            <div class="header-panel">
+                <div class="header-title">
+                    <h1 id="main-title">SGI Fleet Operational Report</h1>
+                    <p>Report window: Last ${lookbackDays} days (weekdays only)</p>
+                </div>
+                <div class="actions-bar">
+                    <button class="btn theme-btn" onclick="toggleTheme()" id="theme-btn">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+                        Light Mode
+                    </button>
+                    <button class="btn btn-primary" onclick="window.print()">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+                        Print Report
+                    </button>
+                </div>
             </div>
-            <div class="kpi-card">
-                <div class="label">Total Operational Rows</div>
-                <div class="value">${records.length}</div>
+
+            <!-- KPIs -->
+            <div class="kpi-grid">
+                <div class="kpi-card">
+                    <div class="label" id="scope-kpi-label">Units Tracked</div>
+                    <div class="value" id="kpi-units">-</div>
+                </div>
+                <div class="kpi-card">
+                    <div class="label">Total Trips / Logs</div>
+                    <div class="value" id="kpi-trips">-</div>
+                </div>
+                <div class="kpi-card kpi-live">
+                    <div class="label">Live Runs %</div>
+                    <div class="value" id="kpi-live-pct">-</div>
+                </div>
+                <div class="kpi-card kpi-est">
+                    <div class="label">Avg Stops Reached</div>
+                    <div class="value" id="kpi-stops-avg">-</div>
+                </div>
             </div>
-            <div class="kpi-card">
-                <div class="label">Unique Days Covered</div>
-                <div class="value">${uniqueDays} days</div>
+
+            <!-- Filters -->
+            <div class="filter-panel">
+                <div class="filter-group" style="flex-grow: 2;">
+                    <div class="filter-group-label">Search Context</div>
+                    <input type="text" class="search-input" placeholder="Search by driver, date, or route name..." id="search-box" oninput="handleSearch(this.value)">
+                </div>
+                <div class="filter-group">
+                    <div class="filter-group-label">Data Source</div>
+                    <div class="filter-btn-group">
+                        <button class="filter-btn active" onclick="setSourceFilter('ALL')" id="source-all">All</button>
+                        <button class="filter-btn" onclick="setSourceFilter('LIVE')" id="source-live">Live</button>
+                        <button class="filter-btn" onclick="setSourceFilter('ESTIMATED')" id="source-est">Est</button>
+                    </div>
+                </div>
+                <div class="filter-group">
+                    <div class="filter-group-label">Trip Status</div>
+                    <div class="filter-btn-group">
+                        <button class="filter-btn active" onclick="setStatusFilter('ALL')" id="status-all">All</button>
+                        <button class="filter-btn" onclick="setStatusFilter('Completed')" id="status-completed">Completed</button>
+                        <button class="filter-btn" onclick="setStatusFilter('In Progress')" id="status-progress">Active</button>
+                    </div>
+                </div>
+                <div class="filter-group" style="flex-grow: 0; min-width: auto; align-self: flex-end;">
+                    <div class="view-toggle">
+                        <button class="view-btn active" onclick="setViewMode('timeline')" id="view-timeline">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8M5 20v-6M19 20v-10"></path><line x1="2" y1="20" x2="22" y2="20"></line></svg>
+                            Timeline
+                        </button>
+                        <button class="view-btn" onclick="setViewMode('table')" id="view-table">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>
+                            Table
+                        </button>
+                    </div>
+                </div>
             </div>
-            <div class="kpi-card">
-                <div class="label">Live Tracking Runs</div>
-                <div class="value">${liveCount} logs</div>
+
+            <!-- Content Area -->
+            <div id="report-view-root">
+                <!-- Dynamic Content Loads Here -->
             </div>
-        </div>
-        
-        <div class="report-table-wrapper">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Bus Name</th>
-                        <th>Bus Number</th>
-                        <th>Route Name</th>
-                        <th>Driver</th>
-                        <th>Source</th>
-                        <th>Trip Start</th>
-                        <th>Trip End</th>
-                        <th>Seq</th>
-                        <th>Stop Name</th>
-                        <th>Reached Time</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${rowsHtml}
-                </tbody>
-            </table>
         </div>
     </div>
+
+        <!-- Data Injection -->
+    <script>
+        const buses = ${JSON.stringify(buses.map(b => ({ id: b._id.toString(), name: b.name, busNumber: b.busNumber, routeName: b.routeName || 'Unassigned' })))};
+        const records = ${JSON.stringify(records)};
+        const initialBusId = ${JSON.stringify(busId || '')};
+
+        const state = {
+            selectedBusId: initialBusId,
+            searchQuery: '',
+            sourceFilter: 'ALL',
+            statusFilter: 'ALL',
+            viewMode: 'timeline',
+            theme: 'dark'
+        };
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            initSidebar();
+            applyTheme();
+            updateUI();
+        });
+
+        function initSidebar() {
+            const list = document.getElementById('bus-list');
+            buses.forEach(b => {
+                const li = document.createElement('li');
+                li.className = 'sidebar-item' + (state.selectedBusId === b.id ? ' active' : '');
+                li.id = 'sidebar-' + b.id;
+                li.onclick = () => selectBus(b.id);
+                li.innerHTML = '<span>' + b.name + '</span>' +
+                               '<span class="subtext">' + b.busNumber + ' | ' + b.routeName + '</span>';
+                list.appendChild(li);
+            });
+        }
+
+        function selectBus(busId) {
+            state.selectedBusId = busId;
+            
+            // Update active sidebar item
+            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
+            if (busId === '') {
+                document.getElementById('sidebar-all').classList.add('active');
+            } else {
+                const el = document.getElementById('sidebar-' + busId);
+                if (el) el.classList.add('active');
+            }
+
+            // Update UI Title
+            const titleEl = document.getElementById('main-title');
+            if (busId === '') {
+                titleEl.textContent = 'SGI Fleet Operational Report';
+            } else {
+                const busObj = buses.find(b => b.id === busId);
+                titleEl.textContent = 'SGI Operational Report: ' + (busObj ? busObj.name : 'Unit');
+            }
+
+            updateUI();
+        }
+
+        function toggleTheme() {
+            state.theme = state.theme === 'dark' ? 'light' : 'dark';
+            applyTheme();
+        }
+
+        function applyTheme() {
+            const body = document.body;
+            const btn = document.getElementById('theme-btn');
+            if (state.theme === 'light') {
+                body.classList.add('light-theme');
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> Dark Mode';
+            } else {
+                body.classList.remove('light-theme');
+                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg> Light Mode';
+            }
+        }
+
+        function handleSearch(val) {
+            state.searchQuery = val.toLowerCase().trim();
+            updateUI();
+        }
+
+        function setSourceFilter(val) {
+            state.sourceFilter = val;
+            document.querySelectorAll('[id^="source-"]').forEach(el => el.classList.remove('active'));
+            document.getElementById('source-' + val.toLowerCase().slice(0, 4)).classList.add('active');
+            updateUI();
+        }
+
+        function setStatusFilter(val) {
+            state.statusFilter = val;
+            document.querySelectorAll('[id^="status-"]').forEach(el => el.classList.remove('active'));
+            
+            const btnId = val === 'ALL' ? 'status-all' : (val === 'Completed' ? 'status-completed' : 'status-progress');
+            const btn = document.getElementById(btnId);
+            if (btn) btn.classList.add('active');
+            updateUI();
+        }
+
+        function setViewMode(val) {
+            state.viewMode = val;
+            document.getElementById('view-timeline').classList.remove('active');
+            document.getElementById('view-table').classList.remove('active');
+            document.getElementById('view-' + val).classList.add('active');
+            updateUI();
+        }
+
+        function updateUI() {
+            // 1. Filter records
+            let filtered = records;
+            
+            // Filter by selected bus
+            if (state.selectedBusId !== '') {
+                filtered = filtered.filter(r => r.busId === state.selectedBusId);
+            }
+
+            // Filter by source
+            if (state.sourceFilter !== 'ALL') {
+                filtered = filtered.filter(r => r.source === state.sourceFilter);
+            }
+
+            // Filter by status
+            if (state.statusFilter !== 'ALL') {
+                filtered = filtered.filter(r => r.status === state.statusFilter);
+            }
+
+            // Filter by search
+            if (state.searchQuery !== '') {
+                filtered = filtered.filter(r => 
+                    r.date.includes(state.searchQuery) ||
+                    r.driverName.toLowerCase().includes(state.searchQuery) ||
+                    r.routeName.toLowerCase().includes(state.searchQuery) ||
+                    r.busName.toLowerCase().includes(state.searchQuery) ||
+                    r.busNumber.toLowerCase().includes(state.searchQuery)
+                );
+            }
+
+            // 2. Compute KPI Stats
+            const totalTrips = filtered.length;
+            const uniqueBuses = [...new Set(filtered.map(r => r.busId))].length;
+            const liveTrips = filtered.filter(r => r.source === 'LIVE').length;
+            const livePct = totalTrips > 0 ? Math.round((liveTrips / totalTrips) * 100) : 0;
+
+            let reachedTotal = 0;
+            let stopsTotal = 0;
+            filtered.forEach(r => {
+                reachedTotal += r.reachedStops.length;
+                stopsTotal += r.stops.length;
+            });
+            const stopsAvg = stopsTotal > 0 ? (reachedTotal / filtered.length).toFixed(1) : '0.0';
+            const stopsAvgMax = stopsTotal > 0 ? (stopsTotal / filtered.length).toFixed(0) : '0';
+
+            // Render KPI values
+            document.getElementById('scope-kpi-label').textContent = state.selectedBusId !== '' ? 'Unit Status' : 'Units Tracked';
+            document.getElementById('kpi-units').textContent = state.selectedBusId !== '' ? (totalTrips > 0 ? 'Active' : 'Offline') : uniqueBuses + ' units';
+            document.getElementById('kpi-trips').textContent = totalTrips + ' logs';
+            document.getElementById('kpi-live-pct').textContent = livePct + '%';
+            document.getElementById('kpi-stops-avg').textContent = stopsAvg + ' / ' + stopsAvgMax;
+
+            // 3. Render View
+            const root = document.getElementById('report-view-root');
+            if (state.viewMode === 'timeline') {
+                root.innerHTML = renderTimelineCards(filtered);
+            } else {
+                root.innerHTML = renderPivotedTable(filtered);
+            }
+        }
+
+        function renderTimelineCards(filtered) {
+            if (filtered.length === 0) {
+                return '<div class="empty-state">' +
+                       '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
+                       '<h3>No Logs Found</h3>' +
+                       '<p>No operational entries matched your search filters.</p>' +
+                       '</div>';
+            }
+
+            let html = '<div class="trips-list">';
+            filtered.forEach(r => {
+                const sourceClass = r.source === 'LIVE' ? 'badge-live' : 'badge-est';
+                const statusClass = r.status === 'Completed' ? 'badge-completed' : 'badge-progress';
+                
+                let timelineHtml = '<div class="timeline-track-wrapper">';
+                if (r.stops && r.stops.length > 0) {
+                    r.stops.forEach((stop, idx) => {
+                        const reached = r.reachedStops.find(rs => rs.stopName === stop.name);
+                        const reachedTime = reached ? reached.reachedTime : '—';
+                        const isReached = reached ? 'reached' : '';
+                        
+                        timelineHtml += '<div class="timeline-stop ' + isReached + '">' +
+                                            '<div class="stop-dot">' + (idx + 1) + '</div>' +
+                                            '<div class="stop-details">' +
+                                                '<div class="stop-name" title="' + stop.name + '">' + stop.name + '</div>' +
+                                                '<div class="stop-time">' + reachedTime + '</div>' +
+                                            '</div>' +
+                                        '</div>';
+                    });
+                } else {
+                    timelineHtml += '<div style="color: var(--text-muted); font-size: 12px; padding: 12px;">No stops configured on this route</div>';
+                }
+                timelineHtml += '</div>';
+
+                html += '<div class="trip-card">' +
+                            '<div class="trip-header">' +
+                                '<div>' +
+                                    '<div class="trip-date">' + r.date + '</div>' +
+                                    '<div class="trip-bus">' + r.busName + ' <code>' + r.busNumber + '</code></div>' +
+                                '</div>' +
+                                '<div class="trip-badges">' +
+                                    '<span class="badge ' + sourceClass + '">' + r.source + '</span>' +
+                                    '<span class="badge ' + statusClass + '">' + r.status.toUpperCase() + '</span>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="trip-details-grid">' +
+                                '<div class="detail-item">' +
+                                    '<span class="detail-label">ROUTE</span>' +
+                                    '<span class="detail-val">' + r.routeName + '</span>' +
+                                    '</div>' +
+                                '<div class="detail-item">' +
+                                    '<span class="detail-label">DRIVER</span>' +
+                                    '<span class="detail-val">' + r.driverName + '</span>' +
+                                '</div>' +
+                                '<div class="detail-item">' +
+                                    '<span class="detail-label">TRIP INTERVAL</span>' +
+                                    '<span class="detail-val">' + r.startTime + ' - ' + r.endTime + '</span>' +
+                                '</div>' +
+                                '<div class="detail-item">' +
+                                    '<span class="detail-label">STOPS REACHED</span>' +
+                                    '<span class="detail-val font-mono">' + r.reachedStops.length + ' / ' + r.stops.length + '</span>' +
+                                '</div>' +
+                            '</div>' +
+                            '<div class="trip-timeline-section">' +
+                                '<div class="detail-label" style="margin-bottom: 8px;">STOPS RUN TIMELINE</div>' +
+                                timelineHtml +
+                            '</div>' +
+                        '</div>';
+            });
+            html += '</div>';
+            return html;
+        }
+
+        function renderPivotedTable(filtered) {
+            if (filtered.length === 0) {
+                return '<div class="empty-state"><h3>No Logs Found</h3></div>';
+            }
+
+            const isSingleBus = state.selectedBusId !== '';
+            let html = '<div class="table-container"><table><thead><tr>';
+            html += '<th>Date</th>';
+            if (!isSingleBus) {
+                html += '<th>Bus Name</th>';
+                html += '<th>Plate</th>';
+                html += '<th>Route</th>';
+            }
+            html += '<th>Driver</th>';
+            html += '<th>Source</th>';
+            html += '<th>Start</th>';
+            html += '<th>End</th>';
+            html += '<th>Status</th>';
+            html += '<th>Reached</th>';
+
+            if (isSingleBus) {
+                const sample = filtered[0];
+                if (sample && sample.stops && sample.stops.length > 0) {
+                    sample.stops.forEach((stop, idx) => {
+                        html += '<th>Stop ' + (idx + 1) + ': ' + stop.name + '</th>';
+                    });
+                }
+            } else {
+                html += '<th>Stops Timeline</th>';
+            }
+            html += '</tr></thead><tbody>';
+
+            filtered.forEach(r => {
+                const sourceClass = r.source === 'LIVE' ? 'badge-live' : 'badge-est';
+                const statusClass = r.status === 'Completed' ? 'badge-completed' : 'badge-progress';
+
+                html += '<tr>';
+                html += '<td><strong>' + r.date + '</strong></td>';
+                if (!isSingleBus) {
+                    html += '<td>' + r.busName + '</td>';
+                    html += '<td><code>' + r.busNumber + '</code></td>';
+                    html += '<td>' + r.routeName + '</td>';
+                }
+                html += '<td>' + r.driverName + '</td>';
+                html += '<td><span class="badge ' + sourceClass + '">' + r.source + '</span></td>';
+                html += '<td>' + r.startTime + '</td>';
+                html += '<td>' + r.endTime + '</td>';
+                html += '<td><span class="badge ' + statusClass + '">' + r.status + '</span></td>';
+                html += '<td class="font-mono font-bold">' + r.reachedStops.length + '/' + r.stops.length + '</td>';
+
+                if (isSingleBus) {
+                    if (r.stops && r.stops.length > 0) {
+                        r.stops.forEach(stop => {
+                            const reached = r.reachedStops.find(rs => rs.stopName === stop.name);
+                            html += '<td>' + (reached ? reached.reachedTime : '—') + '</td>';
+                        });
+                    }
+                } else {
+                    const timelineParts = r.stops.length > 0
+                        ? r.stops.map((stop, sIdx) => {
+                            const reached = r.reachedStops.find(rs => rs.stopName === stop.name);
+                            return (sIdx + 1) + '. ' + stop.name + ' (' + (reached ? reached.reachedTime : '—') + ')';
+                          }).join(' ➔ ')
+                        : 'No Stops';
+                    html += '<td class="timeline-summary" title="' + timelineParts + '">' + timelineParts + '</td>';
+                }
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            return html;
+        }
+    </script>
 </body>
 </html>
         `;
