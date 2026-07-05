@@ -1809,7 +1809,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             : () async {
                                 setSheetState(() => _isBulkSaving = true);
                                 final success = await _submitBulkImport();
-                                setSheetState(() => _isBulkSaving = false);
+                                if (sheetContext.mounted) {
+                                  setSheetState(() => _isBulkSaving = false);
+                                }
                                 if (success && sheetContext.mounted) {
                                   Navigator.pop(sheetContext);
                                   // Open registration manager screen
