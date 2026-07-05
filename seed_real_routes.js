@@ -662,10 +662,14 @@ const ROUTES = [
 // All routes terminate at Ratibad Campus
 const RATIBAD = { lat: 23.1270, lng: 77.3494 };
 
-async function seed() {
-  console.log('🔌 Connecting to MongoDB (SISTecChalo)...');
-  await mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' });
-  console.log(`✅ Connected to: ${mongoose.connection.name}`);
+async function seed(shouldDisconnect = true) {
+  if (mongoose.connection.readyState !== 1) {
+    console.log('🔌 Connecting to MongoDB (SISTecChalo)...');
+    await mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' });
+    console.log(`✅ Connected to: ${mongoose.connection.name}`);
+  } else {
+    console.log('🔌 MongoDB is already connected, reusing connection...');
+  }
 
   // Clear existing routes, buses, and drivers
   await Route.deleteMany({});
@@ -677,14 +681,56 @@ async function seed() {
   const hashedPassword = await argon2.hash(defaultPassword);
   console.log(`🔑 Generated Argon2 hash for driver default password: "${defaultPassword}"`);
 
+  // Sort the raw ROUTES array by bus number before seeding
+  ROUTES.sort((a, b) => {
+    const aIsNum = /^\d+$/.test(a.busNo);
+    const bIsNum = /^\d+$/.test(b.busNo);
+    if (aIsNum && bIsNum) {
+      return parseInt(a.busNo) - parseInt(b.busNo);
+    }
+    if (aIsNum) return -1;
+    if (bIsNum) return 1;
+
+    const aIsT = /^T-\d+$/i.test(a.busNo);
+    const bIsT = /^T-\d+$/i.test(b.busNo);
+    if (aIsT && bIsT) {
+      const aVal = parseInt(a.busNo.replace(/\D/g, ''));
+      const bVal = parseInt(b.busNo.replace(/\D/g, ''));
+      return aVal - bVal;
+    }
+    if (aIsT) return -1;
+    if (bIsT) return 1;
+
+    return a.busNo.localeCompare(b.busNo);
+  });
+
+  // Now, create Routes, Drivers, and Buses in a single iteration!
   for (let ri = 0; ri < ROUTES.length; ri++) {
     const r = ROUTES[ri];
     
-    // Build stops with names only — NO fake coordinates
-    const stopsWithNames = r.stops.map(stop => ({ name: stop.name }));
+    // Normalize typos and duplicates from PDF pages to get the clean base route name
+    let baseRouteName = r.name.trim();
+    if (baseRouteName === 'Ashoka Gardan Route' || baseRouteName === 'Ashoka Garden') {
+      baseRouteName = 'Ashoka Garden Route';
+    } else if (baseRouteName === 'Diwadiya IcchawarRoute' || baseRouteName === 'Diwadiya + Ichhawar Route') {
+      baseRouteName = 'Diwadiya + Ichhawar Route';
+    } else if (baseRouteName === 'Nehru Nagar Road') {
+      baseRouteName = 'Kolar + Nehru Nagar Road';
+    } else if (r.busNo === '14' && r.driver === 'RajeshPrajapati') {
+      baseRouteName = 'Neelbad Route';
+    }
+    
+    let displayBusNo = r.busNo;
+    if (displayBusNo === 'Private Vehicle') {
+      const parts = (r.vehicle || '').split(' ');
+      displayBusNo = parts.length > 0 ? `Pvt ${parts[parts.length - 1]}` : 'Pvt';
+    }
+    const finalRouteName = `${baseRouteName} (Bus no: ${displayBusNo})`;
 
+    // Create a dedicated Route document for this single bus schedule
+    const stopsWithNames = r.stops.map(stop => ({ name: stop.name }));
     const route = await Route.create({
-      name: r.name,
+      name: finalRouteName,
       color: r.color,
       stops: stopsWithNames,
       coordinates: [], // Empty — no fake polyline
@@ -709,13 +755,13 @@ async function seed() {
       status: 'Active',
     });
 
-    // Create bus and link to driver
+    // Create bus and link to driver and dedicated route
     const bus = await Bus.create({
       busNumber: r.vehicle || 'N/A',           // vehicle number as busNumber
-      name: `Bus ${r.busNo} - ${r.name}`,
+      name: `Bus ${r.busNo} - ${route.name}`,
       routeId: route._id.toString(),
-      routeName: r.name,
-      routeColor: r.color,
+      routeName: route.name,
+      routeColor: route.color,
       currentLat: RATIBAD.lat,
       currentLng: RATIBAD.lng,
       heading: 0,
@@ -731,17 +777,27 @@ async function seed() {
     driver.assignedBus = bus._id.toString();
     await driver.save();
 
-    console.log(`✅ Bus & Driver ${r.busNo} (${username}): ${r.name} (${r.stops.length} stops)`);
+    console.log(`✅ Bus, Driver & Dedicated Route ${r.busNo} (${username}): ${route.name} (${r.stops.length} stops)`);
   }
 
-  console.log(`\n🎉 Seeded ${ROUTES.length} routes, buses, and drivers successfully!`);
-  await mongoose.disconnect();
+  console.log(`\n🎉 Seeded ${ROUTES.length} unique routes, buses and drivers successfully!`);
+  if (shouldDisconnect) {
+    await mongoose.disconnect();
+    console.log('🔌 Disconnected from MongoDB');
+  }
 }
 
-seed().catch(err => {
-  console.error('❌ Seed failed:', err);
-  mongoose.disconnect();
-  process.exit(1);
-});
+if (require.main === module) {
+  seed(true).catch(err => {
+    console.error('❌ Seed failed:', err);
+    mongoose.disconnect();
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  seed,
+  ROUTES
+};
 
 
