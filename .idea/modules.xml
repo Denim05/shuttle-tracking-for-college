@@ -2,7 +2,8 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
-      <module fileurl="file://$PROJECT_DIR$/.idea/Chalo.iml" filepath="$PROJECT_DIR$/.idea/Chalo.iml" />
+      <module fileurl="file://$PROJECT_DIR$/shuttle_tracking_flutter.iml" filepath="$PROJECT_DIR$/shuttle_tracking_flutter.iml" />
+      <module fileurl="file://$PROJECT_DIR$/android/shuttle_tracking_flutter_android.iml" filepath="$PROJECT_DIR$/android/shuttle_tracking_flutter_android.iml" />
     </modules>
   </component>
 </project>
