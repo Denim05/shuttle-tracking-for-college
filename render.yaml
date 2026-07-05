@@ -15,9 +15,16 @@ services:
       - key: PORT
         value: 10000
       - key: MONGODB_URI
-        sync: false   # Set this in Render Dashboard â†’ Environment
+        sync: false   # Set this in Render Dashboard -> Environment
       - key: JWT_SECRET
-        sync: false   # Set this in Render Dashboard â†’ Environment
+        sync: false   # Set this in Render Dashboard -> Environment
       - key: GOOGLE_MAPS_API_KEY
-        sync: false   # Set this in Render Dashboard â†’ Environment
-
+        sync: false   # Set this in Render Dashboard -> Environment
+      - key: SMTP_HOST
+        sync: false   # Set this in Render Dashboard -> Environment (smtp.gmail.com)
+      - key: SMTP_PORT
+        sync: false   # Set this in Render Dashboard -> Environment (587)
+      - key: SMTP_USER
+        sync: false   # Set this in Render Dashboard -> Environment (your Gmail)
+      - key: SMTP_PASS
+        sync: false   # Set this in Render Dashboard -> Environment (App Password)
