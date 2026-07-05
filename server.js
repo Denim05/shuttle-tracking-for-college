@@ -670,10 +670,19 @@ app.get('/delete-account', (req, res) => {
         }
     </script>
 </body>
-</html>`);
 });
 
 
+
+app.get('/api/diagnostic-smtp', (req, res) => {
+    res.json({
+        host: process.env.SMTP_HOST || 'default: smtp.ethereal.email',
+        port: process.env.SMTP_PORT || 'default: 587',
+        user: process.env.SMTP_USER ? 'CONFIGURED' : 'MISSING',
+        pass: process.env.SMTP_PASS ? 'CONFIGURED' : 'MISSING',
+        nodeEnv: process.env.NODE_ENV
+    });
+});
 
 // Helper to broadcast stats
 const broadcastStats = async () => {
