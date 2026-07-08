@@ -32,6 +32,8 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   List<dynamic> _submissions = [];
   bool _subsLoading = true;
   String _filterStatus = 'all';
+  final TextEditingController _searchCtrl = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -46,6 +48,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     _tab.dispose();
     _titleCtrl.dispose();
     _descCtrl.dispose();
+    _searchCtrl.dispose();
     super.dispose();
   }
 
@@ -478,15 +481,68 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   }
 
   Widget _buildSubmissionsTab() {
-    final filtered = _filterStatus == 'all'
-        ? _submissions
-        : _submissions.where((s) => s['status'] == _filterStatus).toList();
+    final filtered = _submissions.where((s) {
+      final matchesStatus = _filterStatus == 'all' || s['status'] == _filterStatus;
+      if (!matchesStatus) return false;
+      if (_searchQuery.trim().isEmpty) return true;
+      
+      final q = _searchQuery.trim().toLowerCase();
+      final name = (s['name'] ?? '').toString().toLowerCase();
+      final studentId = (s['studentId'] ?? '').toString().toLowerCase();
+      final phone = (s['phone'] ?? '').toString().toLowerCase();
+      final routeName = (s['routeName'] ?? '').toString().toLowerCase();
+      final pickupStop = (s['pickupStop'] ?? '').toString().toLowerCase();
+      
+      return name.contains(q) ||
+          studentId.contains(q) ||
+          phone.contains(q) ||
+          routeName.contains(q) ||
+          pickupStop.contains(q);
+    }).toList();
 
     return Column(children: [
+      // Search Bar
+      Padding(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+        child: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1E1E1E),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.05)),
+          ),
+          child: TextField(
+            controller: _searchCtrl,
+            onChanged: (val) {
+              setState(() {
+                _searchQuery = val;
+              });
+            },
+            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
+            decoration: InputDecoration(
+              hintText: 'Search by name, ID, phone, route...',
+              hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13),
+              prefixIcon: const Icon(Icons.search_rounded, color: Colors.white38, size: 20),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(Icons.clear_rounded, color: Colors.white38, size: 18),
+                      onPressed: () {
+                        setState(() {
+                          _searchCtrl.clear();
+                          _searchQuery = '';
+                        });
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
+            ),
+          ),
+        ),
+      ),
       // Filter chips
       SingleChildScrollView(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 8),
         child: Row(children: [
           for (final f in ['all', 'pending', 'approved', 'rejected'])
             GestureDetector(

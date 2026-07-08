@@ -4,7 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
 
 class ComplaintManagerScreen extends StatefulWidget {
-  const ComplaintManagerScreen({super.key});
+  final bool nested;
+  const ComplaintManagerScreen({super.key, this.nested = false});
 
   @override
   State<ComplaintManagerScreen> createState() => _ComplaintManagerScreenState();
@@ -51,42 +52,44 @@ class _ComplaintManagerScreenState extends State<ComplaintManagerScreen> {
         : _complaints.where((c) => c['status'] == _filterStatus).toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF121212),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'COMPLAINT BOX',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontSize: 12,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 1,
+      backgroundColor: widget.nested ? Colors.transparent : const Color(0xFF121212),
+      appBar: widget.nested
+          ? null
+          : AppBar(
+              backgroundColor: const Color(0xFF121212),
+              elevation: 0,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70),
+                onPressed: () => Navigator.pop(context),
               ),
-            ),
-            Text(
-              'Manage and resolve student concerns',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white38,
-                fontSize: 10,
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'COMPLAINT BOX',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1,
+                    ),
+                  ),
+                  Text(
+                    'Manage and resolve student concerns',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white38,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
               ),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, color: Colors.blueAccent),
+                  onPressed: _loadComplaints,
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh_rounded, color: Colors.blueAccent),
-            onPressed: _loadComplaints,
-          ),
-        ],
-      ),
       body: Column(
         children: [
           _buildFilterBar(),

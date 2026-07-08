@@ -44,7 +44,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     }
 }
 
-async function sendCredentialsEmail(email, name, username, password) {
+async function sendCredentialsEmail(email, name, username, password, role = 'student') {
     try {
         const host = process.env.SMTP_HOST || 'smtp.ethereal.email';
         const port = parseInt(process.env.SMTP_PORT) || 587;
@@ -72,15 +72,30 @@ async function sendCredentialsEmail(email, name, username, password) {
             });
         }
 
+        let welcomeText = '';
+        if (role === 'manager') {
+            welcomeText = `<p>Your SISTecChalo Manager account has been created by the administrator! You can now log in and manage routes, buses, and students.</p>`;
+        } else if (role === 'admin') {
+            welcomeText = `<p>Your SISTecChalo Administrator account has been created! You can now log in and manage the transit tracking system settings.</p>`;
+        } else if (role === 'user') {
+            welcomeText = `<p>Your SISTecChalo commuter account has been created! You can now log in to track buses, view route schedules, and configure alerts.</p>`;
+        } else if (role === 'driver') {
+            welcomeText = `<p>Your SISTecChalo Driver account has been created by the manager! You can now log in to the driver app and broadcast your location during transit.</p>`;
+        } else if (role === 'student') {
+            welcomeText = `<p>Your bus tracking registration request has been approved by the manager! An account has been created for you with the following login details:</p>`;
+        } else {
+            welcomeText = `<p>Your SISTecChalo account has been created with the following login details:</p>`;
+        }
+
         const mailOptions = {
             from: `"SISTecChalo Admin" <${user || 'no-reply@sistecchalo.edu'}>`,
             to: email,
-            subject: 'Your SISTecChalo Account Credentials',
+            subject: `Your SISTecChalo Account Credentials (${role.toUpperCase()})`,
             html: `
                 <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px;">
                     <h2 style="color: #2D5BFF; text-align: center;">Welcome to SISTecChalo!</h2>
                     <p>Dear <strong>${name}</strong>,</p>
-                    <p>Your bus tracking registration request has been approved by the manager! An account has been created for you with the following login details:</p>
+                    ${welcomeText}
                     <div style="background-color: #f7f9ff; border-left: 4px solid #2D5BFF; padding: 15px; margin: 20px 0; border-radius: 4px;">
                         <p style="margin: 5px 0;"><strong>Username / Enrollment Number:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${username}</code></p>
                         <p style="margin: 5px 0;"><strong>Initial Password:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${password}</code></p>
@@ -670,6 +685,7 @@ app.get('/delete-account', (req, res) => {
         }
     </script>
 </body>
+    </html>`);
 });
 
 
@@ -832,7 +848,7 @@ app.get('/api/routes/:id', authMiddleware, async (req, res) => {
 // --- ADMIN Management ---
 app.post('/api/admins', async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, email } = req.body;
 
         let existing = await Admin.findOne({ username });
         if (existing) return res.status(400).json({ error: 'Admin already exists' });
@@ -841,6 +857,9 @@ app.post('/api/admins', async (req, res) => {
         const newAdmin = new Admin({ ...req.body, password: hashedPassword });
 
         await newAdmin.save();
+        if (email) {
+            await sendCredentialsEmail(email.trim(), username, username, password, newAdmin.role || 'admin');
+        }
         res.status(201).json(newAdmin);
     } catch (_) {
         res.status(500).json({ error: 'Failed to create admin' });
@@ -850,7 +869,7 @@ app.post('/api/admins', async (req, res) => {
 // --- MANAGER Management ---
 app.post('/api/managers', authMiddleware, async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, email } = req.body;
 
         let existing = await Manager.findOne({ username });
         if (existing) return res.status(400).json({ error: 'Manager already exists' });
@@ -859,6 +878,9 @@ app.post('/api/managers', authMiddleware, async (req, res) => {
         const newManager = new Manager({ ...req.body, password: hashedPassword });
 
         await newManager.save();
+        if (email) {
+            await sendCredentialsEmail(email.trim(), username, username, password, newManager.role || 'manager');
+        }
         res.status(201).json(newManager);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to create manager' });
@@ -877,7 +899,7 @@ app.get('/api/managers', async (req, res) => {
 // --- USER Management (Standard Users) ---
 app.post('/api/users', async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, email } = req.body;
 
         let existing = await User.findOne({ username });
         if (existing) return res.status(400).json({ error: 'User already exists' });
@@ -887,6 +909,9 @@ app.post('/api/users', async (req, res) => {
 
         await newUser.save();
         broadcastStats(); // Emit live update
+        if (email) {
+            await sendCredentialsEmail(email.trim(), username, username, password, newUser.role || 'user');
+        }
         res.status(201).json(newUser);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to create user' });

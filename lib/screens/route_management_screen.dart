@@ -5,7 +5,8 @@ import '../services/api_service.dart';
 import 'route_edit_screen.dart';
 
 class RouteManagementScreen extends StatefulWidget {
-  const RouteManagementScreen({super.key});
+  final bool nested;
+  const RouteManagementScreen({super.key, this.nested = false});
 
   @override
   State<RouteManagementScreen> createState() => _RouteManagementScreenState();
@@ -131,19 +132,29 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text('Route Management', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.blueAccent),
-            onPressed: _showAddRouteDialog,
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      backgroundColor: widget.nested ? Colors.transparent : const Color(0xFF121212),
+      appBar: widget.nested
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text('Route Management', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.blueAccent),
+                  onPressed: _showAddRouteDialog,
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+      floatingActionButton: widget.nested
+          ? FloatingActionButton.extended(
+              onPressed: _showAddRouteDialog,
+              backgroundColor: Colors.blueAccent,
+              icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.white),
+              label: Text('Add Route', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          : null,
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
         : _routes.isEmpty

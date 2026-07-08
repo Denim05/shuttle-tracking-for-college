@@ -465,13 +465,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         ? _buildLoadingState()
                         : TabBarView(
                             children: [
-                              const FleetMaintenanceScreen(),
+                              const FleetMaintenanceScreen(nested: true),
                               _buildMapTab(),
                               _buildDriverTab(),
                               _buildUserTab(),
-                              const RouteManagementScreen(),
+                              const RouteManagementScreen(nested: true),
                               _buildAlertTab(),
-                              const ComplaintManagerScreen(),
+                              const ComplaintManagerScreen(nested: true),
                             ],
                           ),
                     ),

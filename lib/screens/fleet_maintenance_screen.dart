@@ -4,7 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
 
 class FleetMaintenanceScreen extends StatefulWidget {
-  const FleetMaintenanceScreen({super.key});
+  final bool nested;
+  const FleetMaintenanceScreen({super.key, this.nested = false});
 
   @override
   State<FleetMaintenanceScreen> createState() => _FleetMaintenanceScreenState();
@@ -166,19 +167,29 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Color(0xFF121212),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        title: Text('Fleet Maintenance', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add_rounded, color: Colors.blueAccent),
-            onPressed: _showAddBusDialog,
-          ),
-          const SizedBox(width: 8),
-        ],
-      ),
+      backgroundColor: widget.nested ? Colors.transparent : const Color(0xFF121212),
+      appBar: widget.nested
+          ? null
+          : AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              title: Text('Fleet Maintenance', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.add_rounded, color: Colors.blueAccent),
+                  onPressed: _showAddBusDialog,
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+      floatingActionButton: widget.nested
+          ? FloatingActionButton.extended(
+              onPressed: _showAddBusDialog,
+              backgroundColor: Colors.blueAccent,
+              icon: const Icon(Icons.add_rounded, color: Colors.white),
+              label: Text('Add Bus', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+            )
+          : null,
       body: _isLoading 
         ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
         : ListView.builder(
