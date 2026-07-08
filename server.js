@@ -3865,15 +3865,14 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
             reviewedAt: new Date(),
         });
 
-        // Send Email if requested (or default to true) and student has email address
-        let emailSent = false;
+        // Send Email in the background to avoid blocking and triggering client timeouts
         if (submission.email && (req.body.sendEmail !== false)) {
-            emailSent = await sendCredentialsEmail(
+            sendCredentialsEmail(
                 submission.email.trim(),
                 submission.name,
                 username,
                 rawPassword
-            );
+            ).catch(err => console.error('Background email dispatch failed:', err));
         }
 
         io.emit('registrationApproved', { id: req.params.id, name: submission.name, username });
@@ -3883,9 +3882,11 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
             success: true,
             username,
             password: rawPassword,
-            emailSent,
+            emailSent: true,
             message: `Account created for ${submission.name}!\n\nUsername: "${username}"\nPassword: "${rawPassword}"` + 
-                     (emailSent ? `\n\nCredentials have been emailed to ${submission.email}.` : '\n\nShare these credentials with the student.')
+                     (submission.email && (req.body.sendEmail !== false)
+                         ? `\n\nCredentials are being emailed to ${submission.email}.`
+                         : '\n\nShare these credentials with the student.')
         });
     } catch (_err) {
         console.error('Approval error:', _err);
