@@ -3957,6 +3957,120 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
     }
 });
 
+// ── MANAGER: Unapprove → delete user account & revert status ────────────────
+app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, res) => {
+    try {
+        const submission = await RegistrationSubmission.findById(req.params.id);
+        if (!submission) return res.status(404).json({ error: 'Submission not found' });
+        if (submission.status !== 'approved') return res.status(400).json({ error: 'Submission is not approved' });
+
+        // Delete the created user if exists
+        if (submission.createdUserId) {
+            await User.findByIdAndDelete(submission.createdUserId);
+        } else {
+            // Fallback: delete by username (studentId)
+            await User.deleteOne({ username: submission.studentId.trim() });
+        }
+
+        // Revert submission status to pending and clear credentials info
+        submission.status = 'pending';
+        submission.createdUserId = undefined;
+        submission.generatedUsername = undefined;
+        submission.generatedPassword = undefined;
+        submission.reviewedAt = undefined;
+        await submission.save();
+
+        io.emit('registrationUnapproved', { id: req.params.id, studentId: submission.studentId });
+        broadcastStats();
+
+        res.json({
+            success: true,
+            message: `Registration for ${submission.name} has been reverted to pending, and their user account was removed.`
+        });
+    } catch (err) {
+        console.error('Unapprove error:', err);
+        res.status(500).json({ error: 'Failed to unapprove registration' });
+    }
+});
+
+// ── MANAGER: Bulk approve pending registrations ──────────────────────────
+app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, res) => {
+    const { ids, password } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'An array of submission IDs is required.' });
+    }
+
+    try {
+        const submissions = await RegistrationSubmission.find({ _id: { $in: ids }, status: 'pending' });
+        if (submissions.length === 0) {
+            return res.status(400).json({ error: 'No pending submissions found to approve.' });
+        }
+
+        const results = [];
+        const errors = [];
+
+        for (const sub of submissions) {
+            const username = sub.studentId.trim();
+
+            // Check if user already exists
+            const existing = await User.findOne({ username });
+            if (existing) {
+                errors.push(`${sub.name} (${username}): Account already exists.`);
+                continue;
+            }
+
+            const rawPassword = password || `SGI@${username}`;
+            const hashedPassword = await argon2.hash(rawPassword);
+
+            // Create student user account
+            const newUser = await User.create({
+                username,
+                password: hashedPassword,
+                email: sub.email || undefined,
+                phone: sub.phone,
+                routeId: sub.routeId,
+                pickupPoint: sub.pickupStop,
+                status: 'Active',
+                userId: sub.studentId,
+                proximityAlertsEnabled: true,
+                gender: sub.gender,
+                fatherName: sub.fatherName,
+                courseName: sub.courseName,
+                fatherPhone: sub.fatherPhone,
+            });
+
+            // Update submission status
+            sub.status = 'approved';
+            sub.generatedUsername = username;
+            sub.generatedPassword = rawPassword;
+            sub.createdUserId = newUser._id.toString();
+            sub.reviewedAt = new Date();
+            await sub.save();
+
+            // Dispatch email in background
+            if (sub.email) {
+                sendCredentialsEmail(sub.email.trim(), sub.name, username, rawPassword)
+                    .catch(e => console.error(`Failed to send background email for ${sub.name}:`, e));
+            }
+
+            io.emit('registrationApproved', { id: sub._id.toString(), name: sub.name, username });
+            results.push(sub);
+        }
+
+        broadcastStats();
+
+        res.json({
+            success: true,
+            approvedCount: results.length,
+            errors,
+            message: `Successfully approved ${results.length} students! ${errors.length > 0 ? `Errors: ${errors.join(', ')}` : ''}`
+        });
+    } catch (err) {
+        console.error('Bulk approve error:', err);
+        res.status(500).json({ error: 'Failed to bulk approve registrations' });
+    }
+});
+
 // ── MANAGER: Reject a submission ──────────────────────────────────────────
 app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res) => {
     try {
