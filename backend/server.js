@@ -3752,6 +3752,22 @@ app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => 
         const routes = await Route.find({});
         const results = [];
         const errors = [];
+        const toInsert = [];
+        const processedIdsInSheet = new Set();
+
+        // 1. Gather all studentIds from payload to query DB in bulk
+        const studentIds = submissions
+            .map(item => item.studentId ? item.studentId.toString().trim() : '')
+            .filter(id => id.length > 0);
+
+        // 2. Fetch existing submissions and users in bulk
+        const [existingSubs, existingUsers] = await Promise.all([
+            RegistrationSubmission.find({ studentId: { $in: studentIds } }, { studentId: 1 }),
+            User.find({ username: { $in: studentIds } }, { username: 1 })
+        ]);
+
+        const dbSubSet = new Set(existingSubs.map(s => s.studentId));
+        const dbUserSet = new Set(existingUsers.map(u => u.username));
 
         for (let i = 0; i < submissions.length; i++) {
             const item = submissions[i];
@@ -3763,10 +3779,16 @@ app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => 
             }
 
             const cleanId = studentId.toString().trim();
-            // Check duplicates in submissions or users
-            const dupSub = await RegistrationSubmission.findOne({ studentId: cleanId });
-            const dupUser = await User.findOne({ username: cleanId });
-            if (dupSub || dupUser) {
+
+            // Check duplicates in the uploaded sheet itself
+            if (processedIdsInSheet.has(cleanId)) {
+                errors.push(`Row ${i + 1} (${cleanId}): Duplicate student ID within the uploaded file.`);
+                continue;
+            }
+            processedIdsInSheet.add(cleanId);
+
+            // Check duplicates in DB in-memory
+            if (dbSubSet.has(cleanId) || dbUserSet.has(cleanId)) {
                 errors.push(`Row ${i + 1} (${cleanId}): Record already exists in pending list or active users.`);
                 continue;
             }
@@ -3783,7 +3805,7 @@ app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => 
             const finalRouteId = matchedRoute ? matchedRoute._id.toString() : (routes[0]?._id?.toString() || 'placeholder');
             const finalRouteName = matchedRoute ? matchedRoute.name : (routeName || 'Unassigned');
 
-            const sub = await RegistrationSubmission.create({
+            toInsert.push({
                 formId: form._id,
                 name: name.toString().trim(),
                 studentId: cleanId,
@@ -3798,8 +3820,12 @@ app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => 
                 fatherPhone: fatherPhone ? fatherPhone.toString().trim() : undefined,
                 status: 'pending'
             });
+        }
 
-            results.push(sub);
+        // 3. Perform bulk insert for all valid records in a single DB query
+        if (toInsert.length > 0) {
+            const inserted = await RegistrationSubmission.insertMany(toInsert);
+            results.push(...inserted);
         }
 
         console.log(`🌱 [Bulk Upload] Imported ${results.length} registrations. Errors: ${errors.length}`);
