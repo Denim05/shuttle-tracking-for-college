@@ -3934,6 +3934,60 @@ app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res
     }
 });
 
+// ── DIAGNOSTIC: Test SMTP connection and email delivery from deployed instance ──
+app.get('/api/debug/smtp-test', async (req, res) => {
+    const testEmail = req.query.email || 'denimhajare@gmail.com';
+    try {
+        const host = process.env.SMTP_HOST || 'smtp.ethereal.email';
+        const port = parseInt(process.env.SMTP_PORT) || 587;
+        const user = process.env.SMTP_USER || '';
+        const pass = process.env.SMTP_PASS || '';
+
+        const logs = [];
+        const transporter = nodemailer.createTransport({
+            host,
+            port,
+            secure: port === 465,
+            auth: { user, pass },
+            debug: true,
+            logger: {
+                info: (msg) => logs.push(`[INFO] ${msg}`),
+                warn: (msg) => logs.push(`[WARN] ${msg}`),
+                error: (msg) => logs.push(`[ERROR] ${msg}`)
+            }
+        });
+
+        const mailOptions = {
+            from: `"SISTecChalo Test" <${user || 'no-reply@sistecchalo.edu'}>`,
+            to: testEmail,
+            subject: 'SISTecChalo Render SMTP Test',
+            html: '<h3>SISTecChalo SMTP Test</h3><p>Diagnostic test email from the Render server.</p>'
+        };
+
+        const info = await transporter.sendMail(mailOptions);
+        res.json({
+            success: true,
+            message: 'SMTP Test Succeeded!',
+            response: info.response,
+            messageId: info.messageId,
+            config: { host, port, user: user ? 'configured' : 'empty' },
+            logs
+        });
+    } catch (err) {
+        res.status(500).json({
+            success: false,
+            error: err.message,
+            stack: err.stack,
+            config: {
+                host: process.env.SMTP_HOST,
+                port: process.env.SMTP_PORT,
+                user: process.env.SMTP_USER ? 'configured' : 'empty',
+                pass: process.env.SMTP_PASS ? 'configured' : 'empty'
+            }
+        });
+    }
+});
+
 const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
