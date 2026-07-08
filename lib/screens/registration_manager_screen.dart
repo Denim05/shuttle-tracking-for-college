@@ -34,6 +34,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   String _filterStatus = 'all';
   final TextEditingController _searchCtrl = TextEditingController();
   String _searchQuery = '';
+  final Set<String> _selectedSubmissionIds = {};
 
   @override
   void initState() {
@@ -72,6 +73,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       final data = await _api.get('manager/registrations');
       if (mounted) setState(() {
         _submissions = data as List;
+        _selectedSubmissionIds.clear(); // Clear selections on load
         _subsLoading = false;
       });
     } catch (_) {
@@ -122,6 +124,89 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       await _api.put('manager/registration-form/${_activeForm!['_id']}/close', {});
       if (mounted) setState(() { _activeForm = null; _shareUrl = null; });
     } catch (_) {}
+  }
+
+  Future<void> _unapprove(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Revert Approval?', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('This will delete the student\'s active user account and put their submission back into the pending list.', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white38))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('UNAPPROVE', style: GoogleFonts.plusJakartaSans(color: Colors.orangeAccent, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _subsLoading = true);
+    try {
+      await _api.put('manager/registrations/$id/unapprove', {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Approval reverted and user account deleted successfully.'), backgroundColor: Colors.orange),
+      );
+      _loadSubmissions();
+    } catch (e) {
+      setState(() => _subsLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  Future<void> _bulkApproveSelected() async {
+    if (_selectedSubmissionIds.isEmpty) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text('Approve Selected?', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to bulk approve all ${_selectedSubmissionIds.length} selected students? Their user accounts will be created automatically with standard passwords (SGI@[Enrollment ID]).', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white38))),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text('APPROVE ALL', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF38EF7D), fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _subsLoading = true);
+    try {
+      final response = await _api.post('manager/registrations/bulk-approve', {
+        'ids': _selectedSubmissionIds.toList(),
+      });
+      
+      final approvedCount = response['approvedCount'] ?? 0;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Successfully approved $approvedCount students!'),
+          backgroundColor: const Color(0xFF38EF7D),
+        ),
+      );
+      
+      setState(() {
+        _selectedSubmissionIds.clear();
+      });
+      _loadSubmissions();
+    } catch (e) {
+      setState(() => _subsLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
   }
 
   Future<void> _approve(Map<String, dynamic> s) async {
@@ -562,6 +647,58 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
             ),
         ]),
       ),
+      // Bulk Actions Header (if there are any pending submissions)
+      if (filtered.any((s) => s['status'] == 'pending')) ...[
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              TextButton.icon(
+                icon: Icon(
+                  filtered.where((s) => s['status'] == 'pending').every((s) => _selectedSubmissionIds.contains(s['_id']))
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
+                  color: Colors.blueAccent,
+                  size: 18,
+                ),
+                label: Text(
+                  filtered.where((s) => s['status'] == 'pending').every((s) => _selectedSubmissionIds.contains(s['_id']))
+                      ? 'DESELECT ALL'
+                      : 'SELECT ALL PENDING',
+                  style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () {
+                  final pendingIds = filtered
+                      .where((s) => s['status'] == 'pending')
+                      .map((s) => s['_id'] as String)
+                      .toList();
+                  
+                  setState(() {
+                    if (pendingIds.every((id) => _selectedSubmissionIds.contains(id))) {
+                      _selectedSubmissionIds.removeAll(pendingIds);
+                    } else {
+                      _selectedSubmissionIds.addAll(pendingIds);
+                    }
+                  });
+                },
+              ),
+              if (_selectedSubmissionIds.isNotEmpty)
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.verified_rounded, size: 14, color: Colors.black),
+                  label: Text('APPROVE SELECTED (${_selectedSubmissionIds.length})', 
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.black)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF38EF7D),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _bulkApproveSelected,
+                ),
+            ],
+          ),
+        ),
+      ],
       if (_subsLoading)
         const Expanded(child: Center(child: CircularProgressIndicator(color: Color(0xFF2D5BFF))))
       else if (filtered.isEmpty)
@@ -600,6 +737,28 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
+          if (isPending)
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  if (_selectedSubmissionIds.contains(s['_id'])) {
+                    _selectedSubmissionIds.remove(s['_id']);
+                  } else {
+                    _selectedSubmissionIds.add(s['_id']);
+                  }
+                });
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: Icon(
+                  _selectedSubmissionIds.contains(s['_id'])
+                      ? Icons.check_box_rounded
+                      : Icons.check_box_outline_blank_rounded,
+                  color: _selectedSubmissionIds.contains(s['_id']) ? const Color(0xFF38EF7D) : Colors.white30,
+                  size: 22,
+                ),
+              ),
+            ),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
@@ -645,6 +804,10 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
               ),
             ]),
           ),
+        ],
+        if (status == 'approved') ...[
+          const SizedBox(height: 10),
+          _btn('REVERT TO PENDING (UNAPPROVE)', Colors.orangeAccent, () => _unapprove(s['_id'])),
         ],
         if (isPending) ...[
           const SizedBox(height: 14),
