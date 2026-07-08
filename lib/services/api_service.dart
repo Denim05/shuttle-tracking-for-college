@@ -66,7 +66,7 @@ class ApiService {
 
   // ─── Retry Wrapper ────────────────────────────────────────────────────────
 
-  Future<dynamic> _withRetry(Future<http.Response> Function() call) async {
+  Future<dynamic> _withRetry(Future<http.Response> Function() call, {bool canRetry = true}) async {
     int attempt = 0;
     while (true) {
       try {
@@ -76,6 +76,13 @@ class ApiService {
       } on ApiException {
         rethrow; // Don't retry 4xx
       } on TimeoutException {
+        if (!canRetry) {
+          throw const ApiException(
+            statusCode: 0,
+            message   : 'Request timed out. Check your network connection.',
+            isNetwork : true,
+          );
+        }
         attempt++;
         if (attempt >= _maxRetries) {
           throw const ApiException(
@@ -86,6 +93,13 @@ class ApiService {
         }
         await Future.delayed(Duration(seconds: 1 << attempt));
       } catch (e) {
+        if (!canRetry) {
+          throw ApiException(
+            statusCode: 0,
+            message   : 'Network error: ${e.toString()}',
+            isNetwork : true,
+          );
+        }
         attempt++;
         if (attempt >= _maxRetries) {
           throw ApiException(
@@ -129,7 +143,7 @@ class ApiService {
       _withRetry(() async => http.get(
             _uri(endpoint),
             headers: await _headers(requiresAuth: requiresAuth),
-          ));
+          ), canRetry: true);
 
   Future<dynamic> post(String endpoint, Map<String, dynamic> body,
           {bool requiresAuth = true}) =>
@@ -137,27 +151,27 @@ class ApiService {
             _uri(endpoint),
             headers: await _headers(requiresAuth: requiresAuth),
             body   : jsonEncode(body),
-          ));
+          ), canRetry: false);
 
   Future<dynamic> put(String endpoint, Map<String, dynamic> body) =>
       _withRetry(() async => http.put(
             _uri(endpoint),
             headers: await _headers(),
             body   : jsonEncode(body),
-          ));
+          ), canRetry: false);
 
   Future<dynamic> patch(String endpoint, Map<String, dynamic> body) =>
       _withRetry(() async => http.patch(
             _uri(endpoint),
             headers: await _headers(),
             body   : jsonEncode(body),
-          ));
+          ), canRetry: false);
 
   Future<dynamic> delete(String endpoint) =>
       _withRetry(() async => http.delete(
             _uri(endpoint),
             headers: await _headers(),
-          ));
+          ), canRetry: false);
 }
 
 
