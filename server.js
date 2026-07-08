@@ -45,6 +45,72 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 }
 
 async function sendCredentialsEmail(email, name, username, password, role = 'student') {
+    const brevoApiKey = process.env.BREVO_API_KEY;
+
+    let welcomeText = '';
+    if (role === 'manager') {
+        welcomeText = `<p>Your SISTecChalo Manager account has been created by the administrator! You can now log in and manage routes, buses, and students.</p>`;
+    } else if (role === 'admin') {
+        welcomeText = `<p>Your SISTecChalo Administrator account has been created! You can now log in and manage the transit tracking system settings.</p>`;
+    } else if (role === 'user') {
+        welcomeText = `<p>Your SISTecChalo commuter account has been created! You can now log in to track buses, view route schedules, and configure alerts.</p>`;
+    } else if (role === 'driver') {
+        welcomeText = `<p>Your SISTecChalo Driver account has been created by the manager! You can now log in to the driver app and broadcast your location during transit.</p>`;
+    } else if (role === 'student') {
+        welcomeText = `<p>Your bus tracking registration request has been approved by the manager! An account has been created for you with the following login details:</p>`;
+    } else {
+        welcomeText = `<p>Your SISTecChalo account has been created with the following login details:</p>`;
+    }
+
+    const htmlContent = `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px;">
+            <h2 style="color: #2D5BFF; text-align: center;">Welcome to SISTecChalo!</h2>
+            <p>Dear <strong>${name}</strong>,</p>
+            ${welcomeText}
+            <div style="background-color: #f7f9ff; border-left: 4px solid #2D5BFF; padding: 15px; margin: 20px 0; border-radius: 4px;">
+                <p style="margin: 5px 0;"><strong>Username / Enrollment Number:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${username}</code></p>
+                <p style="margin: 5px 0;"><strong>Initial Password:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${password}</code></p>
+            </div>
+            <p style="color: #f39c12; font-weight: bold;">⚠️ For your security, please log in and change your password in your Profile section immediately.</p>
+            <p>Safe travels!</p>
+            <hr style="border: 0; border-top: 1px solid #ddd; margin: 25px 0;" />
+            <p style="font-size: 11px; color: #777; text-align: center;">This is an automated email. Please do not reply directly to this message.</p>
+        </div>
+    `;
+
+    if (brevoApiKey) {
+        console.log(`✉️ [Brevo API] Sending credentials email to ${email} via HTTP API...`);
+        try {
+            const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'api-key': brevoApiKey,
+                    'content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sender: { name: 'SISTecChalo Admin', email: process.env.SMTP_USER || 'no-reply@sistecchalo.edu' },
+                    to: [{ email, name }],
+                    subject: `Your SISTecChalo Account Credentials (${role.toUpperCase()})`,
+                    htmlContent: htmlContent
+                })
+            });
+
+            if (response.ok) {
+                const resData = await response.json();
+                console.log(`✉️ [Brevo API Sent] Email sent successfully. Message ID: ${resData.messageId}`);
+                return true;
+            } else {
+                const errText = await response.text();
+                console.error(`❌ [Brevo API Error] Failed to send email: ${response.status} - ${errText}`);
+                return false;
+            }
+        } catch (err) {
+            console.error('❌ [Brevo API Exception] Failed to send email:', err);
+            return false;
+        }
+    }
+
     try {
         const host = process.env.SMTP_HOST || 'smtp.ethereal.email';
         const port = parseInt(process.env.SMTP_PORT) || 587;
@@ -72,40 +138,11 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
             });
         }
 
-        let welcomeText = '';
-        if (role === 'manager') {
-            welcomeText = `<p>Your SISTecChalo Manager account has been created by the administrator! You can now log in and manage routes, buses, and students.</p>`;
-        } else if (role === 'admin') {
-            welcomeText = `<p>Your SISTecChalo Administrator account has been created! You can now log in and manage the transit tracking system settings.</p>`;
-        } else if (role === 'user') {
-            welcomeText = `<p>Your SISTecChalo commuter account has been created! You can now log in to track buses, view route schedules, and configure alerts.</p>`;
-        } else if (role === 'driver') {
-            welcomeText = `<p>Your SISTecChalo Driver account has been created by the manager! You can now log in to the driver app and broadcast your location during transit.</p>`;
-        } else if (role === 'student') {
-            welcomeText = `<p>Your bus tracking registration request has been approved by the manager! An account has been created for you with the following login details:</p>`;
-        } else {
-            welcomeText = `<p>Your SISTecChalo account has been created with the following login details:</p>`;
-        }
-
         const mailOptions = {
             from: `"SISTecChalo Admin" <${user || 'no-reply@sistecchalo.edu'}>`,
             to: email,
             subject: `Your SISTecChalo Account Credentials (${role.toUpperCase()})`,
-            html: `
-                <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px;">
-                    <h2 style="color: #2D5BFF; text-align: center;">Welcome to SISTecChalo!</h2>
-                    <p>Dear <strong>${name}</strong>,</p>
-                    ${welcomeText}
-                    <div style="background-color: #f7f9ff; border-left: 4px solid #2D5BFF; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                        <p style="margin: 5px 0;"><strong>Username / Enrollment Number:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${username}</code></p>
-                        <p style="margin: 5px 0;"><strong>Initial Password:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${password}</code></p>
-                    </div>
-                    <p style="color: #f39c12; font-weight: bold;">⚠️ For your security, please log in and change your password in your Profile section immediately.</p>
-                    <p>Safe travels!</p>
-                    <hr style="border: 0; border-top: 1px solid #ddd; margin: 25px 0;" />
-                    <p style="font-size: 11px; color: #777; text-align: center;">This is an automated email. Please do not reply directly to this message.</p>
-                </div>
-            `
+            html: htmlContent
         };
 
         const info = await transporter.sendMail(mailOptions);
@@ -3937,6 +3974,53 @@ app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res
 // ── DIAGNOSTIC: Test SMTP connection and email delivery from deployed instance ──
 app.get('/api/debug/smtp-test', async (req, res) => {
     const testEmail = req.query.email || 'denimhajare@gmail.com';
+    const brevoApiKey = process.env.BREVO_API_KEY;
+
+    if (brevoApiKey) {
+        try {
+            const user = process.env.SMTP_USER || 'no-reply@sistecchalo.edu';
+            const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'api-key': brevoApiKey,
+                    'content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sender: { name: 'SISTecChalo Diagnostic', email: user },
+                    to: [{ email: testEmail, name: 'Test Recipient' }],
+                    subject: 'SISTecChalo Render Brevo HTTP API Test',
+                    htmlContent: '<h3>SISTecChalo API Test</h3><p>Diagnostic test email from the Render server using Brevo HTTP API.</p>'
+                })
+            });
+
+            if (response.ok) {
+                const resData = await response.json();
+                return res.json({
+                    success: true,
+                    provider: 'Brevo API',
+                    message: 'Brevo API Email Sent Successfully!',
+                    messageId: resData.messageId
+                });
+            } else {
+                const errText = await response.text();
+                return res.status(response.status).json({
+                    success: false,
+                    provider: 'Brevo API',
+                    error: `Status ${response.status}: ${errText}`
+                });
+            }
+        } catch (err) {
+            return res.status(500).json({
+                success: false,
+                provider: 'Brevo API',
+                error: err.message,
+                stack: err.stack
+            });
+        }
+    }
+
+    // SMTP check fallback
     try {
         const host = process.env.SMTP_HOST || 'smtp.ethereal.email';
         const port = parseInt(process.env.SMTP_PORT) || 587;
@@ -3967,6 +4051,7 @@ app.get('/api/debug/smtp-test', async (req, res) => {
         const info = await transporter.sendMail(mailOptions);
         res.json({
             success: true,
+            provider: 'SMTP',
             message: 'SMTP Test Succeeded!',
             response: info.response,
             messageId: info.messageId,
@@ -3976,6 +4061,7 @@ app.get('/api/debug/smtp-test', async (req, res) => {
     } catch (err) {
         res.status(500).json({
             success: false,
+            provider: 'SMTP',
             error: err.message,
             stack: err.stack,
             config: {
