@@ -102,12 +102,10 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
                 return true;
             } else {
                 const errText = await response.text();
-                console.error(`❌ [Brevo API Error] Failed to send email: ${response.status} - ${errText}`);
-                return false;
+                console.warn(`⚠️ [Brevo API Error] Failed to send email: ${response.status} - ${errText}. Falling back to SMTP...`);
             }
         } catch (err) {
-            console.error('❌ [Brevo API Exception] Failed to send email:', err);
-            return false;
+            console.warn('⚠️ [Brevo API Exception] Failed to send email. Falling back to SMTP...', err);
         }
     }
 
