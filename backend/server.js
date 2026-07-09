@@ -2640,9 +2640,57 @@ app.get('/api/manager/users', authMiddleware, async (req, res) => {
 app.put('/api/manager/users/:id', authMiddleware, async (req, res) => {
     try {
         const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        
+        // Sync updated details to the registration submission if one exists
+        const updateFields = {};
+        if (req.body.name !== undefined) updateFields.name = req.body.name;
+        if (req.body.email !== undefined) updateFields.email = req.body.email;
+        if (req.body.phone !== undefined) updateFields.phone = req.body.phone;
+        if (req.body.routeId !== undefined) updateFields.routeId = req.body.routeId;
+        if (req.body.pickupPoint !== undefined) updateFields.pickupStop = req.body.pickupPoint;
+        if (req.body.courseName !== undefined) updateFields.courseName = req.body.courseName;
+        if (req.body.fatherName !== undefined) updateFields.fatherName = req.body.fatherName;
+        if (req.body.fatherPhone !== undefined) updateFields.fatherPhone = req.body.fatherPhone;
+        if (req.body.gender !== undefined) updateFields.gender = req.body.gender;
+
+        if (Object.keys(updateFields).length > 0) {
+            await RegistrationSubmission.findOneAndUpdate(
+                { createdUserId: req.params.id },
+                { $set: updateFields }
+            );
+        }
+
         res.json(updatedUser);
-    } catch (_err) {
+    } catch (err) {
+        console.error('Update user error:', err);
         res.status(500).json({ error: 'Failed to update user' });
+    }
+});
+
+// Manager: Delete User Account
+app.delete('/api/manager/users/:id', authMiddleware, async (req, res) => {
+    try {
+        const user = await User.findById(req.params.id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        
+        // Reset associated registration submission status to pending and clear credentials info
+        await RegistrationSubmission.findOneAndUpdate(
+            { createdUserId: req.params.id },
+            {
+                status: 'pending',
+                createdUserId: undefined,
+                generatedUsername: undefined,
+                generatedPassword: undefined,
+                reviewedAt: undefined
+            }
+        );
+        
+        await User.findByIdAndDelete(req.params.id);
+        broadcastStats();
+        res.json({ success: true, message: 'User deleted successfully' });
+    } catch (err) {
+        console.error('Delete user error:', err);
+        res.status(500).json({ error: 'Failed to delete user' });
     }
 });
 
@@ -3903,10 +3951,19 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
             : `SGI@${username}`;
         const hashedPassword = await argon2.hash(rawPassword);
 
+        // Update email if manually supplied in req.body.email
+        let email = submission.email;
+        if (req.body.email && req.body.email.trim().length > 0) {
+            email = req.body.email.trim();
+            submission.email = email;
+            await submission.save();
+        }
+
         const newUser = await User.create({
             username,                              // enrollment number
+            name: submission.name,                 // student's actual name
             password: hashedPassword,
-            email: submission.email || undefined,
+            email: email || undefined,
             phone: submission.phone,
             routeId: submission.routeId,
             pickupPoint: submission.pickupStop,
@@ -4025,6 +4082,7 @@ app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, 
             // Create student user account
             const newUser = await User.create({
                 username,
+                name: sub.name,
                 password: hashedPassword,
                 email: sub.email || undefined,
                 phone: sub.phone,
@@ -4185,6 +4243,335 @@ app.get('/api/debug/smtp-test', async (req, res) => {
                 pass: process.env.SMTP_PASS ? 'configured' : 'empty'
             }
         });
+    }
+});
+
+// ─── ADMIN: Role & Permissions Management ──────────────────────────────
+const adminMiddleware = (req, res, next) => {
+    if (req.user && req.user.role === 'admin') {
+        next();
+    } else {
+        res.status(403).json({ error: 'Access denied: admin credentials required' });
+    }
+};
+
+// GET all users across all collections
+app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const admins = await Admin.find().select('-password');
+        const managers = await Manager.find().select('-password');
+        const drivers = await Driver.find().select('-password');
+        const users = await User.find().select('-password');
+
+        const allUsers = [];
+
+        admins.forEach(a => {
+            allUsers.push({
+                _id: a._id.toString(),
+                username: a.username,
+                email: a.email,
+                role: 'admin',
+                createdAt: a.createdAt,
+                permissions: a.permissions || ['all']
+            });
+        });
+
+        managers.forEach(m => {
+            allUsers.push({
+                _id: m._id.toString(),
+                username: m.username,
+                email: m.email,
+                role: 'manager',
+                createdAt: m.createdAt,
+                employeeId: m.employeeId,
+                department: m.department,
+                canManage: m.canManage || ['students', 'drivers', 'buses']
+            });
+        });
+
+        drivers.forEach(d => {
+            allUsers.push({
+                _id: d._id.toString(),
+                username: d.username,
+                name: d.name,
+                role: 'driver',
+                status: d.status,
+                createdAt: d.createdAt,
+                assignedBus: d.assignedBus,
+                contactNumber: d.contactNumber
+            });
+        });
+
+        users.forEach(u => {
+            allUsers.push({
+                _id: u._id.toString(),
+                username: u.username,
+                name: u.name,
+                email: u.email,
+                role: 'user',
+                status: u.status,
+                createdAt: u.createdAt,
+                userId: u.userId,
+                phone: u.phone,
+                routeId: u.routeId,
+                pickupPoint: u.pickupPoint,
+                gender: u.gender,
+                fatherName: u.fatherName,
+                courseName: u.courseName,
+                fatherPhone: u.fatherPhone,
+                accessRights: u.accessRights || ['view_routes', 'track_bus']
+            });
+        });
+
+        res.json(allUsers);
+    } catch (err) {
+        console.error('Fetch all users error:', err);
+        res.status(500).json({ error: 'Failed to fetch all users' });
+    }
+});
+
+// CREATE a new user in the appropriate collection
+app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const { username, password, role, email, name, status, ...extra } = req.body;
+        if (!username || !password || !role) {
+            return res.status(400).json({ error: 'Username, password, and role are required.' });
+        }
+
+        const hashedPassword = await argon2.hash(password);
+        let newUser;
+
+        const dupUser = await User.findOne({ username });
+        const dupDriver = await Driver.findOne({ username });
+        const dupManager = await Manager.findOne({ username });
+        const dupAdmin = await Admin.findOne({ username });
+        if (dupUser || dupDriver || dupManager || dupAdmin) {
+            return res.status(409).json({ error: `Username "${username}" already exists in the system.` });
+        }
+
+        switch (role.toLowerCase()) {
+            case 'admin':
+                newUser = await Admin.create({
+                    username,
+                    password: hashedPassword,
+                    email: email || undefined,
+                    permissions: extra.permissions || ['all']
+                });
+                break;
+            case 'manager':
+                newUser = await Manager.create({
+                    username,
+                    password: hashedPassword,
+                    email: email || undefined,
+                    employeeId: extra.employeeId || 'EMP_' + username,
+                    department: extra.department || 'Transit',
+                    canManage: extra.canManage || ['students', 'drivers', 'buses']
+                });
+                break;
+            case 'driver':
+                newUser = await Driver.create({
+                    username,
+                    password: hashedPassword,
+                    name: name || username,
+                    assignedBus: extra.assignedBus || '',
+                    contactNumber: extra.contactNumber || '',
+                    status: status || 'Active'
+                });
+                break;
+            case 'user':
+                newUser = await User.create({
+                    username,
+                    password: hashedPassword,
+                    name: name || username,
+                    email: email || undefined,
+                    phone: extra.phone || '',
+                    routeId: extra.routeId || null,
+                    pickupPoint: extra.pickupPoint || null,
+                    gender: extra.gender || '',
+                    fatherName: extra.fatherName || '',
+                    courseName: extra.courseName || '',
+                    fatherPhone: extra.fatherPhone || '',
+                    status: status || 'Active',
+                    userId: extra.userId || username,
+                    accessRights: extra.accessRights || ['view_routes', 'track_bus']
+                });
+                break;
+            default:
+                return res.status(400).json({ error: `Unsupported role: ${role}` });
+        }
+
+        broadcastStats();
+        res.json({ success: true, user: { _id: newUser._id, username: newUser.username, role } });
+    } catch (err) {
+        console.error('Create user error:', err);
+        res.status(500).json({ error: 'Failed to create user' });
+    }
+});
+
+// UPDATE user (supports moving between collections if role changes)
+app.put('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const currentRole = req.params.role.toLowerCase();
+        const id = req.params.id;
+        const { role: newRole, password: newPassword, ...fields } = req.body;
+
+        let Model;
+        switch (currentRole) {
+            case 'admin': Model = Admin; break;
+            case 'manager': Model = Manager; break;
+            case 'driver': Model = Driver; break;
+            case 'user': Model = User; break;
+            default: return res.status(400).json({ error: 'Invalid source role' });
+        }
+
+        const existingUser = await Model.findById(id);
+        if (!existingUser) return res.status(404).json({ error: 'User not found' });
+
+        let updatedPasswordHash;
+        if (newPassword && newPassword.trim().length >= 6) {
+            updatedPasswordHash = await argon2.hash(newPassword.trim());
+        }
+
+        if (newRole && newRole.toLowerCase() !== currentRole) {
+            const targetRole = newRole.toLowerCase();
+            let TargetModel;
+            switch (targetRole) {
+                case 'admin': TargetModel = Admin; break;
+                case 'manager': TargetModel = Manager; break;
+                case 'driver': TargetModel = Driver; break;
+                case 'user': TargetModel = User; break;
+                default: return res.status(400).json({ error: 'Invalid target role' });
+            }
+
+            const duplicate = await TargetModel.findOne({ username: existingUser.username });
+            if (duplicate) return res.status(409).json({ error: 'Username already exists in target role.' });
+
+            const baseData = {
+                username: existingUser.username,
+                password: updatedPasswordHash || existingUser.password
+            };
+
+            let created;
+            if (targetRole === 'admin') {
+                created = await Admin.create({
+                    ...baseData,
+                    email: fields.email || existingUser.email || undefined,
+                    permissions: fields.permissions || ['all']
+                });
+            } else if (targetRole === 'manager') {
+                created = await Manager.create({
+                    ...baseData,
+                    email: fields.email || existingUser.email || undefined,
+                    employeeId: fields.employeeId || 'EMP_' + existingUser.username,
+                    department: fields.department || 'Transit',
+                    canManage: fields.canManage || ['students', 'drivers', 'buses']
+                });
+            } else if (targetRole === 'driver') {
+                created = await Driver.create({
+                    ...baseData,
+                    name: fields.name || existingUser.name || existingUser.username,
+                    assignedBus: fields.assignedBus || '',
+                    contactNumber: fields.contactNumber || fields.phone || '',
+                    status: fields.status || existingUser.status || 'Active'
+                });
+            } else if (targetRole === 'user') {
+                created = await User.create({
+                    ...baseData,
+                    name: fields.name || existingUser.name || existingUser.username,
+                    email: fields.email || existingUser.email || undefined,
+                    phone: fields.phone || existingUser.phone || '',
+                    routeId: fields.routeId || null,
+                    pickupPoint: fields.pickupPoint || null,
+                    gender: fields.gender || '',
+                    fatherName: fields.fatherName || '',
+                    courseName: fields.courseName || '',
+                    fatherPhone: fields.fatherPhone || '',
+                    status: fields.status || existingUser.status || 'Active',
+                    userId: fields.userId || existingUser.username,
+                    accessRights: fields.accessRights || ['view_routes', 'track_bus']
+                });
+            }
+
+            await RegistrationSubmission.findOneAndUpdate(
+                { createdUserId: id },
+                { createdUserId: created._id.toString(), status: targetRole === 'user' ? 'approved' : 'pending' }
+            );
+
+            await Model.findByIdAndDelete(id);
+
+            broadcastStats();
+            return res.json({ success: true, roleChanged: true, user: created });
+        } else {
+            const updateBody = { ...fields };
+            if (updatedPasswordHash) {
+                updateBody.password = updatedPasswordHash;
+            }
+
+            const updated = await Model.findByIdAndUpdate(id, updateBody, { new: true });
+            
+            if (currentRole === 'user') {
+                const updateSubmissionFields = {};
+                if (fields.name !== undefined) updateSubmissionFields.name = fields.name;
+                if (fields.email !== undefined) updateSubmissionFields.email = fields.email;
+                if (fields.phone !== undefined) updateSubmissionFields.phone = fields.phone;
+                if (fields.routeId !== undefined) updateSubmissionFields.routeId = fields.routeId;
+                if (fields.pickupPoint !== undefined) updateSubmissionFields.pickupStop = fields.pickupPoint;
+                if (fields.courseName !== undefined) updateSubmissionFields.courseName = fields.courseName;
+
+                if (Object.keys(updateSubmissionFields).length > 0) {
+                    await RegistrationSubmission.findOneAndUpdate(
+                        { createdUserId: id },
+                        { $set: updateSubmissionFields }
+                    );
+                }
+            }
+
+            broadcastStats();
+            return res.json({ success: true, roleChanged: false, user: updated });
+        }
+    } catch (err) {
+        console.error('Update user error:', err);
+        res.status(500).json({ error: 'Failed to update user' });
+    }
+});
+
+// DELETE user from specified collection
+app.delete('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, async (req, res) => {
+    try {
+        const role = req.params.role.toLowerCase();
+        const id = req.params.id;
+
+        let Model;
+        switch (role) {
+            case 'admin': Model = Admin; break;
+            case 'manager': Model = Manager; break;
+            case 'driver': Model = Driver; break;
+            case 'user': Model = User; break;
+            default: return res.status(400).json({ error: 'Invalid role' });
+        }
+
+        const user = await Model.findById(id);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        if (role === 'user') {
+            await RegistrationSubmission.findOneAndUpdate(
+                { createdUserId: id },
+                {
+                    status: 'pending',
+                    createdUserId: undefined,
+                    generatedUsername: undefined,
+                    generatedPassword: undefined,
+                    reviewedAt: undefined
+                }
+            );
+        }
+
+        await Model.findByIdAndDelete(id);
+        broadcastStats();
+        res.json({ success: true, message: `User deleted successfully from ${role} collection` });
+    } catch (err) {
+        console.error('Delete user error:', err);
+        res.status(500).json({ error: 'Failed to delete user' });
     }
 });
 

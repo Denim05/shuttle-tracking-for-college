@@ -214,10 +214,10 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     final String studentName = s['name'] ?? 'Student';
     final String studentId = s['studentId'] ?? '';
     final String? studentEmail = s['email'];
-    final hasEmail = studentEmail != null && studentEmail.trim().isNotEmpty;
 
     final passwordCtrl = TextEditingController(text: 'SGI@$studentId');
-    bool sendEmail = hasEmail;
+    final emailCtrl = TextEditingController(text: studentEmail ?? '');
+    bool sendEmail = emailCtrl.text.trim().isNotEmpty;
     bool isSubmitting = false;
 
     await showDialog(
@@ -245,7 +245,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Assign login password for $studentName.',
+                      'Assign login details for $studentName.',
                       style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, height: 1.4),
                     ),
                     const SizedBox(height: 20),
@@ -271,44 +271,80 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                         ),
                       ),
                     ),
-                    if (hasEmail) ...[
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: Checkbox(
-                              value: sendEmail,
-                              activeColor: Colors.blueAccent,
-                              checkColor: Colors.white,
-                              onChanged: (val) {
-                                setDialogState(() {
-                                  sendEmail = val ?? false;
-                                });
-                              },
-                            ),
+                    const SizedBox(height: 20),
+                    Text(
+                      'STUDENT EMAIL (FOR CREDENTIALS DELIVERY)',
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withOpacity(0.05)),
+                      ),
+                      child: TextField(
+                        controller: emailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
+                        onChanged: (val) {
+                          setDialogState(() {
+                            sendEmail = val.trim().isNotEmpty;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          hintText: 'Enter student email',
+                          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white10, fontSize: 13),
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: Checkbox(
+                            value: sendEmail,
+                            activeColor: Colors.blueAccent,
+                            checkColor: Colors.white,
+                            onChanged: emailCtrl.text.trim().isEmpty
+                                ? null
+                                : (val) {
+                                    setDialogState(() {
+                                      sendEmail = val ?? false;
+                                    });
+                                  },
                           ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Email credentials to student',
-                                  style: GoogleFonts.plusJakartaSans(color: Colors.white.withOpacity(0.8), fontSize: 12, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Email credentials to student',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: emailCtrl.text.trim().isEmpty
+                                      ? Colors.white.withOpacity(0.3)
+                                      : Colors.white.withOpacity(0.8),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
                                 ),
+                              ),
+                              if (emailCtrl.text.trim().isNotEmpty)
                                 Text(
-                                  studentEmail,
+                                  emailCtrl.text.trim(),
                                   style: GoogleFonts.plusJakartaSans(color: Colors.white30, fontSize: 10),
                                   overflow: TextOverflow.ellipsis,
                                 ),
-                              ],
-                            ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
@@ -338,6 +374,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                             final data = await _api.put('manager/registrations/$id/approve', {
                               'password': password,
                               'sendEmail': sendEmail,
+                              'email': emailCtrl.text.trim(),
                             });
                             Navigator.pop(dialogContext); // Close first dialog
                             

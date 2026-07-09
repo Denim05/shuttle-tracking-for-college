@@ -963,18 +963,39 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       itemBuilder: (context, index) {
                         final user = filteredUsers[index];
                         final userSemester = user['courseName']?.toString().trim() ?? '';
-                        return _buildGlassCard(
-                          index: index,
+                        final status = user['status']?.toString() ?? 'Active';
+                        final routeId = user['routeId'];
+                        
+                        RouteModel? matchedRoute;
+                        if (routeId != null) {
+                          try {
+                            matchedRoute = _routes.firstWhere((r) => r.id == routeId);
+                          } catch (_) {}
+                        }
+
+                        return _buildUserGlassCard(
+                          status: status,
+                          onTap: () => _showUserDetailsBottomSheet(user),
                           child: Row(
                             children: [
                               Container(
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
-                                  color: Colors.deepPurpleAccent.withOpacity(0.1),
+                                  color: status.toLowerCase() == 'active' 
+                                      ? Colors.blueAccent.withOpacity(0.1) 
+                                      : Colors.orangeAccent.withOpacity(0.1),
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+                                  border: Border.all(
+                                    color: status.toLowerCase() == 'active' 
+                                        ? Colors.blueAccent.withOpacity(0.2) 
+                                        : Colors.orangeAccent.withOpacity(0.2)
+                                  ),
                                 ),
-                                child: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent, size: 20),
+                                child: Icon(
+                                  Icons.person_rounded, 
+                                  color: status.toLowerCase() == 'active' ? Colors.blueAccent : Colors.orangeAccent, 
+                                  size: 20
+                                ),
                               ),
                               const SizedBox(width: 16),
                               Expanded(
@@ -1006,19 +1027,76 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                           ),
                                       ],
                                     ),
-                                    Text('UID: ${user['userId'] ?? user['studentId'] ?? user['roll'] ?? 'N/A'}', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                                    const SizedBox(height: 4),
+                                    const SizedBox(height: 2),
+                                    Text('UID: ${user['userId'] ?? user['username'] ?? 'N/A'}', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                    const SizedBox(height: 6),
                                     Row(
                                       children: [
-                                        const Icon(Icons.location_on_rounded, color: Colors.deepPurpleAccent, size: 12),
-                                        const SizedBox(width: 4),
-                                        Expanded(child: Text(user['pickupPoint'] ?? 'NOT CONFIGURED', style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 12, fontWeight: FontWeight.w500))),
+                                        // Route Badge
+                                        if (matchedRoute != null)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.12),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.3)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.route_rounded, size: 8, color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF')))),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  matchedRoute.name.toUpperCase(),
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))),
+                                                    fontSize: 7,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          )
+                                        else
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withOpacity(0.05),
+                                              borderRadius: BorderRadius.circular(6),
+                                              border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                const Icon(Icons.route_outlined, size: 8, color: Colors.white38),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'NO ROUTE',
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    color: Colors.white38,
+                                                    fontSize: 7,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        const SizedBox(width: 8),
+                                        // Pickup Stop
+                                        Expanded(
+                                          child: Text(
+                                            user['pickupPoint'] ?? 'NOT CONFIGURED', 
+                                            style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 11, fontWeight: FontWeight.w500),
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
                                       ],
                                     ),
                                   ],
                                 ),
                               ),
-                              _buildActionButton(Icons.route_rounded, () => _showUserRouteDialog(user)),
+                              const SizedBox(width: 12),
+                              const Icon(Icons.chevron_right_rounded, color: Colors.white24, size: 20),
                             ],
                           ),
                         );
@@ -2411,6 +2489,433 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               const SizedBox(height: 20),
             ],
           ).animate().slideY(begin: 1, end: 0, duration: 400.ms, curve: Curves.easeOutCubic),
+        ),
+      ),
+    );
+  }
+
+  void _showUserDetailsBottomSheet(dynamic user) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) {
+        bool isEditing = false;
+        bool isUpdating = false;
+        
+        final nameCtrl = TextEditingController(text: user['name'] ?? user['username'] ?? '');
+        final emailCtrl = TextEditingController(text: user['email'] ?? '');
+        final phoneCtrl = TextEditingController(text: user['phone'] ?? '');
+        final courseCtrl = TextEditingController(text: user['courseName'] ?? '');
+        final pickupCtrl = TextEditingController(text: user['pickupPoint'] ?? '');
+        final fatherNameCtrl = TextEditingController(text: user['fatherName'] ?? '');
+        final fatherPhoneCtrl = TextEditingController(text: user['fatherPhone'] ?? '');
+        final genderCtrl = TextEditingController(text: user['gender'] ?? '');
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            final status = user['status'] ?? 'Active';
+            final isActive = status.toLowerCase() == 'active';
+            final statusColor = isActive ? const Color(0xFF38EF7D) : Colors.orangeAccent;
+            
+            final routeId = user['routeId'];
+            RouteModel? matchedRoute;
+            if (routeId != null) {
+              try {
+                matchedRoute = _routes.firstWhere((r) => r.id == routeId);
+              } catch (_) {}
+            }
+
+            Widget buildInfoRow(String label, String value, IconData icon, {Widget? editField}) {
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(icon, color: Colors.white38, size: 16),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(label.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                          const SizedBox(height: 2),
+                          isEditing && editField != null
+                              ? editField
+                              : Text(value.isEmpty ? 'N/A' : value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }
+
+            Widget buildEditableTextField(TextEditingController ctrl, String hint) {
+              return Container(
+                margin: const EdgeInsets.only(top: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                ),
+                child: TextField(
+                  controller: ctrl,
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12),
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12),
+                    border: InputBorder.none,
+                    isDense: true,
+                  ),
+                ),
+              );
+            }
+
+            return DraggableScrollableSheet(
+              initialChildSize: 0.85,
+              maxChildSize: 0.95,
+              minChildSize: 0.5,
+              builder: (_, scrollController) {
+                return Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0D0B14),
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                    child: Column(
+                      children: [
+                        // Drag Handle
+                        const SizedBox(height: 12),
+                        Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(2))),
+                        const SizedBox(height: 16),
+                        
+                        // Header info
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 26,
+                                backgroundColor: statusColor.withOpacity(0.1),
+                                child: Icon(Icons.person_rounded, color: statusColor, size: 28),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    isEditing
+                                        ? buildEditableTextField(nameCtrl, 'Full Name')
+                                        : Text(
+                                            user['name'] ?? user['username'] ?? 'Unknown',
+                                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
+                                          ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'UID: ${user['userId'] ?? user['username'] ?? 'N/A'}',
+                                      style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: statusColor.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: statusColor.withOpacity(0.3)),
+                                ),
+                                child: Text(
+                                  status.toUpperCase(),
+                                  style: GoogleFonts.plusJakartaSans(color: statusColor, fontSize: 9, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        const Divider(color: Colors.white10, height: 1),
+                        
+                        // Main info scrollable area
+                        Expanded(
+                          child: ListView(
+                            controller: scrollController,
+                            padding: const EdgeInsets.all(24),
+                            children: [
+                              // Personal Info Section
+                              Text('ACADEMIC & PERSONAL', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                              const SizedBox(height: 12),
+                              buildInfoRow('Course / Semester', user['courseName'] ?? '', Icons.school_outlined, editField: buildEditableTextField(courseCtrl, 'Course name')),
+                              buildInfoRow('Gender', user['gender'] ?? '', Icons.wc_outlined, editField: buildEditableTextField(genderCtrl, 'Gender')),
+                              const SizedBox(height: 24),
+
+                              // Contact Section
+                              Text('CONTACT INFORMATION', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                              const SizedBox(height: 12),
+                              buildInfoRow('Email Address', user['email'] ?? '', Icons.alternate_email_rounded, editField: buildEditableTextField(emailCtrl, 'Email Address')),
+                              buildInfoRow('Phone Number', user['phone'] ?? '', Icons.phone_android_rounded, editField: buildEditableTextField(phoneCtrl, 'Phone Number')),
+                              const SizedBox(height: 24),
+
+                              // Family Info
+                              Text('FAMILY CONTACTS', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                              const SizedBox(height: 12),
+                              buildInfoRow('Father\'s Name', user['fatherName'] ?? '', Icons.person_outline_rounded, editField: buildEditableTextField(fatherNameCtrl, 'Father\'s Name')),
+                              buildInfoRow('Father\'s Phone', user['fatherPhone'] ?? '', Icons.phone_callback_rounded, editField: buildEditableTextField(fatherPhoneCtrl, 'Father\'s Phone')),
+                              const SizedBox(height: 24),
+
+                              // Transit Section
+                              Text('TRANSPORT STATUS', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                              const SizedBox(height: 12),
+                              buildInfoRow('Pickup Point', user['pickupPoint'] ?? '', Icons.location_on_outlined, editField: buildEditableTextField(pickupCtrl, 'Pickup Point')),
+                              
+                              // Route Info Row (Custom since it has button)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                child: Row(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Icon(Icons.route_outlined, color: Colors.white38, size: 16),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text('Assigned Route'.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                          const SizedBox(height: 4),
+                                          if (matchedRoute != null)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.12),
+                                                borderRadius: BorderRadius.circular(8),
+                                                border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.3)),
+                                              ),
+                                              child: Text(
+                                                matchedRoute.name.toUpperCase(),
+                                                style: GoogleFonts.plusJakartaSans(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))), fontSize: 9, fontWeight: FontWeight.bold),
+                                              ),
+                                            )
+                                          else
+                                            Text('No Route Assigned', style: GoogleFonts.plusJakartaSans(color: Colors.white30, fontSize: 12)),
+                                        ],
+                                      ),
+                                    ),
+                                    ElevatedButton(
+                                      onPressed: () {
+                                        Navigator.pop(context); // Close details sheet first
+                                        _showUserRouteDialog(user); // Open route dialog
+                                      },
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                                        foregroundColor: Colors.blueAccent,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        isDense: true,
+                                      ),
+                                      child: Text('CHANGE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        
+                        const Divider(color: Colors.white10, height: 1),
+                        
+                        // Actions bar at the bottom
+                        SafeArea(
+                          child: Padding(
+                            padding: const EdgeInsets.all(20),
+                            child: Row(
+                              children: [
+                                // Suspend/Activate Toggle Button
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: isUpdating ? null : () async {
+                                      setSheetState(() => isUpdating = true);
+                                      try {
+                                        final newStatus = isActive ? 'Suspended' : 'Active';
+                                        await _apiService.put('manager/users/${user['_id']}', {'status': newStatus});
+                                        if (mounted) {
+                                          setSheetState(() {
+                                            user['status'] = newStatus;
+                                            isUpdating = false;
+                                          });
+                                          _loadData();
+                                        }
+                                      } catch (e) {
+                                        setSheetState(() => isUpdating = false);
+                                        debugPrint('Status update failed: $e');
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isActive ? Colors.orangeAccent.withOpacity(0.1) : const Color(0xFF38EF7D).withOpacity(0.1),
+                                      foregroundColor: isActive ? Colors.orangeAccent : const Color(0xFF38EF7D),
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                    ),
+                                    child: isUpdating 
+                                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                        : Text(
+                                            isActive ? 'SUSPEND ACCOUNT' : 'ACTIVATE ACCOUNT',
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                
+                                // Edit/Save Button
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: isUpdating ? null : () async {
+                                      if (isEditing) {
+                                        // Save mode
+                                        setSheetState(() => isUpdating = true);
+                                        try {
+                                          final body = {
+                                            'name': nameCtrl.text.trim(),
+                                            'email': emailCtrl.text.trim(),
+                                            'phone': phoneCtrl.text.trim(),
+                                            'courseName': courseCtrl.text.trim(),
+                                            'pickupPoint': pickupCtrl.text.trim(),
+                                            'fatherName': fatherNameCtrl.text.trim(),
+                                            'fatherPhone': fatherPhoneCtrl.text.trim(),
+                                            'gender': genderCtrl.text.trim(),
+                                          };
+                                          await _apiService.put('manager/users/${user['_id']}', body);
+                                          if (mounted) {
+                                            setSheetState(() {
+                                              user['name'] = body['name'];
+                                              user['email'] = body['email'];
+                                              user['phone'] = body['phone'];
+                                              user['courseName'] = body['courseName'];
+                                              user['pickupPoint'] = body['pickupPoint'];
+                                              user['fatherName'] = body['fatherName'];
+                                              user['fatherPhone'] = body['fatherPhone'];
+                                              user['gender'] = body['gender'];
+                                              isEditing = false;
+                                              isUpdating = false;
+                                            });
+                                            _loadData();
+                                          }
+                                        } catch (e) {
+                                          setSheetState(() => isUpdating = false);
+                                          debugPrint('User details update failed: $e');
+                                        }
+                                      } else {
+                                        // Toggle Edit
+                                        setSheetState(() {
+                                          isEditing = true;
+                                        });
+                                      }
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: isEditing ? const Color(0xFF38EF7D) : Colors.white.withOpacity(0.05),
+                                      foregroundColor: isEditing ? Colors.black : Colors.white,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      padding: const EdgeInsets.symmetric(vertical: 14),
+                                    ),
+                                    child: isUpdating 
+                                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                                        : Text(
+                                            isEditing ? 'SAVE DETAILS' : 'EDIT DETAILS',
+                                            style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                
+                                // Delete Account Button
+                                Container(
+                                  decoration: BoxDecoration(
+                                    color: Colors.redAccent.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.delete_forever_rounded, color: Colors.redAccent),
+                                    onPressed: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (ctx) => AlertDialog(
+                                          backgroundColor: const Color(0xFF1E1E1E),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                                          title: Text('Delete Account?', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                                          content: Text('Are you sure you want to permanently delete this user account? Their associated registration submission will revert to pending status.', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13)),
+                                          actions: [
+                                            TextButton(
+                                              onPressed: () => Navigator.pop(ctx),
+                                              child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+                                            ),
+                                            TextButton(
+                                              onPressed: () async {
+                                                Navigator.pop(ctx); // Close dialog
+                                                Navigator.pop(context); // Close bottom sheet
+                                                setState(() => _isLoading = true);
+                                                try {
+                                                  await _apiService.delete('manager/users/${user['_id']}');
+                                                  _loadData();
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    const SnackBar(content: Text('User account deleted successfully.'), backgroundColor: Colors.green),
+                                                  );
+                                                } catch (e) {
+                                                  _loadData();
+                                                  ScaffoldMessenger.of(context).showSnackBar(
+                                                    SnackBar(content: Text('Failed to delete user: $e'), backgroundColor: Colors.redAccent),
+                                                  );
+                                                }
+                                              },
+                                              child: Text('DELETE', style: GoogleFonts.plusJakartaSans(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildUserGlassCard({required Widget child, required String status, required VoidCallback onTap}) {
+    final isActive = status.toLowerCase() == 'active';
+    final statusColor = isActive ? const Color(0xFF38EF7D) : Colors.orangeAccent;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E1E1E).withOpacity(0.4),
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(color: Colors.white.withOpacity(0.05)),
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: Container(
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(color: statusColor, width: 4),
+              ),
+            ),
+            padding: const EdgeInsets.fromLTRB(16, 20, 20, 20),
+            child: child,
+          ),
         ),
       ),
     );

@@ -11,6 +11,7 @@ import '../services/notification_service.dart';
 import 'admin_logs_screen.dart';
 import 'fleet_maintenance_screen.dart';
 import 'fleet_radar_screen.dart';
+import 'admin_permissions_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -185,7 +186,9 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       _buildAdminActionTile('Fleet Maintenance', Icons.directions_bus_filled_rounded, Colors.blueAccent, () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetMaintenanceScreen()));
                       }),
-                      _buildAdminActionTile('User Permissions', Icons.admin_panel_settings_rounded, Colors.purpleAccent, () {}),
+                      _buildAdminActionTile('User Permissions', Icons.admin_panel_settings_rounded, Colors.purpleAccent, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPermissionsScreen()));
+                      }),
                       _buildAdminActionTile('System Logs', Icons.terminal_rounded, Colors.orangeAccent, () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminLogsScreen()));
                       }),
