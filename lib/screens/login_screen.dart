@@ -24,6 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String _selectedRole = 'user';
   bool _isLoginLoading = false;
   bool _isGuestLoading = false;
+  bool _obscurePassword = true;
 
   @override
   void initState() {
@@ -379,12 +380,26 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       child: TextField(
         controller: controller,
-        obscureText: isPassword,
+        obscureText: isPassword ? _obscurePassword : false,
         style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
           hintText: hint,
           hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontWeight: FontWeight.w500),
           prefixIcon: Icon(icon, color: Colors.white38, size: 22),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                    color: Colors.white38,
+                    size: 20,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                )
+              : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         ),
