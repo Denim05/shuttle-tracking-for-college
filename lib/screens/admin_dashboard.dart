@@ -12,6 +12,7 @@ import 'admin_logs_screen.dart';
 import 'fleet_maintenance_screen.dart';
 import 'fleet_radar_screen.dart';
 import 'admin_permissions_screen.dart';
+import 'profile_settings_screen.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -119,6 +120,12 @@ class _AdminDashboardState extends State<AdminDashboard> {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.person_outline_rounded, color: Colors.purpleAccent),
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
+            },
+          ),
           IconButton(
             icon: Icon(_isRefreshing ? Icons.sync : Icons.refresh_rounded, color: Colors.blueAccent),
             onPressed: _loadStats,
@@ -263,7 +270,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           physics: const NeverScrollableScrollPhysics(),
           crossAxisSpacing: 14,
           mainAxisSpacing: 14,
-          childAspectRatio: 1.5,
+          childAspectRatio: 1.25,
           children: [
             _buildStatCard('FLEET COUNT', _busCount.toString(), Icons.sensors_rounded, Colors.deepPurpleAccent),
             _buildStatCard('ROUTES', _routeCount.toString(), Icons.hub_rounded, Colors.blueAccent),
@@ -286,7 +293,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,

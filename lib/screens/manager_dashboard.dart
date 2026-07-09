@@ -14,6 +14,7 @@ import 'registration_manager_screen.dart';
 import 'complaint_manager_screen.dart';
 import 'route_management_screen.dart';
 import 'fleet_maintenance_screen.dart';
+import 'profile_settings_screen.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
@@ -386,6 +387,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           ),
                           Row(
                             children: [
+                              _buildAppBarAction(Icons.person_outline_rounded, () {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
+                              }),
                               _buildAppBarAction(Icons.download_rounded, _downloadReport),
                               _buildAppBarAction(Icons.logout_rounded, () {
                                  Provider.of<AuthService>(context, listen: false).logout();
@@ -810,7 +814,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     );
                   },
                   icon: const Icon(Icons.app_registration_rounded, size: 18),
-                  label: Text('Manage Approvals', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                  label: Text('Approvals', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blueAccent.withOpacity(0.12),
                     foregroundColor: Colors.blueAccent,
@@ -830,7 +834,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     _showBulkImportBottomSheet();
                   },
                   icon: const Icon(Icons.cloud_upload_rounded, size: 18),
-                  label: Text('Bulk Import', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                  label: Text('Bulk Import', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurpleAccent.withOpacity(0.12),
                     foregroundColor: Colors.deepPurpleAccent,

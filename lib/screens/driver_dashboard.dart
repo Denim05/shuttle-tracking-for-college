@@ -13,6 +13,7 @@ import '../models/bus_model.dart';
 import '../models/route_model.dart';
 import '../components/bus_map.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'profile_settings_screen.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -484,13 +485,28 @@ class _DriverDashboardState extends State<DriverDashboard> {
                             ),
                           ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
-                          onPressed: () => Provider.of<AuthService>(context, listen: false).logout(),
-                          style: IconButton.styleFrom(
-                            backgroundColor: Colors.white.withOpacity(0.05),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          ),
+                        Row(
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.person_outline_rounded, color: Colors.white70, size: 20),
+                              onPressed: () {
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
+                              },
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.white.withOpacity(0.05),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
+                              icon: const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
+                              onPressed: () => Provider.of<AuthService>(context, listen: false).logout(),
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.white.withOpacity(0.05),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),

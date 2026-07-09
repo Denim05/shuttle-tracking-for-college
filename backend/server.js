@@ -2694,18 +2694,75 @@ app.delete('/api/manager/users/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// User: Update Profile (Self)
+// Unified User Profile (Self Fetch)
+app.get('/api/users/profile', authMiddleware, async (req, res) => {
+    try {
+        const { id, role } = req.user;
+        let Model;
+        switch (role) {
+            case 'admin': Model = Admin; break;
+            case 'manager': Model = Manager; break;
+            case 'driver': Model = Driver; break;
+            case 'user': Model = User; break;
+            default: return res.status(400).json({ error: 'Invalid role' });
+        }
+        
+        const profile = await Model.findById(id).select('-password');
+        if (!profile) return res.status(404).json({ error: 'Profile not found' });
+        
+        res.json({ role, profile });
+    } catch (err) {
+        console.error('Fetch profile error:', err);
+        res.status(500).json({ error: 'Failed to fetch profile' });
+    }
+});
+
+// Unified User Profile (Self Update)
 app.put('/api/users/profile', authMiddleware, async (req, res) => {
     try {
-        const { proximityAlertsEnabled } = req.body;
-        const updatedUser = await User.findByIdAndUpdate(req.user.id, { proximityAlertsEnabled }, { new: true });
-        res.json(updatedUser);
-    } catch (_err) {
+        const { id, role } = req.user;
+        let Model;
+        switch (role) {
+            case 'admin': Model = Admin; break;
+            case 'manager': Model = Manager; break;
+            case 'driver': Model = Driver; break;
+            case 'user': Model = User; break;
+            default: return res.status(400).json({ error: 'Invalid role' });
+        }
+
+        const allowedUpdates = {};
+        if (req.body.email !== undefined) allowedUpdates.email = req.body.email;
+        if (req.body.phone !== undefined) allowedUpdates.phone = req.body.phone;
+        if (req.body.name !== undefined) {
+            if (role === 'driver' || role === 'user') allowedUpdates.name = req.body.name;
+        }
+        if (req.body.contactNumber !== undefined && role === 'driver') allowedUpdates.contactNumber = req.body.contactNumber;
+        if (req.body.proximityAlertsEnabled !== undefined && role === 'user') allowedUpdates.proximityAlertsEnabled = req.body.proximityAlertsEnabled;
+
+        const updated = await Model.findByIdAndUpdate(id, { $set: allowedUpdates }, { new: true }).select('-password');
+        
+        if (role === 'user') {
+            const updateSubmissionFields = {};
+            if (allowedUpdates.name !== undefined) updateSubmissionFields.name = allowedUpdates.name;
+            if (allowedUpdates.email !== undefined) updateSubmissionFields.email = allowedUpdates.email;
+            if (allowedUpdates.phone !== undefined) updateSubmissionFields.phone = allowedUpdates.phone;
+            
+            if (Object.keys(updateSubmissionFields).length > 0) {
+                await RegistrationSubmission.findOneAndUpdate(
+                    { createdUserId: id },
+                    { $set: updateSubmissionFields }
+                );
+            }
+        }
+
+        res.json(updated);
+    } catch (err) {
+        console.error('Update profile error:', err);
         res.status(500).json({ error: 'Failed to update profile' });
     }
 });
 
-// User: Change Password
+// Unified User: Change Password
 app.put('/api/users/change-password', authMiddleware, async (req, res) => {
     const { currentPassword, newPassword } = req.body;
     if (!currentPassword || !newPassword) {
@@ -2715,18 +2772,26 @@ app.put('/api/users/change-password', authMiddleware, async (req, res) => {
         return res.status(400).json({ error: 'New password must be at least 6 characters.' });
     }
     try {
-        const user = await User.findById(req.user.id);
+        const { id, role } = req.user;
+        let Model;
+        switch (role) {
+            case 'admin': Model = Admin; break;
+            case 'manager': Model = Manager; break;
+            case 'driver': Model = Driver; break;
+            case 'user': Model = User; break;
+            default: return res.status(400).json({ error: 'Invalid role' });
+        }
+
+        const user = await Model.findById(id);
         if (!user) return res.status(404).json({ error: 'User not found.' });
 
-        // Verify current password
         const valid = await argon2.verify(user.password, currentPassword);
         if (!valid) return res.status(401).json({ error: 'Current password is incorrect.' });
 
-        // Hash and save new password
         const hashed = await argon2.hash(newPassword);
-        await User.findByIdAndUpdate(req.user.id, { password: hashed });
+        await Model.findByIdAndUpdate(id, { password: hashed });
 
-        console.log(`🔑 [Password Changed] User: ${user.username}`);
+        console.log(`🔑 [Password Changed] User: ${user.username} (Role: ${role})`);
         res.json({ success: true, message: 'Password changed successfully.' });
     } catch (err) {
         console.error('Change password error:', err);

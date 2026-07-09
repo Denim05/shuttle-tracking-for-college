@@ -18,6 +18,7 @@ import '../services/notification_service.dart';
 import 'fleet_radar_screen.dart';
 import 'schedule_screen.dart';
 import 'complaint_screen.dart';
+import 'profile_settings_screen.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -1056,6 +1057,23 @@ class _UserDashboardState extends State<UserDashboard> {
           const SizedBox(height: 24),
           // ── Account / Security ─────────────────────────────────────────────
           _buildProfileSection('ACCOUNT', [
+            ListTile(
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent, size: 18),
+              ),
+              title: Text('Personal Profile', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+              subtitle: Text('Edit your name, email, and phone', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
+              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
+              },
+            ),
             ListTile(
               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
               leading: Container(
