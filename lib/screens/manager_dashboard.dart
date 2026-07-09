@@ -379,7 +379,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
                                     ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
                                     const SizedBox(width: 8),
-                                    Text('Admin Panel', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                                    Text('Manager Panel', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                                   ],
                                 ),
                               ],
