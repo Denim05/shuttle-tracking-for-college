@@ -2714,7 +2714,6 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         foregroundColor: Colors.blueAccent,
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                        isDense: true,
                                       ),
                                       child: Text('CHANGE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.bold)),
                                     ),
