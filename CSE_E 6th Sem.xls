@@ -1,1 +1,324 @@
-<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><meta http-equiv="content-type" content="application/vnd.ms-excel; charset=UTF-8"><head><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Table</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--><style>@page { size:portrait; mso-page-orientation:portrait; }@page Section1 {size:595.28pt 841.89pt; margin:1.0in 1.25in 1.0in 1.25in;mso-header-margin:.5in;mso-footer-margin:.5in;mso-paper-source:0;}div.Section1 {page:Section1;}@page Section2 {size:841.89pt 595.28pt;mso-page-orientation:portrait;margin:1.25in 1.0in 1.25in 1.0in;mso-header-margin:.5in;mso-footer-margin:.5in;mso-paper-source:0;}div.Section2 {page:Section2;}br {mso-data-placement:same-cell;}</style></head><body><div class="Section1"><table><thead><tr><th>Student Name</th><th>Gender</th><th>Father Name</th><th>Course Name</th><th>Mobile No.</th><th>Email Id.</th><th>Enrollment Number</th><th>Father Mobile Number</th><th>Permanent Address</th></tr></thead><tbody><tr><td>AARAMBH RAMENIYA</td><td>MALE</td><td>SANJAY RAMENIYA</td><td>CSE 6 SEM 3 YR</td><td>8269200305</td><td>iamarambhrameniya@gmail.com</td><td>0536CS231001</td><td>9977995055</td><td>H. NO-27, CAMP NO-12, SATYAM COLONY, BAIRAGARH BHOPAL</td></tr><tr><td>ADITYA KUMAR MISHRA</td><td>MALE</td><td>MANISH KUMAR MISHRA</td><td>CSE 6 SEM 3 YR</td><td>9341519772</td><td>adityamishra987570@gmail.com</td><td>0536CS231002</td><td>8306407938</td><td>VILLAGE - BANNI, CHAPPRA</td></tr><tr><td>AGRIM RAMENIYA</td><td>MALE</td><td>SANJAY RAMENIYA</td><td>CSE 6 SEM 3 YR</td><td>9669807968</td><td>rameniyaagrim@gmail.com</td><td>0536CS231003</td><td>9977995055</td><td>H. NO-27, CAMP NO-12, SATYAM COLONY, BAIRAGARH BHOPAL</td></tr><tr><td>AKANKSHA NAVIK</td><td>FEMALE</td><td>SUBHASH NAVIK</td><td>CSE 6 SEM 3 YR</td><td>9098734528</td><td>akankshanavik2@gmail.com</td><td>0536CS231004</td><td>9039927305</td><td>Jr. M.I.G- 243/1 INDRA NAGAR MANDIDEEP, BHOPAL</td></tr><tr><td>ALTMAS KHAN</td><td>MALE</td><td>AYYUB KHAN</td><td>CSE 6 SEM 3 YR</td><td>9111580264</td><td>altmask833@gmail.com</td><td>0536CS231005</td><td>7000741949</td><td>DEWADIYA, ICHHAWAR</td></tr><tr><td>AMIT KUMAR RAY</td><td>MALE</td><td>GUNESHWAR RAY</td><td>CSE 6 SEM 3 YR</td><td>9508121381</td><td>amitkumarpatel7562@gmail.com</td><td>0536CS231006</td><td>8709546652</td><td>EKAMMA, MADHUBANI , GHONGHOUR, BIHAR</td></tr><tr><td>AMIT KUMAR VARMA</td><td>MALE</td><td>SANTOSH VARMA</td><td>CSE 6 SEM 3 YR</td><td>9131103924</td><td>amitvarma36500@gmail.com</td><td>0536CS231007</td><td>9977191074</td><td>H. NO- 81, KANHA KUNJ PHASE -2, KOLAR ROAD, BHOPAL</td></tr><tr><td>ANANT KUMAR SINGH</td><td>MALE</td><td>ANIL KUMAR SINGH</td><td>CSE 6 SEM 3 YR</td><td>7388103303</td><td>anantsingha411@gmail.com</td><td>0536CS231008</td><td>8840466191</td><td>MOHANPUR BHAVRAKH, MIRZAPUR U.P</td></tr><tr><td>ANUJ SINGH GHOSHI</td><td>MALE</td><td>NIRPAT SINGH GHOSHI</td><td>CSE 6 SEM 3 YR</td><td>8085427836</td><td>anujthakurx10@gmail.com</td><td>0536CS231010</td><td>9165428060</td><td>610 QUATAR HINOTIYA ALAM,  KOLAR ROAD, BHOPAL</td></tr><tr><td>ANURAG</td><td>MALE</td><td>SHIVHARI</td><td>CSE 6 SEM 3 YR</td><td>9669721727</td><td>anuragnamdev830@gmail.com</td><td>0536CS231011</td><td>9174309981</td><td>VILL- KHAPARIYA, TH- SEONI MALWA, DIST- NARMADAPURAM</td></tr><tr><td>ARUN SHIVHARE</td><td>MALE</td><td>MANOJ KUMAR SHIVHARE</td><td>CSE 6 SEM 3 YR</td><td>8224059850</td><td>arunshivhare925@gmail.com</td><td>0536CS231012</td><td>9826206648</td><td>VILL- TATAM, TH- MAHARAJPUR, DIST- CHHATARPUR</td></tr><tr><td>ARYAN RAJORIYA</td><td>MALE</td><td>SHYAM RAJORIYA</td><td>CSE 6 SEM 3 YR</td><td>7470932236</td><td>aryanrajoriya16@gmail.com</td><td>0536CS231014</td><td></td><td>RATIBAD</td></tr><tr><td>ASTHA SINGH CHOUDHARY</td><td>FEMALE</td><td>SHAILESH KUMAR CHOUDHARY</td><td>CSE 6 SEM 3 YR</td><td>8602370454</td><td>aasthaxoxo04@gmail.com</td><td>0536CS231015</td><td>9179070454</td><td>VIVEKANANDA NAGAR, RAGENDRA PRASAD WARD /ORDINANCE FACTORY. KATNI</td></tr><tr><td>AYUSH RAI</td><td>MALE</td><td>DHARMENDRA RAI</td><td>CSE 6 SEM 3 YR</td><td>8528601371</td><td>ayush8528601371@gmail.com</td><td>0536CS231016</td><td>9696777936</td><td>562 NEHRU NAGAR LALITPUR U.P</td></tr><tr><td>BHARAT SINGH</td><td>MALE</td><td>RAJESH SINGH</td><td>CSE 6 SEM 3 YR</td><td>7317653321</td><td>bharatsinghbhadauriya10d@gmail.com</td><td>0536CS231017</td><td>8896052451</td><td>PATHAR KATA CHAURAHA, IN FRONT OF AXIS BANK , CIVIL LINES, FATEHPUR, U.P</td></tr><tr><td>DEEPIKA GHOSHI</td><td>FEMALE</td><td>SHIVRAJ SINGH GHOSHI</td><td>CSE 6 SEM 3 YR</td><td>9630738644</td><td>shivrajghoshi6@gmail.com</td><td>0536CS231018</td><td>9329306615</td><td>H.No -372, 610 Quarters Hinotiya Alam Kolar Road Bhopal</td></tr><tr><td>DEV KUMAR PANWAR</td><td>MALE</td><td>BHANWAR SINGH</td><td>CSE 6 SEM 3 YR</td><td>9200182884</td><td>devpatel29038@gmail.com</td><td>0536CS231019</td><td>6266476580</td><td>H, NO-63, PATEL MOHALLA, KORT PIPALIYA, NASRULLAGANJ , DISTRICT SEHORE</td></tr><tr><td>DHRUV SAINI</td><td>MALE</td><td>ABHISHEK SAINI</td><td>CSE 6 SEM 3 YR</td><td>7879094405</td><td>dhruvsaini962005@gmail.com</td><td>0536CS231020</td><td>8085026673</td><td>H.NO. 247, BEHIND PALASH HOTEL, BANGANGA, BHOPAL</td></tr><tr><td>GAYATRI KALAMBE</td><td>FEMALE</td><td>DEVENDRA KALAMBE</td><td>CSE 6 SEM 3 YR</td><td>7828749917</td><td>gayatrikalambe524@gmail.com</td><td>0536CS231022</td><td>9340983133</td><td>RADHA KRISHNA WARD NO-3, MOHGAON HAVELI, TH- SAUSAR, DIST- CHHINDWARA</td></tr><tr><td>HAJARE DENIM DHANPAL</td><td>MALE</td><td>DHANPAL HAJARE</td><td>CSE 6 SEM 3 YR</td><td>8087270508</td><td></td><td>0536CS231023</td><td></td><td>H. NO- 400/2,  GAJANAN NAGRI, BRAHMPURI, DIST- CHANDRAPUR, MAHARASHTRA</td></tr><tr><td>HARENDRA KUSHWAHA</td><td>MALE</td><td>BETOO</td><td>CSE 6 SEM 3 YR</td><td>9302742363</td><td>harendrakushwaha342@gmail.com</td><td>0536CS231024</td><td>7089631549</td><td>VILL- RAMUPURA, POST- RAGAULI, TH-LAVKUSHNAGAR, DIST- CHHATARPUR</td></tr><tr><td>HARSH PATEL</td><td>MALE</td><td>BANTI PATEL</td><td>CSE 6 SEM 3 YR</td><td>6268235679</td><td>hp1200792@gmail.com</td><td>0536CS231025</td><td>9752134467</td><td>S/O Mr. BANTI PATEL, WARD NO 11MUKATI  MOHALLA CHAKALDI CHAKLA(VANGRAM), SEHORE, M.P.</td></tr><tr><td>KIRAN MEWADA</td><td>FEMALE</td><td>OMPRAKASH MEWADA</td><td>CSE 6 SEM 3 YR</td><td>7354464330</td><td>Kiranmewada28@gmail.com</td><td>0536CS231030</td><td>7049056435</td><td>SAI COLONY, ASHTA, DIAT- SEHORE</td></tr><tr><td>KRASHN KUMAR AHIRWAR</td><td>MALE</td><td>PRABHUDAYAL AHIRWAR</td><td>CSE 6 SEM 3 YR</td><td>9039153506</td><td>krishnakumarahirwar425@gmail.com</td><td>0536CS231031</td><td>8899442795</td><td>VILL- AKTAUHA, WARD NI-19, TH- LAVKUSHNAGAR, DIST- CHHATARPUR.</td></tr><tr><td>MANSVI</td><td>FEMALE</td><td>SHARAD</td><td>CSE 6 SEM 3 YR</td><td>7879338275</td><td>mansvidawande@gmail.com</td><td>0536CS231032</td><td>6267115370</td><td>H. NO-15, DWARKA NAGAR,  NEAR BADORA, TH- GHORADONGRI, DIST- BETUL</td></tr><tr><td>MOHD AMAAN</td><td>MALE</td><td>MOHD TARIK</td><td>CSE 6 SEM 3 YR</td><td>9305575625</td><td>mohdamaan72004@gmail.com</td><td>0536CS231034</td><td>7668999081</td><td>28/2 DIG BUNGALOW NAVEEN RAMBA NAGAR, BHOPAL</td></tr><tr><td>MUHAMMAD AYAN</td><td>MALE</td><td>MUHAMMAD SHAKIR KHAN</td><td>CSE 6 SEM 3 YR</td><td>8357806673</td><td>muhammad125114@gmail.com</td><td>0536CS231035</td><td>7879809575</td><td>WARD NO-09, KANTHI MOHALL, VILL- LAVKUSH NAGAR, TH- LAUNDI, CHHATARPUR</td></tr><tr><td>MUSKAN VERMA</td><td>FEMALE</td><td>VIKRAM SINGH</td><td>CSE 6 SEM 3 YR</td><td>9399640656</td><td>Muskanverma2472@gamil.com</td><td>0536CS231036</td><td>8966965491</td><td>VILL- BHEEL KHEDI, POST- LASUDIYA KHAS, DIST- SEHORE</td></tr><tr><td>NIKITA TILAK</td><td>FEMALE</td><td>KARAN SINGH TILAK</td><td>CSE 6 SEM 3 YR</td><td>7999880977</td><td></td><td>0536CS231037</td><td>9713556053</td><td>H. NO-37, VILL- BADJHIRI, POST- JHAGARIYA KHURD, DIST- BHOPAL (M.P)</td></tr><tr><td>OM UIKEY</td><td>MALE</td><td>JAIRAM UIKEY</td><td>CSE 6 SEM 3 YR</td><td>8815081605</td><td>ouike41@gmail.com</td><td>0536CS231038</td><td>8319116321</td><td>VILL- CHIKKLI MUKASA,  POST- DHANORA, BLOCK -PANDURNA, DIST- CHHINDWARA</td></tr><tr><td>PALAK NAGAR</td><td>FEMALE</td><td>RAMJEEVAN NAGAR</td><td>CSE 6 SEM 3 YR</td><td>8770897613</td><td></td><td>0536CS231039</td><td>9826680874</td><td>H. NO- 09, RATIBADH, NEAR SAPNA PHOTO STUDIO BHOPAL</td></tr><tr><td>PALLAVI RANGARE</td><td>FEMALE</td><td>DILEEP RANGARE</td><td>CSE 6 SEM 3 YR</td><td>7247026694</td><td>pallavirangare@gmail.com</td><td>0536CS231040</td><td>9981350544</td><td>WARD NO 18, NEAR BUDDHA VIHAR, KAJALWANI, POST- SAUSAR, DIST- CHHINDWARA</td></tr><tr><td>PANKAJ SAHU</td><td>MALE</td><td>CHANDAN SAHU</td><td>CSE 6 SEM 3 YR</td><td>6205367942</td><td>pankajsahu8775226@gmail.com</td><td>0536CS231041</td><td>9572863123</td><td>VILLAGE JARIYAGAR DIST KHUNTI STATE JHARKHAND 835234</td></tr><tr><td>PAWAN KUMAR CHAUHAN</td><td>MALE</td><td>DULARCHAND PRASAD</td><td>CSE 6 SEM 3 YR</td><td>6205948409</td><td>pawanhsm@gmail.com</td><td>0536CS231042</td><td>8949437434</td><td>SIWAN BIHAR</td></tr><tr><td>PIYUSH HEDAU</td><td>MALE</td><td>ANIL HEDAU</td><td>CSE 6 SEM 3 YR</td><td>9302751517</td><td>piyushhedau53@gmail.com</td><td>0536CS231044</td><td>9644544348</td><td>WARD NO -1, VILL-  BENI, TH- KHAIRLANJI, DIAT- BALAGHAT</td></tr><tr><td>PRASHANT AHIRWAR</td><td>MALE</td><td>DHARAM LAL</td><td>CSE 6 SEM 3 YR</td><td>7828968802</td><td>prashantahirwar074@gmail.com</td><td>0536CS231045</td><td>9981941385</td><td>DR. AMBEDKAR WARD NO-15, BANDA, DIST- SAGAR</td></tr><tr><td>PRIYANSH RAJ</td><td>MALE</td><td>SUNIL RAJ</td><td>CSE 6 SEM 3 YR</td><td>9826739866</td><td>priyash.raj.k@gmail.com</td><td>0536CS231047</td><td>8871835138</td><td>18, SANDAL CHAYAN KUMAR PURA JAHANGIRABAD BHOPAL</td></tr><tr><td>RAJ SONI</td><td>MALE</td><td>ANILSONI</td><td>CSE 6 SEM 3 YR</td><td>9131038067</td><td>rs1675895@gmail.com</td><td>0536CS231049</td><td>9713415454</td><td>H. NO- S-19, NEHRU NAGAR, NEAR MADHURAM SWEETS, BHOPAL</td></tr><tr><td>RISHIKA DUBEY</td><td>FEMALE</td><td>DEVENDRA DUBEY</td><td>CSE 6 SEM 3 YR</td><td>9244331977</td><td>rishikadubey1408@gmail.com</td><td>0536CS231051</td><td>6260062852</td><td>NEW CIVIL LINE BANDA WARD 10</td></tr><tr><td>RISHU RAJ</td><td>MALE</td><td>RUPESH KUMAR</td><td>CSE 6 SEM 3 YR</td><td>7870548585</td><td>rrs90608865@gmail.com</td><td>0536CS231052</td><td>9060886564</td><td>VILLAGE MOR, PS MOKAMA PATNA</td></tr><tr><td>RIYA VERMA</td><td>FEMALE</td><td>VIKRAM VERMA</td><td>CSE 6 SEM 3 YR</td><td>9285408584</td><td>riyaverma2976@gmail.com</td><td>0536CS231053</td><td>9981542967</td><td>VILL- GUDBHEL, POST- NAPLAKHEDI, DIST- SEHORE</td></tr><tr><td>ROHIT KUMAR</td><td>MALE</td><td>PANKAJ KUMAR</td><td>CSE 6 SEM 3 YR</td><td>9199468272</td><td>rohitkumar0789464@gmail.com</td><td>0536CS231054</td><td>8084662704</td><td>VILL- BAIKATHPUR, POST- KHUSRUPUR, DIST- PATNA</td></tr><tr><td>SAMEER PATIL</td><td>MALE</td><td>SHAMRAO PATIL</td><td>CSE 6 SEM 3 YR</td><td>6268978201</td><td>'-</td><td>0536CS231056</td><td>9179453356</td><td>SAWTA CHOWK, WARD NO- 6, TH- SAUSAR, DIST- CHHINDWARA</td></tr><tr><td>SANTOSHI PATEL</td><td>FEMALE</td><td>JAYBHAN PATEL</td><td>CSE 6 SEM 3 YR</td><td>6261326332</td><td>santoshipatel811@gmail.com</td><td>0536CS231057</td><td>6263797882</td><td>VILL- MURACHH, TH- PAWAI, DIST- PANNA</td></tr><tr><td>SATYAM MOURYA</td><td>MALE</td><td>DAYANANDAN MOURYA</td><td>CSE 6 SEM 3 YR</td><td>7880276253</td><td>satyammourya658@gmail.com</td><td>0536CS231058</td><td>7049697274</td><td>NEWTON NO- 12, KALI CAMP, WARD NO-11,  TH- PARASIA, DIST-  CHHINDWARA</td></tr><tr><td>SHEVENDRA SINGH CHANDEL</td><td>MALE</td><td>MOORAT SINGH CHANDEL</td><td>CSE 6 SEM 3 YR</td><td>7723883326</td><td>shevendrachandel@gmail.com</td><td>0536CS231059</td><td>9575173519</td><td>GUNDOURA MP</td></tr><tr><td>SHIVANSHU SINGH</td><td>MALE</td><td>VIBHUTI NARAYAN SINGH</td><td>CSE 6 SEM 3 YR</td><td>8462921236</td><td>'-</td><td>0536CS231061</td><td>'-</td><td>NA</td></tr><tr><td>SHUBHAM KUMAR</td><td>MALE</td><td>RANJEET KUMAR</td><td>CSE 6 SEM 3 YR</td><td>9199147048</td><td>shubhamrampur4250@gmail.com</td><td>0536CS231062</td><td>9708407311</td><td>VILL- RAMPUR, POST- RAMPUR KHORRAM, SARAN, BIHAR -841442</td></tr><tr><td>SNEHLATA KUDARE</td><td>FEMALE</td><td>NATHULAL KUDARE</td><td>CSE 6 SEM 3 YR</td><td>7828695784</td><td></td><td>0536CS231063</td><td></td><td>GULLARDHANA BHIMPUR BETUL</td></tr><tr><td>SUCHITA NAGAR</td><td>FEMALE</td><td>RAMRAJ NAGAR</td><td>CSE 6 SEM 3 YR</td><td>8871722075</td><td>nagarsuchita6@gmail.com</td><td>0536CS231065</td><td>8889622075</td><td>H NO- 6, VILLAGE KHAMLA KHEDI,  POST kHAJURI, BHOPAL</td></tr><tr><td>SUHANI NAGAR</td><td>FEMALE</td><td>DAULAT SINGH NAGAR</td><td>CSE 6 SEM 3 YR</td><td>9907403243</td><td></td><td>0536CS231066</td><td>8640048052</td><td>H. NO- 18, VILL- NANDNI, POST- TILAKHEDI, DIST- BHOPAL (M.P)</td></tr><tr><td>TANISH VISHWAKARMA</td><td>MALE</td><td>Rajesh Vishwakarma</td><td>CSE 6 SEM 3 YR</td><td>9685725375</td><td>tanishvishwakarms45@gmail.com</td><td>0536CS231068</td><td>6263284473</td><td>H. NO 172, IN FRONT OF HP FUEL PETROL PUMP, NEELBAD, BHOPAL</td></tr><tr><td>TARUN MEWADA</td><td>MALE</td><td>Suraj Singh</td><td>CSE 6 SEM 3 YR</td><td>9301694614</td><td>tarunrajput361@gmail.coom</td><td>0536CS231069</td><td></td><td>VILL- KHAMALIYA, DIST- SEHORE</td></tr><tr><td>UDAY SHANKAR</td><td>MALE</td><td>KUNDAN KUMAR</td><td>CSE 6 SEM 3 YR</td><td>7644085792</td><td></td><td>0536CS231070</td><td>6201149017</td><td>ACHUARA BARH PATNA</td></tr><tr><td>UTKARSH TIWARI</td><td>MALE</td><td>VIJAY KUMAR TIWARI</td><td>CSE 6 SEM 3 YR</td><td>8305867487</td><td>tiwari.utkarsh2806@gmail.com</td><td>0536CS231071</td><td>8305111141</td><td>HIG 8 DEENDAYAL PURAM UTAILY SATNA MADHYA PRADESH</td></tr></tbody></table></div></body></html>
+<html xmlns:v="urn:schemas-microsoft-com:vml"
+xmlns:o="urn:schemas-microsoft-com:office:office"
+xmlns:x="urn:schemas-microsoft-com:office:excel"
+xmlns="http://www.w3.org/TR/REC-html40">
+
+<head>
+<meta name="Excel Workbook Frameset">
+<meta http-equiv=Content-Type content="text/html; charset=utf-8">
+<meta name=ProgId content=Excel.Sheet>
+<meta name=Generator content="Microsoft Excel 15">
+<link rel=File-List href="CSE_E%206th%20Sem_files/filelist.xml">
+<![if !supportTabStrip]>
+<link id="shLink" href="CSE_E%206th%20Sem_files/sheet001.htm">
+
+<link id="shLink">
+
+<script language="JavaScript">
+<!--
+ var c_lTabs=1;
+
+ var c_rgszSh=new Array(c_lTabs);
+ c_rgszSh[0] = "Table";
+
+
+
+ var c_rgszClr=new Array(8);
+ c_rgszClr[0]="window";
+ c_rgszClr[1]="buttonface";
+ c_rgszClr[2]="windowframe";
+ c_rgszClr[3]="windowtext";
+ c_rgszClr[4]="threedlightshadow";
+ c_rgszClr[5]="threedhighlight";
+ c_rgszClr[6]="threeddarkshadow";
+ c_rgszClr[7]="threedshadow";
+
+ var g_iShCur;
+ var g_rglTabX=new Array(c_lTabs);
+
+function fnGetIEVer()
+{
+ var ua=window.navigator.userAgent
+ var msie=ua.indexOf("MSIE")
+ if (msie>0 && window.navigator.platform=="Win32")
+  return parseInt(ua.substring(msie+5,ua.indexOf(".", msie)));
+ else
+  return 0;
+}
+
+function fnBuildFrameset()
+{
+ var szHTML="<frameset rows=\"*,18\" border=0 width=0 frameborder=no framespacing=0>"+
+  "<frame src=\""+document.all.item("shLink")[0].href+"\" name=\"frSheet\" noresize>"+
+  "<frameset cols=\"54,*\" border=0 width=0 frameborder=no framespacing=0>"+
+  "<frame src=\"\" name=\"frScroll\" marginwidth=0 marginheight=0 scrolling=no>"+
+  "<frame src=\"\" name=\"frTabs\" marginwidth=0 marginheight=0 scrolling=no>"+
+  "</frameset></frameset><plaintext>";
+
+ with (document) {
+  open("text/html","replace");
+  write(szHTML);
+  close();
+ }
+
+ fnBuildTabStrip();
+}
+
+function fnBuildTabStrip()
+{
+ var szHTML=
+  "<html><head><style>.clScroll {font:8pt Courier New;color:"+c_rgszClr[6]+";cursor:default;line-height:10pt;}"+
+  ".clScroll2 {font:10pt Arial;color:"+c_rgszClr[6]+";cursor:default;line-height:11pt;}</style></head>"+
+  "<body onclick=\"event.returnValue=false;\" ondragstart=\"event.returnValue=false;\" onselectstart=\"event.returnValue=false;\" bgcolor="+c_rgszClr[4]+" topmargin=0 leftmargin=0><table cellpadding=0 cellspacing=0 width=100%>"+
+  "<tr><td colspan=6 height=1 bgcolor="+c_rgszClr[2]+"></td></tr>"+
+  "<tr><td style=\"font:1pt\">&nbsp;<td>"+
+  "<td valign=top id=tdScroll class=\"clScroll\" onclick=\"parent.fnFastScrollTabs(0);\" onmouseover=\"parent.fnMouseOverScroll(0);\" onmouseout=\"parent.fnMouseOutScroll(0);\"><a>&#171;</a></td>"+
+  "<td valign=top id=tdScroll class=\"clScroll2\" onclick=\"parent.fnScrollTabs(0);\" ondblclick=\"parent.fnScrollTabs(0);\" onmouseover=\"parent.fnMouseOverScroll(1);\" onmouseout=\"parent.fnMouseOutScroll(1);\"><a>&lt</a></td>"+
+  "<td valign=top id=tdScroll class=\"clScroll2\" onclick=\"parent.fnScrollTabs(1);\" ondblclick=\"parent.fnScrollTabs(1);\" onmouseover=\"parent.fnMouseOverScroll(2);\" onmouseout=\"parent.fnMouseOutScroll(2);\"><a>&gt</a></td>"+
+  "<td valign=top id=tdScroll class=\"clScroll\" onclick=\"parent.fnFastScrollTabs(1);\" onmouseover=\"parent.fnMouseOverScroll(3);\" onmouseout=\"parent.fnMouseOutScroll(3);\"><a>&#187;</a></td>"+
+  "<td style=\"font:1pt\">&nbsp;<td></tr></table></body></html>";
+
+ with (frames['frScroll'].document) {
+  open("text/html","replace");
+  write(szHTML);
+  close();
+ }
+
+ szHTML =
+  "<html><head>"+
+  "<style>A:link,A:visited,A:active {text-decoration:none;"+"color:"+c_rgszClr[3]+";}"+
+  ".clTab {cursor:hand;background:"+c_rgszClr[1]+";font:9pt Arial;padding-left:3px;padding-right:3px;text-align:center;}"+
+  ".clBorder {background:"+c_rgszClr[2]+";font:1pt;}"+
+  "</style></head><body onload=\"parent.fnInit();\" onselectstart=\"event.returnValue=false;\" ondragstart=\"event.returnValue=false;\" bgcolor="+c_rgszClr[4]+
+  " topmargin=0 leftmargin=0><table id=tbTabs cellpadding=0 cellspacing=0>";
+
+ var iCellCount=(c_lTabs+1)*2;
+
+ var i;
+ for (i=0;i<iCellCount;i+=2)
+  szHTML+="<col width=1><col>";
+
+ var iRow;
+ for (iRow=0;iRow<6;iRow++) {
+
+  szHTML+="<tr>";
+
+  if (iRow==5)
+   szHTML+="<td colspan="+iCellCount+"></td>";
+  else {
+   if (iRow==0) {
+    for(i=0;i<iCellCount;i++)
+     szHTML+="<td height=1 class=\"clBorder\"></td>";
+   } else if (iRow==1) {
+    for(i=0;i<c_lTabs;i++) {
+     szHTML+="<td height=1 nowrap class=\"clBorder\">&nbsp;</td>";
+     szHTML+=
+      "<td id=tdTab height=1 nowrap class=\"clTab\" onmouseover=\"parent.fnMouseOverTab("+i+");\" onmouseout=\"parent.fnMouseOutTab("+i+");\">"+
+      "<a href=\""+document.all.item("shLink")[i].href+"\" target=\"frSheet\" id=aTab>&nbsp;"+c_rgszSh[i]+"&nbsp;</a></td>";
+    }
+    szHTML+="<td id=tdTab height=1 nowrap class=\"clBorder\"><a id=aTab>&nbsp;</a></td><td width=100%></td>";
+   } else if (iRow==2) {
+    for (i=0;i<c_lTabs;i++)
+     szHTML+="<td height=1></td><td height=1 class=\"clBorder\"></td>";
+    szHTML+="<td height=1></td><td height=1></td>";
+   } else if (iRow==3) {
+    for (i=0;i<iCellCount;i++)
+     szHTML+="<td height=1></td>";
+   } else if (iRow==4) {
+    for (i=0;i<c_lTabs;i++)
+     szHTML+="<td height=1 width=1></td><td height=1></td>";
+    szHTML+="<td height=1 width=1></td><td></td>";
+   }
+  }
+  szHTML+="</tr>";
+ }
+
+ szHTML+="</table></body></html>";
+ with (frames['frTabs'].document) {
+  open("text/html","replace");
+  charset=document.charset;
+  write(szHTML);
+  close();
+ }
+}
+
+function fnInit()
+{
+ g_rglTabX[0]=0;
+ var i;
+ for (i=1;i<=c_lTabs;i++)
+  with (frames['frTabs'].document.all.tbTabs.rows[1].cells[fnTabToCol(i-1)])
+   g_rglTabX[i]=offsetLeft+offsetWidth-6;
+}
+
+function fnTabToCol(iTab)
+{
+ return 2*iTab+1;
+}
+
+function fnNextTab(fDir)
+{
+ var iNextTab=-1;
+ var i;
+
+ with (frames['frTabs'].document.body) {
+  if (fDir==0) {
+   if (scrollLeft>0) {
+    for (i=0;i<c_lTabs&&g_rglTabX[i]<scrollLeft;i++);
+    if (i<c_lTabs)
+     iNextTab=i-1;
+   }
+  } else {
+   if (g_rglTabX[c_lTabs]+6>offsetWidth+scrollLeft) {
+    for (i=0;i<c_lTabs&&g_rglTabX[i]<=scrollLeft;i++);
+    if (i<c_lTabs)
+     iNextTab=i;
+   }
+  }
+ }
+ return iNextTab;
+}
+
+function fnScrollTabs(fDir)
+{
+ var iNextTab=fnNextTab(fDir);
+
+ if (iNextTab>=0) {
+  frames['frTabs'].scroll(g_rglTabX[iNextTab],0);
+  return true;
+ } else
+  return false;
+}
+
+function fnFastScrollTabs(fDir)
+{
+ if (c_lTabs>16)
+  frames['frTabs'].scroll(g_rglTabX[fDir?c_lTabs-1:0],0);
+ else
+  if (fnScrollTabs(fDir)>0) window.setTimeout("fnFastScrollTabs("+fDir+");",5);
+}
+
+function fnSetTabProps(iTab,fActive)
+{
+ var iCol=fnTabToCol(iTab);
+ var i;
+
+ if (iTab>=0) {
+  with (frames['frTabs'].document.all) {
+   with (tbTabs) {
+    for (i=0;i<=4;i++) {
+     with (rows[i]) {
+      if (i==0)
+       cells[iCol].style.background=c_rgszClr[fActive?0:2];
+      else if (i>0 && i<4) {
+       if (fActive) {
+        cells[iCol-1].style.background=c_rgszClr[2];
+        cells[iCol].style.background=c_rgszClr[0];
+        cells[iCol+1].style.background=c_rgszClr[2];
+       } else {
+        if (i==1) {
+         cells[iCol-1].style.background=c_rgszClr[2];
+         cells[iCol].style.background=c_rgszClr[1];
+         cells[iCol+1].style.background=c_rgszClr[2];
+        } else {
+         cells[iCol-1].style.background=c_rgszClr[4];
+         cells[iCol].style.background=c_rgszClr[(i==2)?2:4];
+         cells[iCol+1].style.background=c_rgszClr[4];
+        }
+       }
+      } else
+       cells[iCol].style.background=c_rgszClr[fActive?2:4];
+     }
+    }
+   }
+   with (aTab[iTab].style) {
+    cursor=(fActive?"default":"hand");
+    color=c_rgszClr[3];
+   }
+  }
+ }
+}
+
+function fnMouseOverScroll(iCtl)
+{
+ frames['frScroll'].document.all.tdScroll[iCtl].style.color=c_rgszClr[7];
+}
+
+function fnMouseOutScroll(iCtl)
+{
+ frames['frScroll'].document.all.tdScroll[iCtl].style.color=c_rgszClr[6];
+}
+
+function fnMouseOverTab(iTab)
+{
+ if (iTab!=g_iShCur) {
+  var iCol=fnTabToCol(iTab);
+  with (frames['frTabs'].document.all) {
+   tdTab[iTab].style.background=c_rgszClr[5];
+  }
+ }
+}
+
+function fnMouseOutTab(iTab)
+{
+ if (iTab>=0) {
+  var elFrom=frames['frTabs'].event.srcElement;
+  var elTo=frames['frTabs'].event.toElement;
+
+  if ((!elTo) ||
+   (elFrom.tagName==elTo.tagName) ||
+   (elTo.tagName=="A" && elTo.parentElement!=elFrom) ||
+   (elFrom.tagName=="A" && elFrom.parentElement!=elTo)) {
+
+   if (iTab!=g_iShCur) {
+    with (frames['frTabs'].document.all) {
+     tdTab[iTab].style.background=c_rgszClr[1];
+    }
+   }
+  }
+ }
+}
+
+function fnSetActiveSheet(iSh)
+{
+ if (iSh!=g_iShCur) {
+  fnSetTabProps(g_iShCur,false);
+  fnSetTabProps(iSh,true);
+  g_iShCur=iSh;
+ }
+}
+
+ window.g_iIEVer=fnGetIEVer();
+ if (window.g_iIEVer>=4)
+  fnBuildFrameset();
+//-->
+</script>
+<![endif]><!--[if gte mso 9]><xml>
+ <x:ExcelWorkbook>
+  <x:ExcelWorksheets>
+   <x:ExcelWorksheet>
+    <x:Name>Table</x:Name>
+    <x:WorksheetSource HRef="CSE_E%206th%20Sem_files/sheet001.htm"/>
+   </x:ExcelWorksheet>
+  </x:ExcelWorksheets>
+  <x:Stylesheet HRef="CSE_E%206th%20Sem_files/stylesheet.css"/>
+  <x:WindowHeight>11604</x:WindowHeight>
+  <x:WindowWidth>23040</x:WindowWidth>
+  <x:WindowTopX>32767</x:WindowTopX>
+  <x:WindowTopY>32767</x:WindowTopY>
+  <x:ProtectStructure>False</x:ProtectStructure>
+  <x:ProtectWindows>False</x:ProtectWindows>
+ </x:ExcelWorkbook>
+</xml><![endif]-->
+</head>
+
+<frameset rows="*,39" border=0 width=0 frameborder=no framespacing=0>
+ <frame src="CSE_E%206th%20Sem_files/sheet001.htm" name="frSheet">
+ <frame src="CSE_E%206th%20Sem_files/tabstrip.htm" name="frTabs" marginwidth=0 marginheight=0>
+ <noframes>
+  <body>
+   <p>This page uses frames, but your browser doesn't support them.</p>
+  </body>
+ </noframes>
+</frameset>
+</html>

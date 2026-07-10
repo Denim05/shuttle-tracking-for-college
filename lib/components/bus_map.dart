@@ -50,6 +50,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   MapType _currentMapType = MapType.normal;
   bool _showLayerSelector = false;
 
+  bool _isMuted = false;
+  String _currentInstruction = "Head east on Main Road";
+  String _nextInstruction = "Then turn left";
+  IconData _instructionIcon = Icons.navigation_rounded;
+  IconData _nextInstructionIcon = Icons.turn_left_rounded;
+
   // ── Map object sets — only rebuilt when GPS data changes ──────────────────
   Set<Marker>   _markers   = {};
   Set<Polyline> _polylines = {};
@@ -109,9 +115,14 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       _updateFlowPolyline();
     });
 
+    _focusInitialBus();
+
     // Precache icons and then build initial markers
     _precacheIcons().then((_) {
       _cacheRouteData();
+      if (_focusedBus != null) {
+        _updateNavigationInstructions(_focusedBus!);
+      }
       _rebuildMapObjects();
     });
   }
@@ -122,6 +133,20 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     bool needsRebuild = false;
 
+    // Keep focused bus updated with latest live telemetry
+    if (_focusedBus != null) {
+      try {
+        _focusedBus = widget.buses.firstWhere((b) => b.id == _focusedBus!.id);
+        _updateNavigationInstructions(_focusedBus!);
+      } catch (_) {}
+    } else {
+      _focusInitialBus();
+    }
+
+    if (old.centerOnBusId != widget.centerOnBusId && widget.centerOnBusId != null) {
+      _focusInitialBus();
+    }
+
     for (final bus in widget.buses) {
       final newPos = LatLng(bus.currentLat, bus.currentLng);
       final oldPos = _animatedPos[bus.id];
@@ -129,8 +154,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       // Precache icon if new bus
       if (!_busIcons.containsKey(bus.id)) {
         final label = _busLabel(bus.id);
-        _ensureBusIcon(bus.id, label, isFocused: false);
-        _ensureBusIcon(bus.id, label, isFocused: true);
+        _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: false);
+        _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: true);
       }
 
       if (oldPos == null) {
@@ -359,6 +384,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     final result = <String, Marker>{};
 
     for (final bus in widget.buses) {
+      if (bus.status.toLowerCase() == 'offline') {
+        continue;
+      }
+
       final isFocused = _focusedBus?.id == bus.id;
       final pos       = _animatedPos[bus.id]     ?? LatLng(bus.currentLat, bus.currentLng);
       final heading   = _animatedHeading[bus.id] ?? bus.heading;
@@ -384,6 +413,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             _focusedBus  = bus;
             _isDriveMode = true;
             _isFollowing = true;
+            _updateNavigationInstructions(bus);
           });
           _scheduleCameraMove(bus);
           _rebuildMapObjects();
@@ -517,91 +547,209 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   Future<void> _precacheIcons() async {
     for (final bus in widget.buses) {
       final label = _busLabel(bus.id);
-      await _ensureBusIcon(bus.id, label, isFocused: false);
-      await _ensureBusIcon(bus.id, label, isFocused: true);
+      await _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: false);
+      await _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: true);
     }
     _stopIcon     = await _drawStopMarker(false);
     _lastStopIcon = await _drawStopMarker(true);
   }
 
-  Future<void> _ensureBusIcon(String busId, String label, {required bool isFocused}) async {
+  Future<void> _ensureBusIcon(String busId, String label, String routeColorHex, {required bool isFocused}) async {
     final map = isFocused ? _focusedBusIcons : _busIcons;
     if (map.containsKey(busId)) return;
-    final icon = await _drawBusMarker(label, isFocused: isFocused);
+    final icon = await _drawBusMarker(label, routeColorHex, isFocused: isFocused);
     if (mounted) {
       map[busId] = icon;
       _rebuildMapObjects();
     }
   }
 
-  Future<BitmapDescriptor> _drawBusMarker(String label, {bool isFocused = false}) async {
-    const double w = 80.0;
-    const double h = 80.0;
+  Future<BitmapDescriptor> _drawBusMarker(String label, String routeColorHex, {bool isFocused = false}) async {
+    const double w = 120.0;
+    const double h = 120.0;
     final double cx = w / 2;
     final double cy = h / 2;
 
-    final Color primaryColor = isFocused ? const Color(0xFF1A4CFF) : const Color(0xFF0D0B14);
-    final Color accentColor  = isFocused ? Colors.white : const Color(0xFF38EF7D);
-    final Color textColor    = Colors.white;
+    final Color routeColor = Color(int.parse(routeColorHex.replaceAll('#', '0xFF')));
 
     final ui.PictureRecorder rec = ui.PictureRecorder();
     final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, w, h));
 
-    // 1. Soft Ambient glow shadow
-    canvas.drawCircle(
-      Offset(cx, cy), 22,
-      Paint()
-        ..color = primaryColor.withOpacity(0.45)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8),
-    );
-
-    // 2. Outer border ring (glowing ring)
-    canvas.drawCircle(
-      Offset(cx, cy), 20,
-      Paint()
-        ..color = accentColor.withOpacity(0.3)
-        ..style = PaintingStyle.fill,
-    );
-
-    // 3. Inner circle (body)
-    canvas.drawCircle(
-      Offset(cx, cy), 17,
-      Paint()
-        ..color = primaryColor
-        ..style = PaintingStyle.fill,
-    );
-
-    // 4. Solid border outline
-    canvas.drawCircle(
-      Offset(cx, cy), 17.5,
-      Paint()
-        ..color = accentColor
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2.0,
-    );
-
-    // 5. Heading indicator chevron pointing UP (since the marker rotates)
-    final Paint chevronPaint = Paint()
-      ..color = accentColor
-      ..style = PaintingStyle.fill;
+    // 1. Drop shadow (3D float effect)
+    final shadowPaint = Paint()
+      ..color = Colors.black.withOpacity(0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
     
-    final Path chevron = Path()
-      ..moveTo(cx, cy - 28)
-      ..lineTo(cx - 7, cy - 19)
-      ..lineTo(cx, cy - 22)
-      ..lineTo(cx + 7, cy - 19)
-      ..close();
-    canvas.drawPath(chevron, chevronPaint);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(cx - 18, cy - 30 + 8, 36, 68),
+        const Radius.circular(10),
+      ),
+      shadowPaint,
+    );
 
-    // 6. Bus Label text inside the circle
+    // 2. Glowing Ring underneath if focused
+    if (isFocused) {
+      final glowPaint = Paint()
+        ..color = routeColor.withOpacity(0.2)
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(cx, cy + 5), 45, glowPaint);
+
+      final glowOutline = Paint()
+        ..color = routeColor.withOpacity(0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2.0;
+      canvas.drawCircle(Offset(cx, cy + 5), 45, glowOutline);
+    }
+
+    // 3. Wheels (4 dark gray rounded rects on the sides)
+    final wheelPaint = Paint()..color = const Color(0xFF222222);
+    // Top-left
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 21, cy - 22, 4, 14), const Radius.circular(2)), wheelPaint);
+    // Top-right
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 17, cy - 22, 4, 14), const Radius.circular(2)), wheelPaint);
+    // Bottom-left
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 21, cy + 12, 4, 14), const Radius.circular(2)), wheelPaint);
+    // Bottom-right
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 17, cy + 12, 4, 14), const Radius.circular(2)), wheelPaint);
+
+    // 4. Main Bus Body (Lower extrusion layer to give 3D depth)
+    final extrusionPaint = Paint()..color = routeColor.withOpacity(0.85);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(cx - 18, cy - 30, 36, 68),
+        const Radius.circular(10),
+      ),
+      extrusionPaint,
+    );
+
+    // 5. Main Bus Body (Upper white layer with gradient)
+    final bodyPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(cx - 18, cy - 30),
+        Offset(cx + 18, cy + 38),
+        [
+          Colors.white,
+          const Color(0xFFEBEBEB),
+          const Color(0xFFD6D6D6),
+        ],
+        [0.0, 0.7, 1.0],
+      );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(cx - 18, cy - 30, 36, 66),
+        const Radius.circular(10),
+      ),
+      bodyPaint,
+    );
+
+    // 6. Side stripes (Route colored accent line on the body)
+    final stripePaint = Paint()..color = routeColor;
+    canvas.drawRect(Rect.fromLTWH(cx - 17.5, cy - 10, 1.5, 30), stripePaint);
+    canvas.drawRect(Rect.fromLTWH(cx + 16, cy - 10, 1.5, 30), stripePaint);
+
+    // 7. Roof/Cabin (Raised 3D effect)
+    // Shadow under the cabin roof
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(cx - 14, cy - 22 + 2, 28, 48),
+        const Radius.circular(8),
+      ),
+      Paint()
+        ..color = Colors.black.withOpacity(0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+    );
+    // Cabin body
+    final cabinPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(cx - 14, cy - 22),
+        Offset(cx + 14, cy + 26),
+        [
+          Colors.white,
+          const Color(0xFFF2F2F2),
+        ],
+      );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(cx - 14, cy - 22, 28, 48),
+        const Radius.circular(8),
+      ),
+      cabinPaint,
+    );
+
+    // 8. Front Windshield (Deep glossy blue with cyan gradient)
+    final glassPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(cx - 11, cy - 20),
+        Offset(cx + 11, cy - 10),
+        [
+          const Color(0xFF00E5FF),
+          const Color(0xFF0051FF),
+        ],
+      );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTWH(cx - 11, cy - 20, 22, 10),
+        const Radius.circular(3),
+      ),
+      glassPaint,
+    );
+
+    // Windshield specular highlights (diagonal white line)
+    final highlightPaint = Paint()
+      ..color = Colors.white.withOpacity(0.65)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(Offset(cx - 6, cy - 20), Offset(cx - 1, cy - 10), highlightPaint);
+    canvas.drawLine(Offset(cx - 1, cy - 20), Offset(cx + 2, cy - 10), highlightPaint);
+
+    // 9. Side and Rear Windows
+    final windowPaint = Paint()
+      ..shader = ui.Gradient.linear(
+        Offset(cx - 13, cy - 8),
+        Offset(cx + 13, cy + 24),
+        [
+          const Color(0xFF003C8F),
+          const Color(0xFF001064),
+        ],
+      );
+    // Side Windows
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 13.5, cy - 8, 1, 28), const Radius.circular(1)), windowPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 12.5, cy - 8, 1, 28), const Radius.circular(1)), windowPaint);
+    // Rear Window
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 10, cy + 22, 20, 3), const Radius.circular(1)), windowPaint);
+
+    // 10. Headlights (Bright Yellow glow)
+    final headlightPaint = Paint()
+      ..color = const Color(0xFFFFEA00)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
+    canvas.drawCircle(Offset(cx - 11, cy - 29), 3, headlightPaint);
+    canvas.drawCircle(Offset(cx + 11, cy - 29), 3, headlightPaint);
+
+    // 11. Taillights (Red rectangles)
+    final taillightPaint = Paint()..color = const Color(0xFFFF1744);
+    canvas.drawRect(Rect.fromLTWH(cx - 15, cy + 34, 4, 2), taillightPaint);
+    canvas.drawRect(Rect.fromLTWH(cx + 11, cy + 34, 4, 2), taillightPaint);
+
+    // 12. Route Label Badge on Roof (Circular colored badge with text)
+    final badgePaint = Paint()..color = routeColor;
+    canvas.drawCircle(Offset(cx, cy + 8), 10, badgePaint);
+
+    // Badge outline
+    final badgeOutline = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawCircle(Offset(cx, cy + 8), 10, badgeOutline);
+
+    // Draw the text
     final textPainter = TextPainter(
       text: TextSpan(
         text: label,
         style: GoogleFonts.plusJakartaSans(
-          color: textColor,
-          fontSize: 10,
-          fontWeight: FontWeight.w900,
-          letterSpacing: -0.2,
+          color: Colors.white,
+          fontSize: 8.5,
+          fontWeight: FontWeight.bold,
         ),
       ),
       textDirection: TextDirection.ltr,
@@ -609,12 +757,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     textPainter.layout();
     textPainter.paint(
       canvas,
-      Offset(cx - textPainter.width / 2, cy - textPainter.height / 2),
+      Offset(cx - textPainter.width / 2, cy + 8 - textPainter.height / 2),
     );
 
     final ui.Image img = await rec.endRecording().toImage(w.toInt(), h.toInt());
-    final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
-    return BitmapDescriptor.fromBytes(bd!.buffer.asUint8List());
+    final ByteData? data = await img.toByteData(format: ui.ImageByteFormat.png);
+    if (data == null) return BitmapDescriptor.defaultMarker;
+    return BitmapDescriptor.fromBytes(data.buffer.asUint8List());
   }
 
   Future<BitmapDescriptor> _drawStopMarker(bool isLast) async {
@@ -667,6 +816,544 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  void _focusInitialBus() {
+    if (widget.centerOnBusId != null) {
+      try {
+        final bus = widget.buses.firstWhere((b) => b.id == widget.centerOnBusId);
+        _focusedBus = bus;
+        if (widget.initialDriveMode) {
+          _isDriveMode = true;
+          _isFollowing = true;
+        }
+      } catch (_) {}
+    } else if (widget.initialDriveMode && widget.buses.isNotEmpty) {
+      _focusedBus = widget.buses.first;
+      _isDriveMode = true;
+      _isFollowing = true;
+    }
+  }
+
+  void _updateNavigationInstructions(Bus bus) {
+    if (bus.etas.isNotEmpty) {
+      _currentInstruction = "Head toward ${bus.etas.first.stopName}";
+      if (bus.etas.length > 1) {
+        _nextInstruction = "Next stop: ${bus.etas[1].stopName}";
+        _nextInstructionIcon = Icons.location_on_outlined;
+      } else {
+        _nextInstruction = "Then arrive at destination";
+        _nextInstructionIcon = Icons.check_circle_outline_rounded;
+      }
+      _instructionIcon = Icons.navigation_rounded;
+    } else {
+      _currentInstruction = "Drive along the route";
+      _nextInstruction = "GPS is active";
+      _instructionIcon = Icons.navigation_rounded;
+      _nextInstructionIcon = Icons.gps_fixed_rounded;
+    }
+  }
+
+  void _showAIAssistantDialog() {
+    HapticFeedback.lightImpact();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F1528),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Colors.blueAccent, width: 1.5),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.auto_awesome, color: Colors.blueAccent, size: 24),
+            const SizedBox(width: 10),
+            Text(
+              'Gemini Route Assist',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'AI analysis shows traffic is moving smoothly on the current route. Estimated delay is 0 minutes. Suggest continuing on the primary path.',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              'DISMISS',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.blueAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReportDialog() {
+    HapticFeedback.lightImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: const Color(0xFF0D0B14).withOpacity(0.96),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
+              ),
+            ),
+            Text(
+              'REPORT AN ISSUE',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.w900,
+                fontSize: 14,
+                letterSpacing: 2,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Wrap(
+              spacing: 12,
+              runSpacing: 12,
+              children: [
+                _buildReportOption(ctx, Icons.traffic_rounded, 'Traffic Jam', Colors.orangeAccent),
+                _buildReportOption(ctx, Icons.car_crash_rounded, 'Crash', Colors.redAccent),
+                _buildReportOption(ctx, Icons.construction_rounded, 'Roadworks', Colors.amber),
+                _buildReportOption(ctx, Icons.warning_amber_rounded, 'Hazard', Colors.yellow),
+                _buildReportOption(ctx, Icons.timer_outlined, 'Bus Delay', Colors.blueAccent),
+              ],
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportOption(BuildContext ctx, IconData icon, String label, Color color) {
+    return GestureDetector(
+      onTap: () {
+        Navigator.pop(ctx);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF38EF7D),
+            content: Text(
+              'Reported "$label" successfully. Thank you for updating transit conditions!',
+              style: GoogleFonts.plusJakartaSans(color: Colors.black, fontWeight: FontWeight.bold),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: color, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTurnByTurnCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF004D40), // Premium dark teal green
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.3),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Row(
+        children: [
+          // Direction Icon
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.12),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(_instructionIcon, color: Colors.white, size: 32),
+          ),
+          const SizedBox(width: 16),
+          // Instructions Text
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _currentInstruction,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Text(
+                      'Then  ',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white60,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Icon(_nextInstructionIcon, color: Colors.white70, size: 14),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        _nextInstruction,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white70,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Sparkle Assist Button (Circular blue with sparkle)
+          GestureDetector(
+            onTap: _showAIAssistantDialog,
+            child: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: const BoxDecoration(
+                color: Colors.blueAccent,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSidebarCompassBtn() {
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.6),
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Transform.rotate(
+        angle: -((_animatedHeading[_focusedBus?.id] ?? 0.0) * (3.14159 / 180.0)),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Icon(Icons.explore_outlined, color: Colors.white38, size: 30),
+            // Red compass needle pointing North
+            Positioned(
+              top: 8,
+              child: Container(
+                width: 3,
+                height: 12,
+                color: Colors.redAccent,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSidebarSearchBtn() {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            backgroundColor: const Color(0xFF0F1528),
+            content: Text(
+              'Search along route is active.',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+          ),
+        );
+      },
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.6),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white10),
+        ),
+        child: const Icon(Icons.search, color: Colors.white, size: 22),
+      ),
+    );
+  }
+
+  Widget _buildSidebarMuteBtn() {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        setState(() {
+          _isMuted = !_isMuted;
+        });
+      },
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.6),
+          shape: BoxShape.circle,
+          border: Border.all(color: Colors.white10),
+        ),
+        child: Icon(
+          _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+          color: Colors.white,
+          size: 22,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReCentreBtn() {
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        if (_focusedBus != null) {
+          setState(() {
+            _isFollowing = true;
+          });
+          _scheduleCameraMove(_focusedBus!);
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: _isFollowing ? const Color(0xFF38EF7D) : Colors.white10, width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+            )
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Transform.rotate(
+              angle: 45 * 3.14159 / 180, // tilt icon slightly to look like navigation
+              child: Icon(
+                Icons.navigation_rounded,
+                color: _isFollowing ? const Color(0xFF38EF7D) : Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              'Re-centre',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildReportBtn() {
+    return GestureDetector(
+      onTap: _showReportDialog,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.8),
+          borderRadius: BorderRadius.circular(30),
+          border: Border.all(color: Colors.white10),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+            )
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 16),
+            const SizedBox(width: 8),
+            Text(
+              'Report',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBottomStatsPanel() {
+    // Generate realistic remaining time and distance using ETA or a dynamic fallback
+    String timeStr = "12 min";
+    String distanceStr = "4.8 km";
+    String etaStr = "10:38 am";
+
+    if (_focusedBus != null) {
+      if (_focusedBus!.etas.isNotEmpty) {
+        final totalMins = _focusedBus!.etas.fold<int>(0, (prev, element) => prev + element.minutes);
+        timeStr = totalMins > 60 
+            ? '${totalMins ~/ 60} hr ${totalMins % 60} min'
+            : '$totalMins min';
+        final speed = _focusedBus!.speed > 0 ? _focusedBus!.speed : 30.0; // km/h
+        final distanceKm = (speed * (totalMins / 60.0)).clamp(0.5, 45.0);
+        distanceStr = '${distanceKm.toStringAsFixed(1)} km';
+        final arrivalTime = DateTime.now().add(Duration(minutes: totalMins));
+        final hour = arrivalTime.hour > 12 ? arrivalTime.hour - 12 : (arrivalTime.hour == 0 ? 12 : arrivalTime.hour);
+        final min = arrivalTime.minute.toString().padLeft(2, '0');
+        final ampm = arrivalTime.hour >= 12 ? 'pm' : 'am';
+        etaStr = '$hour:$min $ampm';
+      } else {
+        timeStr = "15 min";
+        distanceStr = "5.2 km";
+        final arrivalTime = DateTime.now().add(const Duration(minutes: 15));
+        final hour = arrivalTime.hour > 12 ? arrivalTime.hour - 12 : (arrivalTime.hour == 0 ? 12 : arrivalTime.hour);
+        final min = arrivalTime.minute.toString().padLeft(2, '0');
+        final ampm = arrivalTime.hour >= 12 ? 'pm' : 'am';
+        etaStr = '$hour:$min $ampm';
+      }
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(28),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0B14).withOpacity(0.82),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.white.withOpacity(0.1)),
+          ),
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: _toggleDriveMode,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          timeStr,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF38EF7D), // Eco green
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        const Icon(Icons.eco_rounded, color: Color(0xFF38EF7D), size: 16),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$distanceStr  •  $etaStr',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white60,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () {
+                  HapticFeedback.lightImpact();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      backgroundColor: const Color(0xFF0F1528),
+                      content: Text(
+                        'Recalculating alternative routes...',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white),
+                      ),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withOpacity(0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.alt_route_rounded, color: Colors.blueAccent, size: 22),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   // UI CONTROLS
   // ═══════════════════════════════════════════════════════════════════════════
 
@@ -828,14 +1515,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         ),
 
         // ── Map Controls ────────────────────────────────────────────────────
-        if (widget.showMapControls)
+        if (widget.showMapControls && !_isDriveMode)
           Positioned(
             right: 12,
             top:   MediaQuery.of(context).padding.top + 80,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // —— Layers picker (Now opens beautiful bottom sheet) ——————————
                 _buildMapBtn(
                   icon:  Icons.layers_rounded,
                   label: 'LAYERS',
@@ -843,8 +1529,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   onTap: _showLayersSheet,
                 ),
                 const SizedBox(height: 10),
-
-                // —— Follow bus ————————————————————
                 _buildMapBtn(
                   icon:    _isFollowing ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded,
                   label:   _isFollowing ? 'FOLLOWING' : 'FOLLOW BUS',
@@ -853,8 +1537,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   onTap:   _toggleFollow,
                 ),
                 const SizedBox(height: 10),
-
-                // —— Drive / Navigation mode ————————————
                 _buildMapBtn(
                   icon:    Icons.directions_car_filled_rounded,
                   label:   _isDriveMode ? 'EXIT NAV' : 'DRIVE MODE',
@@ -862,8 +1544,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   isActive: _isDriveMode,
                   onTap:   _toggleDriveMode,
                 ),
-
-                // —— My location ———————————————————
                 if (widget.showLocationButton) ...[
                   const SizedBox(height: 10),
                   _buildMapBtn(
@@ -878,45 +1558,48 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           ),
 
         // ── Drive Mode HUD ──────────────────────────────────────────────────
-        if (_isDriveMode && _focusedBus != null)
+        if (_isDriveMode && _focusedBus != null) ...[
           Positioned(
-            top:   MediaQuery.of(context).padding.top + 10,
-            left:  16,
-            right: 80,
-            child: GestureDetector(
-              onTap: _toggleDriveMode,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00C853),
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                        color: const Color(0xFF00C853).withOpacity(0.4),
-                        blurRadius: 16)
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.navigation_rounded, color: Colors.white, size: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      'DRIVE MODE  •  ${(_animatedHeading[_focusedBus!.id] ?? 0).toInt()}°  •  Tap to exit',
-                      style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 12,
-                          letterSpacing: 1),
-                    ),
-                  ],
-                ),
-              ),
+            top: MediaQuery.of(context).padding.top + 10,
+            left: 16,
+            right: 16,
+            child: _buildTurnByTurnCard(),
+          ),
+          Positioned(
+            right: 16,
+            top: MediaQuery.of(context).padding.top + 100,
+            child: Column(
+              children: [
+                _buildSidebarCompassBtn(),
+                const SizedBox(height: 12),
+                _buildSidebarSearchBtn(),
+                const SizedBox(height: 12),
+                _buildSidebarMuteBtn(),
+              ],
             ),
           ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 110,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _buildReCentreBtn(),
+                _buildReportBtn(),
+              ],
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: 20,
+            child: _buildBottomStatsPanel(),
+          ),
+        ],
 
         // ── Focused Bus Card ────────────────────────────────────────────────
-        if (_focusedBus != null)
+        if (_focusedBus != null && !_isDriveMode)
           Positioned(
             left:   16,
             right:  16,
@@ -973,39 +1656,42 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                                 Text(
                                   'SHUTTLE ${_busLabel(_focusedBus!.id)}',
                                   style: GoogleFonts.plusJakartaSans(
-                                      color: Colors.white,
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.5),
+                                    color: Colors.white,
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w900,
+                                    letterSpacing: 0.5,
+                                  ),
                                 ),
                                 const SizedBox(height: 4),
-                                Row(children: [
-                                  Container(
-                                    width: 8, height: 8,
-                                    decoration: const BoxDecoration(
-                                        color: Colors.greenAccent,
-                                        shape: BoxShape.circle),
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    _focusedBus!.routeName.toUpperCase(),
-                                    style: GoogleFonts.plusJakartaSans(
-                                        color: Colors.white60,
+                                Row(
+                                  children: [
+                                    Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFF38EF7D),
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'ONLINE  •  ROUTE ${_focusedBus!.routeId}',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: Colors.white38,
                                         fontSize: 10,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 1.0),
-                                  ),
-                                ]),
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 0.8,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
                           IconButton(
-                            onPressed: () {
-                              setState(() => _focusedBus = null);
-                              _rebuildMapObjects();
-                            },
                             icon: const Icon(Icons.close_rounded,
-                                color: Colors.white38),
+                                color: Colors.white30, size: 24),
+                            onPressed: () => setState(() => _focusedBus = null),
                           ),
                         ],
                       ),

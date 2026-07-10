@@ -95,7 +95,7 @@ class NotificationService {
       return;
     }
 
-    const AndroidNotificationDetails androidNotificationDetails =
+    final AndroidNotificationDetails androidNotificationDetails =
         AndroidNotificationDetails(
       'SISTecChalo_pulse_alerts',
       'Pulse Alerts',
@@ -103,11 +103,11 @@ class NotificationService {
       importance: Importance.max,
       priority: Priority.high,
       ticker: 'ticker',
-      color: Color(0xFF00F0FF),
-      styleInformation: BigTextStyleInformation(''),
+      color: const Color(0xFF00F0FF),
+      styleInformation: BigTextStyleInformation(body),
     );
 
-    const NotificationDetails notificationDetails = NotificationDetails(
+    final NotificationDetails notificationDetails = NotificationDetails(
       android: androidNotificationDetails,
     );
 
