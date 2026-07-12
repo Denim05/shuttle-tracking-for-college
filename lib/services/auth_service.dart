@@ -158,6 +158,30 @@ class AuthService with ChangeNotifier {
     }
   }
 
+  Future<void> updateProximityRadius(double radius) async {
+    if (_currentUser == null || _token == null) return;
+
+    try {
+      final response = await http.put(
+        Uri.parse('${AppConstants.apiUrl}/users/profile'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $_token',
+        },
+        body: jsonEncode({'proximityRadiusKm': radius}),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        _currentUser = User.fromJson(data);
+        await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('Error updating proximity radius: $e');
+    }
+  }
+
   /// Changes the authenticated user's password.
   /// Throws an [Exception] with a user-facing message on failure.
   Future<void> changePassword(String currentPassword, String newPassword) async {

@@ -1046,6 +1046,8 @@ class _UserDashboardState extends State<UserDashboard> {
         const SizedBox(height: 24),
         _buildProfileSection('PREFERENCES', [
           _buildToggleTile('PROXIMITY ALERTS', 'Notify when bus is near', user?.proximityAlertsEnabled ?? true, (v) => auth.updateProximityAlerts(v)),
+          if (user?.proximityAlertsEnabled ?? true)
+            _buildRadiusSliderTile(user?.proximityRadiusKm ?? 1.0, (v) => auth.updateProximityRadius(v)),
           _buildProfileTile('THEME', 'NEON DEPTH', Icons.dark_mode_outlined),
         ]),
         const SizedBox(height: 24),
@@ -1286,6 +1288,47 @@ class _UserDashboardState extends State<UserDashboard> {
         value: val,
         onChanged: onChanged,
         activeThumbColor: const Color(0xFF2D5BFF),
+      ),
+    );
+  }
+
+  Widget _buildRadiusSliderTile(double currentVal, Function(double) onChanged) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('ALERT RADIUS', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
+              Text('${currentVal.toStringAsFixed(1)} KM', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontWeight: FontWeight.bold, fontSize: 13)),
+            ],
+          ),
+          const SizedBox(height: 4),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: const Color(0xFF2D5BFF),
+              inactiveTrackColor: Colors.white10,
+              thumbColor: const Color(0xFF00F0FF),
+              overlayColor: const Color(0xFF00F0FF).withOpacity(0.2),
+              valueIndicatorColor: const Color(0xFF2D5BFF),
+              valueIndicatorTextStyle: GoogleFonts.plusJakartaSans(color: Colors.white),
+            ),
+            child: Slider(
+              value: currentVal,
+              min: 0.5,
+              max: 3.0,
+              divisions: 5,
+              label: '${currentVal.toStringAsFixed(1)} KM',
+              onChanged: (val) {
+                // Round to nearest division
+                final rounded = (val * 2).round() / 2;
+                onChanged(rounded);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

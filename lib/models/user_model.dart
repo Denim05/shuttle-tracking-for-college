@@ -8,6 +8,7 @@ class User {
   final String? routeId;
   final String? pickupPoint;
   final bool proximityAlertsEnabled;
+  final double proximityRadiusKm;
   final List<String> accessRights;
 
   User({
@@ -20,6 +21,7 @@ class User {
     this.routeId,
     this.pickupPoint,
     this.proximityAlertsEnabled = true,
+    this.proximityRadiusKm = 1.0,
     this.accessRights = const [],
   });
 
@@ -34,6 +36,7 @@ class User {
       routeId: json['routeId'],
       pickupPoint: json['pickupPoint'],
       proximityAlertsEnabled: json['proximityAlertsEnabled'] ?? true,
+      proximityRadiusKm: (json['proximityRadiusKm'] as num?)?.toDouble() ?? 1.0,
       accessRights: List<String>.from(json['accessRights'] ?? []),
     );
   }
@@ -49,6 +52,7 @@ class User {
       'routeId': routeId,
       'pickupPoint': pickupPoint,
       'proximityAlertsEnabled': proximityAlertsEnabled,
+      'proximityRadiusKm': proximityRadiusKm,
       'accessRights': accessRights,
     };
   }
