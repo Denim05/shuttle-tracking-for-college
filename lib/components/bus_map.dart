@@ -133,13 +133,28 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     bool needsRebuild = false;
 
+    if (old.initialDriveMode != widget.initialDriveMode) {
+      _isDriveMode = widget.initialDriveMode;
+      if (_isDriveMode) {
+        _isFollowing = true;
+        _focusInitialBus();
+        if (_focusedBus != null) {
+          _updateNavigationInstructions(_focusedBus!);
+        }
+      } else {
+        _isFollowing = false;
+        _focusedBus = null;
+      }
+      needsRebuild = true;
+    }
+
     // Keep focused bus updated with latest live telemetry
     if (_focusedBus != null) {
       try {
         _focusedBus = widget.buses.firstWhere((b) => b.id == _focusedBus!.id);
         _updateNavigationInstructions(_focusedBus!);
       } catch (_) {}
-    } else {
+    } else if (_isDriveMode) {
       _focusInitialBus();
     }
 
@@ -565,72 +580,85 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   Future<BitmapDescriptor> _drawBusMarker(String label, String routeColorHex, {bool isFocused = false}) async {
-    const double w = 120.0;
-    const double h = 120.0;
-    final double cx = w / 2;
-    final double cy = h / 2;
+    const double scale = 1.8; // Optimal scale: large enough for details, small enough for map aesthetics
+    const double w = 120.0 * scale;
+    const double h = 120.0 * scale;
+    const double cx = 60.0; // Logical center X
+    const double cy = 60.0; // Logical center Y
 
     final Color routeColor = Color(int.parse(routeColorHex.replaceAll('#', '0xFF')));
 
     final ui.PictureRecorder rec = ui.PictureRecorder();
     final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, w, h));
 
-    // 1. Drop shadow (3D float effect)
+    // Scale the coordinate system
+    canvas.scale(scale);
+
+    // 1. Drop shadow (elevated slightly, soft blur)
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.4)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+      ..color = Colors.black.withOpacity(0.35)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4.0 * scale);
     
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(cx - 18, cy - 30 + 8, 36, 68),
-        const Radius.circular(10),
+        Rect.fromLTWH(cx - 18.5, cy - 30.5 + 4.5, 37, 67),
+        const Radius.circular(11),
       ),
       shadowPaint,
     );
 
-    // 2. Glowing Ring underneath if focused
+    // 2. Focused Glowing Ring
     if (isFocused) {
       final glowPaint = Paint()
-        ..color = routeColor.withOpacity(0.2)
+        ..color = routeColor.withOpacity(0.18)
         ..style = PaintingStyle.fill;
-      canvas.drawCircle(Offset(cx, cy + 5), 45, glowPaint);
+      canvas.drawCircle(Offset(cx, cy + 4), 46, glowPaint);
 
       final glowOutline = Paint()
         ..color = routeColor.withOpacity(0.6)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
-      canvas.drawCircle(Offset(cx, cy + 5), 45, glowOutline);
+      canvas.drawCircle(Offset(cx, cy + 4), 46, glowOutline);
     }
 
-    // 3. Wheels (4 dark gray rounded rects on the sides)
+    // 3. Wheels (4 dark gray rounded rects)
     final wheelPaint = Paint()..color = const Color(0xFF222222);
-    // Top-left
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 21, cy - 22, 4, 14), const Radius.circular(2)), wheelPaint);
-    // Top-right
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 17, cy - 22, 4, 14), const Radius.circular(2)), wheelPaint);
-    // Bottom-left
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 21, cy + 12, 4, 14), const Radius.circular(2)), wheelPaint);
-    // Bottom-right
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 17, cy + 12, 4, 14), const Radius.circular(2)), wheelPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 21, cy - 20, 4, 13), const Radius.circular(2)), wheelPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 17, cy - 20, 4, 13), const Radius.circular(2)), wheelPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 21, cy + 11, 4, 13), const Radius.circular(2)), wheelPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 17, cy + 11, 4, 13), const Radius.circular(2)), wheelPaint);
 
-    // 4. Main Bus Body (Lower extrusion layer to give 3D depth)
-    final extrusionPaint = Paint()..color = routeColor.withOpacity(0.85);
+    // 4. 3D Body Extrusion (Stack extrusion loops to render solid side walls)
+    final Color darkerRouteColor = Color.alphaBlend(Colors.black.withOpacity(0.42), routeColor);
+    final extrusionPaint = Paint()..color = darkerRouteColor;
+    for (double i = 3.5; i >= 0.0; i -= 0.5) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(cx - 18, cy - 30 + i, 36, 66),
+          const Radius.circular(10),
+        ),
+        extrusionPaint,
+      );
+    }
+
+    // 5. Front Bumper
+    final bumperPaint = Paint()..color = const Color(0xFF333333);
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(cx - 18, cy - 30, 36, 68),
-        const Radius.circular(10),
+        Rect.fromLTWH(cx - 15, cy - 31, 30, 3.5),
+        const Radius.circular(1.5),
       ),
-      extrusionPaint,
+      bumperPaint,
     );
 
-    // 5. Main Bus Body (Upper white layer with gradient)
+    // 6. Upper Bus Body
     final bodyPaint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(cx - 18, cy - 30),
-        Offset(cx + 18, cy + 38),
+        Offset(cx + 18, cy + 36),
         [
           Colors.white,
-          const Color(0xFFEBEBEB),
+          const Color(0xFFEDEDED),
           const Color(0xFFD6D6D6),
         ],
         [0.0, 0.7, 1.0],
@@ -643,31 +671,42 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       bodyPaint,
     );
 
-    // 6. Side stripes (Route colored accent line on the body)
+    // 7. Accent side stripes
     final stripePaint = Paint()..color = routeColor;
-    canvas.drawRect(Rect.fromLTWH(cx - 17.5, cy - 10, 1.5, 30), stripePaint);
-    canvas.drawRect(Rect.fromLTWH(cx + 16, cy - 10, 1.5, 30), stripePaint);
+    canvas.drawRect(Rect.fromLTWH(cx - 17.5, cy - 8, 1.8, 28), stripePaint);
+    canvas.drawRect(Rect.fromLTWH(cx + 15.7, cy - 8, 1.8, 28), stripePaint);
 
-    // 7. Roof/Cabin (Raised 3D effect)
-    // Shadow under the cabin roof
+    // 8. 3D Cabin/Roof Extrusion (Stack extrusion loops for solid roof block elevation)
     canvas.drawRRect(
       RRect.fromRectAndRadius(
-        Rect.fromLTWH(cx - 14, cy - 22 + 2, 28, 48),
+        Rect.fromLTWH(cx - 14, cy - 22 + 1.5, 28, 48),
         const Radius.circular(8),
       ),
       Paint()
-        ..color = Colors.black.withOpacity(0.15)
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2),
+        ..color = Colors.black.withOpacity(0.16)
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2.0 * scale),
     );
-    // Cabin body
+    final cabinExtrusionPaint = Paint()..color = const Color(0xFFB5B5B5);
+    for (double i = 2.0; i >= 0.0; i -= 0.5) {
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(cx - 14, cy - 22 + i, 28, 48),
+          const Radius.circular(8),
+        ),
+        cabinExtrusionPaint,
+      );
+    }
+    // Cabin Roof top
     final cabinPaint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(cx - 14, cy - 22),
         Offset(cx + 14, cy + 26),
         [
           Colors.white,
-          const Color(0xFFF2F2F2),
+          const Color(0xFFF7F7F7),
+          const Color(0xFFE0E0E0),
         ],
+        [0.0, 0.65, 1.0],
       );
     canvas.drawRRect(
       RRect.fromRectAndRadius(
@@ -677,7 +716,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       cabinPaint,
     );
 
-    // 8. Front Windshield (Deep glossy blue with cyan gradient)
+    // 9. Front Windshield (Gradient glass)
     final glassPaint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(cx - 11, cy - 20),
@@ -695,15 +734,15 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       glassPaint,
     );
 
-    // Windshield specular highlights (diagonal white line)
+    // specular highlight
     final highlightPaint = Paint()
       ..color = Colors.white.withOpacity(0.65)
-      ..strokeWidth = 1.5
+      ..strokeWidth = 1.6
       ..style = PaintingStyle.stroke;
-    canvas.drawLine(Offset(cx - 6, cy - 20), Offset(cx - 1, cy - 10), highlightPaint);
-    canvas.drawLine(Offset(cx - 1, cy - 20), Offset(cx + 2, cy - 10), highlightPaint);
+    canvas.drawLine(Offset(cx - 6, cy - 20), Offset(cx - 1.5, cy - 10), highlightPaint);
+    canvas.drawLine(Offset(cx - 1.5, cy - 20), Offset(cx + 3, cy - 10), highlightPaint);
 
-    // 9. Side and Rear Windows
+    // 10. Segmented Side and Rear Windows
     final windowPaint = Paint()
       ..shader = ui.Gradient.linear(
         Offset(cx - 13, cy - 8),
@@ -713,34 +752,39 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           const Color(0xFF001064),
         ],
       );
-    // Side Windows
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 13.5, cy - 8, 1, 28), const Radius.circular(1)), windowPaint);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 12.5, cy - 8, 1, 28), const Radius.circular(1)), windowPaint);
+    // Left windows
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 13.8, cy - 8, 1, 7.5), const Radius.circular(0.5)), windowPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 13.8, cy + 1.5, 1, 7.5), const Radius.circular(0.5)), windowPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 13.8, cy + 11, 1, 7.5), const Radius.circular(0.5)), windowPaint);
+    // Right windows
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 12.8, cy - 8, 1, 7.5), const Radius.circular(0.5)), windowPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 12.8, cy + 1.5, 1, 7.5), const Radius.circular(0.5)), windowPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 12.8, cy + 11, 1, 7.5), const Radius.circular(0.5)), windowPaint);
     // Rear Window
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 10, cy + 22, 20, 3), const Radius.circular(1)), windowPaint);
+    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx - 9.5, cy + 22, 19, 3.2), const Radius.circular(1)), windowPaint);
 
-    // 10. Headlights (Bright Yellow glow)
+    // 11. Headlights (Bright Yellow glow)
     final headlightPaint = Paint()
       ..color = const Color(0xFFFFEA00)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2);
-    canvas.drawCircle(Offset(cx - 11, cy - 29), 3, headlightPaint);
-    canvas.drawCircle(Offset(cx + 11, cy - 29), 3, headlightPaint);
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 1.8 * scale);
+    canvas.drawCircle(Offset(cx - 10, cy - 28.5), 3.2, headlightPaint);
+    canvas.drawCircle(Offset(cx + 10, cy - 28.5), 3.2, headlightPaint);
 
-    // 11. Taillights (Red rectangles)
+    // 12. Taillights (Red rectangles)
     final taillightPaint = Paint()..color = const Color(0xFFFF1744);
-    canvas.drawRect(Rect.fromLTWH(cx - 15, cy + 34, 4, 2), taillightPaint);
-    canvas.drawRect(Rect.fromLTWH(cx + 11, cy + 34, 4, 2), taillightPaint);
+    canvas.drawRect(Rect.fromLTWH(cx - 13.5, cy + 34, 4, 2.2), taillightPaint);
+    canvas.drawRect(Rect.fromLTWH(cx + 9.5, cy + 34, 4, 2.2), taillightPaint);
 
-    // 12. Route Label Badge on Roof (Circular colored badge with text)
+    // 13. Route Label Badge on Roof (Circular colored badge with text)
     final badgePaint = Paint()..color = routeColor;
-    canvas.drawCircle(Offset(cx, cy + 8), 10, badgePaint);
+    canvas.drawCircle(Offset(cx, cy + 8), 10.0, badgePaint);
 
     // Badge outline
     final badgeOutline = Paint()
       ..color = Colors.white
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
-    canvas.drawCircle(Offset(cx, cy + 8), 10, badgeOutline);
+    canvas.drawCircle(Offset(cx, cy + 8), 10.0, badgeOutline);
 
     // Draw the text
     final textPainter = TextPainter(
@@ -767,21 +811,26 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   Future<BitmapDescriptor> _drawStopMarker(bool isLast) async {
-    const double size = 40.0;
+    const double scale = 1.4; // Refined stop marker size for proportional mapping
+    const double size = 40.0 * scale;
+    const double drawSize = 40.0;
+    
     final ui.PictureRecorder rec = ui.PictureRecorder();
-    final Canvas canvas = Canvas(rec, const Rect.fromLTWH(0, 0, size, size));
+    final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, size, size));
 
-    canvas.drawCircle(const Offset(size / 2, size / 2), size / 2 - 4,
+    canvas.scale(scale);
+
+    canvas.drawCircle(const Offset(drawSize / 2, drawSize / 2), drawSize / 2 - 4,
         Paint()..color = isLast ? Colors.redAccent : Colors.white);
     canvas.drawCircle(
-      const Offset(size / 2, size / 2), size / 2 - 4,
+      const Offset(drawSize / 2, drawSize / 2), drawSize / 2 - 4,
       Paint()
         ..color = isLast ? Colors.white : const Color(0xFF1A4CFF)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 3,
     );
     if (isLast) {
-      canvas.drawCircle(const Offset(size / 2, size / 2), size / 2 - 12,
+      canvas.drawCircle(const Offset(drawSize / 2, drawSize / 2), drawSize / 2 - 12,
           Paint()..color = Colors.white);
     }
 
@@ -850,49 +899,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       _instructionIcon = Icons.navigation_rounded;
       _nextInstructionIcon = Icons.gps_fixed_rounded;
     }
-  }
-
-  void _showAIAssistantDialog() {
-    HapticFeedback.lightImpact();
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0F1528),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: Colors.blueAccent, width: 1.5),
-        ),
-        title: Row(
-          children: [
-            const Icon(Icons.auto_awesome, color: Colors.blueAccent, size: 24),
-            const SizedBox(width: 10),
-            Text(
-              'Gemini Route Assist',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-        content: Text(
-          'AI analysis shows traffic is moving smoothly on the current route. Estimated delay is 0 minutes. Suggest continuing on the primary path.',
-          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text(
-              'DISMISS',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.blueAccent,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showReportDialog() {
@@ -1051,19 +1057,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   ],
                 ),
               ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Sparkle Assist Button (Circular blue with sparkle)
-          GestureDetector(
-            onTap: _showAIAssistantDialog,
-            child: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: const BoxDecoration(
-                color: Colors.blueAccent,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.auto_awesome, color: Colors.white, size: 22),
             ),
           ),
         ],

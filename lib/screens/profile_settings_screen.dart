@@ -248,6 +248,206 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
   }
 
+  void _showPrivacyPolicy() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0F172A),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8,
+          minChildSize: 0.5,
+          maxChildSize: 0.95,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: ListView(
+                controller: scrollController,
+                children: [
+                  const SizedBox(height: 12),
+                  Center(
+                    child: Container(
+                      width: 48,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.white24,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      const Icon(Icons.security_rounded, color: Colors.tealAccent, size: 28),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Privacy Policy',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Last Updated: July 2026',
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11),
+                  ),
+                  const Divider(color: Colors.white10, height: 24),
+                  
+                  _buildPolicySection(
+                    '1. Location Data Collection',
+                    'Our app collects precise real-time location data of vehicles to provide tracking services. For drivers, location data is collected in the foreground and/or background when sharing route coordinates so students can see active shuttles. For users, location is optionally used to show your distance relative to stops.',
+                  ),
+                  _buildPolicySection(
+                    '2. How We Use Data',
+                    'Location and transit data are used solely to calculate accurate Estimated Time of Arrival (ETA), display live bus markers, and send notifications. We do not sell or share individual transit or location history with third-party advertising services.',
+                  ),
+                  _buildPolicySection(
+                    '3. Data Protection & Security',
+                    'All coordinates, speed updates, and profile details are encrypted in transit using Secure WebSockets (WSS) and HTTPS. Connection status is constantly audited for system security.',
+                  ),
+                  _buildPolicySection(
+                    '4. Your Controls & Permissions',
+                    'You can grant or revoke location permissions at any time through your device settings. Disabling location tracking will disable live broadcasting for drivers and personal proximity tracking for users.',
+                  ),
+                  _buildPolicySection(
+                    '5. Contact & Support',
+                    'For questions regarding safety policies or data compliance, please reach out to the campus transit administration help desk.',
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.tealAccent.withOpacity(0.12),
+                      foregroundColor: Colors.tealAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(color: Colors.tealAccent.withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      'I UNDERSTAND',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildPolicySection(String title, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white.withOpacity(0.8),
+              fontSize: 13,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            body,
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white60,
+              fontSize: 12,
+              height: 1.5,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAboutDialog() {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF0F172A),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+            side: const BorderSide(color: Colors.white10),
+          ),
+          title: Row(
+            children: [
+              const Icon(Icons.info_outline_rounded, color: Colors.blueAccent, size: 24),
+              const SizedBox(width: 12),
+              Text(
+                'System Information',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildAboutRow('Application', 'SmartCampus Shuttle'),
+              _buildAboutRow('Platform Version', 'v2.4.0 (Stable)'),
+              _buildAboutRow('API Gateway', 'Secure Gateway Active'),
+              _buildAboutRow('WebSocket Client', 'WSS Connected'),
+              _buildAboutRow('System Mode', _role.toUpperCase()),
+              const Divider(color: Colors.white10, height: 20),
+              Text(
+                '© 2026 SmartTransit Systems. Designed for real-time fleet scheduling, driver telemetry, and safe campus logistics.',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, height: 1.4),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: Text(
+                'CLOSE',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.blueAccent,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAboutRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
+          Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final roleColor = _getRoleColor();
@@ -360,7 +560,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                     Text('SECURITY & ACTIONS', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
                     const SizedBox(height: 12),
 
-                    // Change password action
+                     // Change password action
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
@@ -372,6 +572,38 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         onTap: _showPasswordResetDialog,
                         leading: const Icon(Icons.vpn_key_rounded, color: Colors.orangeAccent, size: 20),
                         title: Text('CHANGE ACCOUNT PASSWORD', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
+                      ),
+                    ),
+
+                    // Privacy Policy & Data Usage action
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E).withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.05)),
+                      ),
+                      child: ListTile(
+                        onTap: _showPrivacyPolicy,
+                        leading: const Icon(Icons.security_rounded, color: Colors.tealAccent, size: 20),
+                        title: Text('PRIVACY POLICY & DATA USAGE', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
+                      ),
+                    ),
+
+                    // About & System Info action
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF1E1E1E).withOpacity(0.4),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.05)),
+                      ),
+                      child: ListTile(
+                        onTap: _showAboutDialog,
+                        leading: const Icon(Icons.info_outline_rounded, color: Colors.blueAccent, size: 20),
+                        title: Text('ABOUT & SYSTEM INFORMATION', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
                         trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
                       ),
                     ),

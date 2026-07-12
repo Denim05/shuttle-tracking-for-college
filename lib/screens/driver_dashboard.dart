@@ -406,7 +406,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         return Bus.fromJson(b);
                       }).toList(),
                       selectedRoute: _selectedRoute,
-                      initialDriveMode: true,
+                      centerOnBusId: _selectedBusId,
+                      initialDriveMode: _isOnline,
                       showMyLocation: false,
                       showMapControls: false,
                       initialMapType: MapType.none,
@@ -422,7 +423,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     ),
 
               // Reconnecting Guard
-              if (!isConnected)
+              if (_isOnline && !isConnected)
                 Positioned(
                   top: MediaQuery.of(context).padding.top,
                   left: 0, right: 0,
