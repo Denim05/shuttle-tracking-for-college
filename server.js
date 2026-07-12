@@ -2736,6 +2736,7 @@ app.put('/api/users/profile', authMiddleware, async (req, res) => {
         }
         if (req.body.contactNumber !== undefined && role === 'driver') allowedUpdates.contactNumber = req.body.contactNumber;
         if (req.body.proximityAlertsEnabled !== undefined && role === 'user') allowedUpdates.proximityAlertsEnabled = req.body.proximityAlertsEnabled;
+        if (req.body.proximityRadiusKm !== undefined && role === 'user') allowedUpdates.proximityRadiusKm = Number(req.body.proximityRadiusKm) || 1.0;
 
         const updated = await Model.findByIdAndUpdate(id, { $set: allowedUpdates }, { new: true }).select('-password');
         
@@ -3076,6 +3077,7 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
 
 // Socket.io for Real-time Bus Updates
 const busGeofenceState = {}; // { busId: { stopName: lastNotifiedTimestamp } }
+const userGeofenceState = {}; // { userId: { stopName: lastNotifiedTimestamp } }
 const GEOFENCE_RADIUS_KM = 1.0; // 1.0 km as per request
 const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -3188,6 +3190,72 @@ io.on('connection', (socket) => {
                             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                             const distanceKm = R * c;
 
+                            // ── TARGETED FCM PUSH NOTIFICATIONS (Custom Geofence Radius) ──
+                            if (distanceKm <= 3.0) {
+                                (async () => {
+                                    if (admin.apps.length > 0) {
+                                        try {
+                                            const targetUsers = await User.find({
+                                                routeId: bus.routeId ? bus.routeId.toString() : null,
+                                                pickupPoint: { $regex: new RegExp(`^${stop.name.trim()}$`, 'i') },
+                                                proximityAlertsEnabled: true,
+                                                fcmToken: { $ne: null }
+                                            });
+
+                                            const now = Date.now();
+                                            const tokens = [];
+
+                                            for (const user of targetUsers) {
+                                                const uRadius = user.proximityRadiusKm !== undefined ? user.proximityRadiusKm : 1.0;
+                                                if (distanceKm <= uRadius) {
+                                                    if (!userGeofenceState[user._id]) userGeofenceState[user._id] = {};
+                                                    const lastNotified = userGeofenceState[user._id][stop.name] || 0;
+
+                                                    if (now - lastNotified > COOLDOWN_MS) {
+                                                        userGeofenceState[user._id][stop.name] = now;
+                                                        tokens.push(user.fcmToken);
+                                                    }
+                                                }
+                                            }
+
+                                            if (tokens.length > 0) {
+                                                const messagePayload = {
+                                                    notification: {
+                                                        title: `Bus Approaching: ${bus.routeName || 'Shuttle'}`,
+                                                        body: `Your shuttle is approaching ${stop.name}. Distance: ${distanceKm.toFixed(1)} km. Est: ${minutes} min.`
+                                                    },
+                                                    android: {
+                                                        priority: 'high',
+                                                        notification: {
+                                                            channelId: 'SISTecChalo_pulse_alerts',
+                                                            color: '#00F0FF',
+                                                            sound: 'default'
+                                                        }
+                                                    },
+                                                    tokens: tokens
+                                                };
+                                                const response = await admin.messaging().sendEachForMulticast(messagePayload);
+                                                console.log(`🔥 [Firebase] Sent custom proximity push notification to ${response.successCount} users.`);
+                                                
+                                                // Clean up invalid tokens
+                                                response.responses.forEach((resp, idx) => {
+                                                    if (!resp.success) {
+                                                        const error = resp.error;
+                                                        if (error && (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered')) {
+                                                            const failedToken = tokens[idx];
+                                                            User.updateOne({ fcmToken: failedToken }, { $set: { fcmToken: null } }).exec()
+                                                                .catch(err => console.error('Error cleaning stale token:', err.message));
+                                                        }
+                                                    }
+                                                });
+                                            }
+                                        } catch (err) {
+                                            console.error('❌ [Firebase] Failed to send push notifications:', err.message);
+                                        }
+                                    }
+                                })();
+                            }
+
                             if (distanceKm <= GEOFENCE_RADIUS_KM) {
                                 const now = Date.now();
                                 if (!busGeofenceState[bus._id]) busGeofenceState[bus._id] = {};
@@ -3201,53 +3269,6 @@ io.on('connection', (socket) => {
                                         minutes: minutes
                                     });
                                     console.log(`🔔 [GEOFENCE] Bus ${bus.busNumber} reached stop: ${stop.name}`);
-
-                                    // Send FCM push notifications to all users registered for this route
-                                    (async () => {
-                                        if (admin.apps.length > 0) {
-                                            try {
-                                                const targetUsers = await User.find({
-                                                    routeId: bus.routeId ? bus.routeId.toString() : null,
-                                                    proximityAlertsEnabled: true,
-                                                    fcmToken: { $ne: null }
-                                                });
-                                                const tokens = targetUsers.map(u => u.fcmToken).filter(Boolean);
-                                                if (tokens.length > 0) {
-                                                    const messagePayload = {
-                                                        notification: {
-                                                            title: `Bus Approaching: ${bus.routeName || 'Shuttle'}`,
-                                                            body: `Shuttle is approaching ${stop.name}. Estimated arrival: ${minutes} min.`
-                                                        },
-                                                        android: {
-                                                            priority: 'high',
-                                                            notification: {
-                                                                channelId: 'SISTecChalo_pulse_alerts',
-                                                                color: '#00F0FF',
-                                                                sound: 'default'
-                                                            }
-                                                        },
-                                                        tokens: tokens
-                                                    };
-                                                    const response = await admin.messaging().sendEachForMulticast(messagePayload);
-                                                    console.log(`🔥 [Firebase] Sent ${response.successCount} push notifications successfully.`);
-                                                    
-                                                    // Clean up invalid tokens
-                                                    response.responses.forEach((resp, idx) => {
-                                                        if (!resp.success) {
-                                                            const error = resp.error;
-                                                            if (error && (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered')) {
-                                                                const failedToken = tokens[idx];
-                                                                User.updateOne({ fcmToken: failedToken }, { $set: { fcmToken: null } }).exec()
-                                                                    .catch(err => console.error('Error cleaning stale token:', err.message));
-                                                            }
-                                                        }
-                                                    });
-                                                }
-                                            } catch (err) {
-                                                console.error('❌ [Firebase] Failed to send push notifications:', err.message);
-                                            }
-                                        }
-                                    })();
 
                                     // ── LIVE TRIP LOG: Record actual stop-reached time ──
                                     const alreadyRecorded = tripLog.reachedStops.some(rs => rs.stopName === stop.name);
