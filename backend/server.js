@@ -957,12 +957,55 @@ app.post('/api/users', async (req, res) => {
 
 app.get('/api/users', async (req, res) => {
     try {
-        const users = await User.find();
-        res.json(users);
+        const users = await User.find().lean();
+        const [submissions, students] = await Promise.all([
+            RegistrationSubmission.find().lean(),
+            Student.find().lean()
+        ]);
+
+        const nameMap = new Map();
+        for (const sub of submissions) {
+            if (sub.name && sub.name.trim().length > 0) {
+                const cleanName = sub.name.trim();
+                if (sub.createdUserId) nameMap.set(sub.createdUserId.toString(), cleanName);
+                if (sub.studentId) nameMap.set(sub.studentId.trim().toUpperCase(), cleanName);
+                if (sub.generatedUsername) nameMap.set(sub.generatedUsername.trim().toUpperCase(), cleanName);
+            }
+        }
+        for (const st of students) {
+            if (st.name && st.name.trim().length > 0) {
+                const cleanName = st.name.trim();
+                if (st.studentId) nameMap.set(st.studentId.trim().toUpperCase(), cleanName);
+            }
+        }
+
+        const enrichedUsers = users.map(user => {
+            const usernameKey = (user.username || '').trim().toUpperCase();
+            const userIdKey = (user.userId || '').trim().toUpperCase();
+            const userObjId = user._id ? user._id.toString() : '';
+
+            const currentName = (user.name || '').trim();
+            const isIdLike = !currentName || 
+                             currentName === user.username || 
+                             currentName === user.userId || 
+                             /^\d{2,}/.test(currentName);
+
+            if (isIdLike) {
+                const resolvedName = nameMap.get(userObjId) || nameMap.get(usernameKey) || nameMap.get(userIdKey);
+                if (resolvedName) {
+                    user.name = resolvedName;
+                    User.findByIdAndUpdate(user._id, { name: resolvedName }).catch(() => {});
+                }
+            }
+            return user;
+        });
+
+        res.json(enrichedUsers);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch users' });
     }
 });
+
 
 // POST /api/users/fcm-token
 // Updates or stores the FCM push notification token for the logged-in user
@@ -2627,12 +2670,65 @@ app.delete('/api/manager/routes/:id', authMiddleware, async (req, res) => {
 
 app.get('/api/manager/users', authMiddleware, async (req, res) => {
     try {
-        const users = await User.find().select('-password');
-        res.json(users);
+        const users = await User.find().select('-password').lean();
+        
+        // Enrich user objects where name is missing or set equal to enrollment number
+        const [submissions, students] = await Promise.all([
+            RegistrationSubmission.find().lean(),
+            Student.find().lean()
+        ]);
+
+        const nameMap = new Map();
+
+        // 1. Map from Registration Submissions
+        for (const sub of submissions) {
+            if (sub.name && sub.name.trim().length > 0) {
+                const cleanName = sub.name.trim();
+                if (sub.createdUserId) nameMap.set(sub.createdUserId.toString(), cleanName);
+                if (sub.studentId) nameMap.set(sub.studentId.trim().toUpperCase(), cleanName);
+                if (sub.generatedUsername) nameMap.set(sub.generatedUsername.trim().toUpperCase(), cleanName);
+            }
+        }
+
+        // 2. Map from Students database
+        for (const st of students) {
+            if (st.name && st.name.trim().length > 0) {
+                const cleanName = st.name.trim();
+                if (st.studentId) nameMap.set(st.studentId.trim().toUpperCase(), cleanName);
+            }
+        }
+
+        const enrichedUsers = [];
+        for (const user of users) {
+            const usernameKey = (user.username || '').trim().toUpperCase();
+            const userIdKey = (user.userId || '').trim().toUpperCase();
+            const userObjId = user._id ? user._id.toString() : '';
+
+            const currentName = (user.name || '').trim();
+            const isIdLike = !currentName || 
+                             currentName === user.username || 
+                             currentName === user.userId || 
+                             /^\d{2,}/.test(currentName);
+
+            if (isIdLike) {
+                const resolvedName = nameMap.get(userObjId) || 
+                                     nameMap.get(usernameKey) || 
+                                     nameMap.get(userIdKey);
+                if (resolvedName) {
+                    user.name = resolvedName;
+                    // Update MongoDB document in background to persist resolved name
+                    User.findByIdAndUpdate(user._id, { name: resolvedName }).catch(() => {});
+                }
+            }
+            enrichedUsers.push(user);
+        }
+
+        res.json(enrichedUsers);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch users' });
     }
 });
+
 
 // Manager: Update User Status/Route
 app.put('/api/manager/users/:id', authMiddleware, async (req, res) => {
