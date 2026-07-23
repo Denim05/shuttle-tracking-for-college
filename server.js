@@ -4105,12 +4105,21 @@ app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, 
         if (!submission) return res.status(404).json({ error: 'Submission not found' });
         if (submission.status !== 'approved') return res.status(400).json({ error: 'Submission is not approved' });
 
-        // Delete the created user if exists
-        if (submission.createdUserId) {
+        // Safely delete created user if valid ObjectId
+        if (submission.createdUserId && mongoose.Types.ObjectId.isValid(submission.createdUserId)) {
             await User.findByIdAndDelete(submission.createdUserId);
-        } else {
-            // Fallback: delete by username (studentId)
-            await User.deleteOne({ username: submission.studentId.trim() });
+        }
+        
+        // Also delete by username/studentId to ensure account removal
+        const studentUsername = (submission.generatedUsername || submission.studentId || '').trim();
+        if (studentUsername) {
+            await User.deleteMany({
+                $or: [
+                    { username: studentUsername },
+                    { username: studentUsername.toUpperCase() },
+                    { userId: studentUsername }
+                ]
+            });
         }
 
         // Revert submission status to pending and clear credentials info
@@ -4121,8 +4130,10 @@ app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, 
         submission.reviewedAt = undefined;
         await submission.save();
 
-        io.emit('registrationUnapproved', { id: req.params.id, studentId: submission.studentId });
-        broadcastStats();
+        if (submission.studentId) {
+            io.emit('registrationUnapproved', { id: req.params.id, studentId: submission.studentId });
+        }
+        await broadcastStats();
 
         res.json({
             success: true,
@@ -4130,9 +4141,10 @@ app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, 
         });
     } catch (err) {
         console.error('Unapprove error:', err);
-        res.status(500).json({ error: 'Failed to unapprove registration' });
+        res.status(500).json({ error: err.message || 'Failed to unapprove registration' });
     }
 });
+
 
 // ── MANAGER: Bulk approve pending registrations ──────────────────────────
 app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, res) => {
