@@ -155,8 +155,13 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
     }
 }
 
+// ── HELPER FUNCTIONS FOR STABILITY & SANITIZATION ────────────────────────────
+const safeTrim = (val) => (val !== null && val !== undefined) ? val.toString().trim() : '';
+const isValidId = (id) => id && typeof id === 'string' && mongoose.Types.ObjectId.isValid(id.trim());
+
 /**
  * Calculates real-time Estimated Time of Arrival (ETA) using Google Maps Distance Matrix API.
+
  * Falls back to Haversine formula if API key is missing or request fails.
  */
 const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed) => {
@@ -4111,8 +4116,10 @@ app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => 
 
 // ── MANAGER: Approve → auto-create user account ───────────────────────────
 app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, res) => {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
+
         if (!submission) return res.status(404).json({ error: 'Submission not found' });
         if (submission.status === 'approved') return res.status(400).json({ error: 'Already approved' });
 
@@ -4196,6 +4203,7 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
 
 // ── MANAGER: Unapprove → delete user account & revert status ────────────────
 app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, res) => {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
         if (!submission) return res.status(404).json({ error: 'Submission not found' });
@@ -4250,7 +4258,8 @@ app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, 
     }
 
     try {
-        const submissions = await RegistrationSubmission.find({ _id: { $in: ids }, status: 'pending' });
+        const validIds = ids.filter(id => isValidId(id));
+        const submissions = await RegistrationSubmission.find({ _id: { $in: validIds }, status: 'pending' });
         if (submissions.length === 0) {
             return res.status(400).json({ error: 'No pending submissions found to approve.' });
         }
@@ -4323,17 +4332,20 @@ app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, 
 
 // ── MANAGER: Reject a submission ──────────────────────────────────────────
 app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res) => {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const updated = await RegistrationSubmission.findByIdAndUpdate(
             req.params.id,
             { status: 'rejected', rejectionNote: req.body.note || '', reviewedAt: new Date() },
             { new: true }
         );
+        if (!updated) return res.status(404).json({ error: 'Submission not found' });
         res.json(updated);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to reject registration' });
     }
 });
+
 
 // ── DIAGNOSTIC: Test SMTP connection and email delivery from deployed instance ──
 app.get('/api/debug/smtp-test', async (req, res) => {
