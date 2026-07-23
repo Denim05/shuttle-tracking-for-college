@@ -56,10 +56,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   IconData _instructionIcon = Icons.navigation_rounded;
   IconData _nextInstructionIcon = Icons.turn_left_rounded;
 
-  // ── Map object sets — only rebuilt when GPS data changes ──────────────────
-  Set<Marker>   _markers   = {};
-  Set<Polyline> _polylines = {};
-  Set<Circle>   _circles   = {};
+  // ── ValueNotifiers for decoupled Map Rendering ────────────────────────────
+  late final ValueNotifier<Set<Marker>> _markersNotifier;
+  late final ValueNotifier<Set<Polyline>> _polylinesNotifier;
+  late final ValueNotifier<Set<Circle>> _circlesNotifier;
 
   // ── Animation state ────────────────────────────────────────────────────────
   final Map<String, AnimationController> _markerAnims    = {};
@@ -72,13 +72,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   final Map<String, double>              _startHeading    = {};
   final Map<String, double>              _targetHeading   = {};
 
-  // ── Polyline flow — 8fps timer, only touches route_flow polyline ───────────
-  Timer? _flowTimer;
-  double _flowOffset = 0.0;
-
   // ── Camera debounce ───────────────────────────────────────────────────────
   Timer? _cameraDebounce;
   bool   _mapReady = false;
+  DateTime? _lastCameraMoveTime;
 
   // ── Icon caches ───────────────────────────────────────────────────────────
   final Map<String, BitmapDescriptor> _busIcons        = {};
@@ -106,14 +103,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     _isFollowing   = widget.initialDriveMode;
     _currentMapType = widget.initialMapType;
 
-    _buildDarkMapStyle();
+    _markersNotifier = ValueNotifier<Set<Marker>>({});
+    _polylinesNotifier = ValueNotifier<Set<Polyline>>({});
+    _circlesNotifier = ValueNotifier<Set<Circle>>({});
 
-    // Flow: update at ~8fps (every 125ms) — only changes the dashed overlay
-    _flowTimer = Timer.periodic(const Duration(milliseconds: 125), (_) {
-      if (!mounted) return;
-      _flowOffset = (_flowOffset + 2.5) % 20.0;
-      _updateFlowPolyline();
-    });
+    _buildDarkMapStyle();
 
     _focusInitialBus();
 
@@ -235,7 +229,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     for (final c in _markerAnims.values) {
       c.dispose();
     }
-    _flowTimer?.cancel();
+    _markersNotifier.dispose();
+    _polylinesNotifier.dispose();
+    _circlesNotifier.dispose();
     _cameraDebounce?.cancel();
     _mapController?.dispose();
     super.dispose();
@@ -277,25 +273,30 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         // If we are following this bus, update the camera position in real-time
         if (_isFollowing && _focusedBus?.id == busId) {
           final headingVal = _isDriveMode ? _animatedHeading[busId]! : 0.0;
-          _mapController?.moveCamera(CameraUpdate.newCameraPosition(
-            CameraPosition(
-              target:  _animatedPos[busId]!,
-              zoom:    _isDriveMode ? 18.0 : 16.5,
-              tilt:    _isDriveMode ? 52.0 : 0.0,
-              bearing: headingVal,
-            ),
-          ));
+          final now = DateTime.now();
+          if (_lastCameraMoveTime == null ||
+              now.difference(_lastCameraMoveTime!).inMilliseconds >= 50) {
+            _lastCameraMoveTime = now;
+            _mapController?.moveCamera(CameraUpdate.newCameraPosition(
+              CameraPosition(
+                target:  _animatedPos[busId]!,
+                zoom:    _isDriveMode ? 18.0 : 16.5,
+                tilt:    _isDriveMode ? 52.0 : 0.0,
+                bearing: headingVal,
+              ),
+            ));
+          }
         }
 
-        // Only rebuild map objects — not the whole widget tree
-        _rebuildMapObjects();
+        // Only rebuild map markers and circles — not the whole polyline route
+        _rebuildMarkersOnly();
       });
 
       ctrl.addStatusListener((s) {
         if (s == AnimationStatus.completed) {
           _animatedPos[busId]     = _targetPos[busId] ?? end;
           _animatedHeading[busId] = _targetHeading[busId] ?? endBearing;
-          _rebuildMapObjects();
+          _rebuildMarkersOnly();
         }
       });
     } else {
@@ -367,32 +368,19 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     final newPolylines = _buildPolylines();
     final newCircles   = _buildCircles();
 
-    // Single setState for all three sets together
-    setState(() {
-      _markers   = newMarkers;
-      _polylines = newPolylines;
-      _circles   = newCircles;
-    });
+    _markersNotifier.value = newMarkers;
+    _polylinesNotifier.value = newPolylines;
+    _circlesNotifier.value = newCircles;
   }
 
-  // Update only the animated dashed flow polyline — called at 8fps
-  void _updateFlowPolyline() {
-    if (!mounted || widget.selectedRoute == null || _selectedRoutePoints.isEmpty) return;
+  void _rebuildMarkersOnly() {
+    if (!mounted) return;
 
-    final flow = Polyline(
-      polylineId: const PolylineId('route_flow'),
-      points:     _selectedRoutePoints,
-      width:      5,
-      color:      Colors.white.withOpacity(0.35),
-      patterns:   [PatternItem.dash(10), PatternItem.gap(10 + _flowOffset)],
-    );
+    final newMarkers = _buildMarkers();
+    final newCircles = _buildCircles();
 
-    setState(() {
-      _polylines = {
-        ..._polylines.where((p) => p.polylineId.value != 'route_flow'),
-        flow,
-      };
-    });
+    _markersNotifier.value = newMarkers;
+    _circlesNotifier.value = newCircles;
   }
 
   Set<Marker> _buildMarkers() {
@@ -467,6 +455,15 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         jointType:  JointType.round,
         endCap:     Cap.roundCap,
         startCap:   Cap.roundCap,
+      );
+
+      // Static Flow Overlay (no animation offset, so no timer needed!)
+      result['route_flow'] = Polyline(
+        polylineId: const PolylineId('route_flow'),
+        points:     _selectedRoutePoints,
+        width:      5,
+        color:      Colors.white.withOpacity(0.35),
+        patterns:   [PatternItem.dash(10), PatternItem.gap(10)],
       );
     }
 
@@ -1466,45 +1463,60 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     return Stack(
       children: [
         // ── Google Map ──────────────────────────────────────────────────────
-        GoogleMap(
-          initialCameraPosition: CameraPosition(
-            target: widget.buses.isNotEmpty
-                ? LatLng(widget.buses.first.currentLat,
-                         widget.buses.first.currentLng)
-                : _bhopal,
-            zoom: _isDriveMode ? 18 : 15,
-            tilt:    _isDriveMode ? 52 : 0,
-            bearing: _isDriveMode
-                ? (_animatedHeading[widget.buses.isNotEmpty ? widget.buses.first.id : ''] ?? 0)
-                : 0,
-          ),
-          onMapCreated: (ctrl) {
-            _mapController = ctrl;
-            _mapReady = true;
-            if (_currentMapType == MapType.none) {
-              ctrl.setMapStyle(_darkMapStyle);
-            }
-            if (widget.buses.isNotEmpty) {
-              final b = widget.buses.first;
-              ctrl.animateCamera(CameraUpdate.newLatLngZoom(
-                  LatLng(b.currentLat, b.currentLng),
-                  _isDriveMode ? 18 : 15));
-            }
+        ValueListenableBuilder<Set<Marker>>(
+          valueListenable: _markersNotifier,
+          builder: (context, markers, _) {
+            return ValueListenableBuilder<Set<Polyline>>(
+              valueListenable: _polylinesNotifier,
+              builder: (context, polylines, _) {
+                return ValueListenableBuilder<Set<Circle>>(
+                  valueListenable: _circlesNotifier,
+                  builder: (context, circles, _) {
+                    return GoogleMap(
+                      initialCameraPosition: CameraPosition(
+                        target: widget.buses.isNotEmpty
+                            ? LatLng(widget.buses.first.currentLat,
+                                     widget.buses.first.currentLng)
+                            : _bhopal,
+                        zoom: _isDriveMode ? 18 : 15,
+                        tilt:    _isDriveMode ? 52 : 0,
+                        bearing: _isDriveMode
+                            ? (_animatedHeading[widget.buses.isNotEmpty ? widget.buses.first.id : ''] ?? 0)
+                            : 0,
+                      ),
+                      onMapCreated: (ctrl) {
+                        _mapController = ctrl;
+                        _mapReady = true;
+                        if (_currentMapType == MapType.none) {
+                          ctrl.setMapStyle(_darkMapStyle);
+                        }
+                        if (widget.buses.isNotEmpty) {
+                          final b = widget.buses.first;
+                          ctrl.animateCamera(CameraUpdate.newLatLngZoom(
+                              LatLng(b.currentLat, b.currentLng),
+                              _isDriveMode ? 18 : 15));
+                        }
+                      },
+                      mapType:               _currentMapType == MapType.none ? MapType.normal : _currentMapType,
+                      markers:               markers,
+                      polylines:             polylines,
+                      circles:               circles,
+                      myLocationEnabled:     widget.showMyLocation,
+                      myLocationButtonEnabled: false,
+                      zoomControlsEnabled:   false,
+                      mapToolbarEnabled:     true,
+                      compassEnabled:        _isDriveMode,
+                      tiltGesturesEnabled:   true,
+                      rotateGesturesEnabled: true,
+                      buildingsEnabled:      _isDriveMode,   // 3D buildings only in drive mode
+                      trafficEnabled:        true,
+                      onTap: (_) => setState(() => _focusedBus = null),
+                    );
+                  },
+                );
+              },
+            );
           },
-          mapType:               _currentMapType == MapType.none ? MapType.normal : _currentMapType,
-          markers:               _markers,
-          polylines:             _polylines,
-          circles:               _circles,
-          myLocationEnabled:     widget.showMyLocation,
-          myLocationButtonEnabled: false,
-          zoomControlsEnabled:   false,
-          mapToolbarEnabled:     true,
-          compassEnabled:        _isDriveMode,
-          tiltGesturesEnabled:   true,
-          rotateGesturesEnabled: true,
-          buildingsEnabled:      _isDriveMode,   // 3D buildings only in drive mode
-          trafficEnabled:        true,
-          onTap: (_) => setState(() => _focusedBus = null),
         ),
 
         // ── Map Controls ────────────────────────────────────────────────────
