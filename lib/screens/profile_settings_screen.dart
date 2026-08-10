@@ -303,7 +303,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   
                   _buildPolicySection(
                     '1. Location Data Collection',
-                    'Our app collects precise real-time location data of vehicles to provide tracking services. For drivers, location data is collected in the foreground and/or background when sharing route coordinates so students can see active shuttles. For users, location is optionally used to show your distance relative to stops.',
+                    'Our app collects precise real-time location data of vehicles to provide tracking services. For drivers, location data is collected in the foreground and/or background when sharing route coordinates so students can see active buses. For users, location is optionally used to show your distance relative to stops.',
                   ),
                   _buildPolicySection(
                     '2. How We Use Data',
@@ -406,7 +406,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildAboutRow('Application', 'SmartCampus Shuttle'),
+              _buildAboutRow('Application', 'SmartCampus Bus'),
               _buildAboutRow('Platform Version', 'v2.4.0 (Stable)'),
               _buildAboutRow('API Gateway', 'Secure Gateway Active'),
               _buildAboutRow('WebSocket Client', 'WSS Connected'),

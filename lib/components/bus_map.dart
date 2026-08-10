@@ -407,7 +407,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         flat:     true,
         consumeTapEvents: false,
         infoWindow: InfoWindow(
-          title:   'Shuttle ${_busLabel(bus.id)}',
+          title:   'Bus ${_busLabel(bus.id)}',
           snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}',
         ),
         onTap: () {
@@ -987,105 +987,126 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   Widget _buildTurnByTurnCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF004D40), // Premium dark teal green
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
-        ],
-      ),
-      child: Row(
-        children: [
-          // Direction Icon
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(_instructionIcon, color: Colors.white, size: 32),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(24),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A).withOpacity(0.88),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFF38EF7D).withOpacity(0.3), width: 1.5),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.4),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              )
+            ],
           ),
-          const SizedBox(width: 16),
-          // Instructions Text
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _currentInstruction,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
+          child: Row(
+            children: [
+              // Direction Icon
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF38EF7D), Color(0xFF11998E)],
                   ),
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(color: const Color(0xFF38EF7D).withOpacity(0.4), blurRadius: 10),
+                  ],
                 ),
-                const SizedBox(height: 4),
-                Row(
+                child: Icon(_instructionIcon, color: Colors.black, size: 24),
+              ),
+              const SizedBox(width: 16),
+              // Instructions Text
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      'Then  ',
+                      _currentInstruction,
                       style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white60,
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.3,
                       ),
                     ),
-                    Icon(_nextInstructionIcon, color: Colors.white70, size: 14),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        _nextInstruction,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white70,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Text(
+                          'Then  ',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF38EF7D),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                        Icon(_nextInstructionIcon, color: Colors.white70, size: 14),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: Text(
+                            _nextInstruction,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
 
   Widget _buildSidebarCompassBtn() {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.6),
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Transform.rotate(
-        angle: -((_animatedHeading[_focusedBus?.id] ?? 0.0) * (3.14159 / 180.0)),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            const Icon(Icons.explore_outlined, color: Colors.white38, size: 30),
-            // Red compass needle pointing North
-            Positioned(
-              top: 8,
-              child: Container(
-                width: 3,
-                height: 12,
-                color: Colors.redAccent,
-              ),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+        child: Container(
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A).withOpacity(0.8),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withOpacity(0.12)),
+          ),
+          child: Transform.rotate(
+            angle: -((_animatedHeading[_focusedBus?.id] ?? 0.0) * (3.14159 / 180.0)),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                const Icon(Icons.explore_outlined, color: Colors.white60, size: 26),
+                Positioned(
+                  top: 8,
+                  child: Container(
+                    width: 3,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );
@@ -1097,23 +1118,31 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         HapticFeedback.lightImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            backgroundColor: const Color(0xFF0F1528),
+            backgroundColor: const Color(0xFF0F172A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
             content: Text(
               'Search along route is active.',
-              style: GoogleFonts.plusJakartaSans(color: Colors.white),
+              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
             ),
           ),
         );
       },
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white10),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withOpacity(0.8),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withOpacity(0.12)),
+            ),
+            child: const Icon(Icons.search_rounded, color: Colors.white, size: 20),
+          ),
         ),
-        child: const Icon(Icons.search, color: Colors.white, size: 22),
       ),
     );
   }
@@ -1126,18 +1155,24 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           _isMuted = !_isMuted;
         });
       },
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white10),
-        ),
-        child: Icon(
-          _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-          color: Colors.white,
-          size: 22,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+          child: Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withOpacity(0.8),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withOpacity(0.12)),
+            ),
+            child: Icon(
+              _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+              color: _isMuted ? Colors.redAccent : Colors.white,
+              size: 20,
+            ),
+          ),
         ),
       ),
     );
@@ -1519,81 +1554,60 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           },
         ),
 
-        // ── Map Controls ────────────────────────────────────────────────────
-        if (widget.showMapControls && !_isDriveMode)
+        // ── Map Floating Action Stack (Right side) ─────────────────────────
+        if (widget.showMapControls)
           Positioned(
-            right: 12,
-            top:   MediaQuery.of(context).padding.top + 80,
+            right: 16,
+            top: MediaQuery.of(context).padding.top + 76,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 _buildMapBtn(
-                  icon:  Icons.layers_rounded,
+                  icon: Icons.layers_rounded,
                   label: 'LAYERS',
                   color: Colors.white70,
                   onTap: _showLayersSheet,
                 ),
                 const SizedBox(height: 10),
                 _buildMapBtn(
-                  icon:    _isFollowing ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded,
-                  label:   _isFollowing ? 'FOLLOWING' : 'FOLLOW BUS',
-                  color:   Colors.blueAccent,
+                  icon: _isFollowing ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded,
+                  label: _isFollowing ? 'FOLLOWING' : 'FOLLOW BUS',
+                  color: const Color(0xFF2D5BFF),
                   isActive: _isFollowing,
-                  onTap:   _toggleFollow,
+                  onTap: _toggleFollow,
                 ),
                 const SizedBox(height: 10),
                 _buildMapBtn(
-                  icon:    Icons.directions_car_filled_rounded,
-                  label:   _isDriveMode ? 'EXIT NAV' : 'DRIVE MODE',
-                  color:   const Color(0xFF00C853),
+                  icon: Icons.directions_car_filled_rounded,
+                  label: _isDriveMode ? 'EXIT NAV' : 'DRIVE MODE',
+                  color: const Color(0xFF38EF7D),
                   isActive: _isDriveMode,
-                  onTap:   _toggleDriveMode,
+                  onTap: _toggleDriveMode,
                 ),
                 if (widget.showLocationButton) ...[
                   const SizedBox(height: 10),
                   _buildMapBtn(
-                    icon:  Icons.person_pin_circle_rounded,
+                    icon: Icons.my_location_rounded,
                     label: 'MY LOCATION',
                     color: Colors.deepPurpleAccent,
                     onTap: _getCurrentLocation,
                   ),
                 ],
+                if (_isDriveMode) ...[
+                  const SizedBox(height: 10),
+                  _buildSidebarMuteBtn(),
+                ],
               ],
             ),
           ),
 
-        // ── Drive Mode HUD ──────────────────────────────────────────────────
+        // ── Drive Mode Navigation Banner ────────────────────────────────────
         if (_isDriveMode && _focusedBus != null) ...[
           Positioned(
-            top: MediaQuery.of(context).padding.top + 10,
+            top: MediaQuery.of(context).padding.top + 76,
             left: 16,
-            right: 16,
+            right: 72, // Leave space for right sidebar icons
             child: _buildTurnByTurnCard(),
-          ),
-          Positioned(
-            right: 16,
-            top: MediaQuery.of(context).padding.top + 100,
-            child: Column(
-              children: [
-                _buildSidebarCompassBtn(),
-                const SizedBox(height: 12),
-                _buildSidebarSearchBtn(),
-                const SizedBox(height: 12),
-                _buildSidebarMuteBtn(),
-              ],
-            ),
-          ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 110,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildReCentreBtn(),
-                _buildReportBtn(),
-              ],
-            ),
           ),
           Positioned(
             left: 16,
@@ -1659,7 +1673,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'SHUTTLE ${_busLabel(_focusedBus!.id)}',
+                                  'BUS ${_busLabel(_focusedBus!.id)}',
                                   style: GoogleFonts.plusJakartaSans(
                                     color: Colors.white,
                                     fontSize: 18,

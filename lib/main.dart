@@ -9,6 +9,8 @@ import 'services/socket_service.dart';
 import 'services/bus_store.dart';
 import 'services/notification_service.dart';
 import 'theme/app_theme.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'screens/login_screen.dart';
 import 'screens/user_dashboard.dart';
 import 'screens/admin_dashboard.dart';
@@ -169,47 +171,95 @@ class _SplashScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              width : 80,
-              height: 80,
+      backgroundColor: const Color(0xFF0B0F17),
+      body: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Background ambient radial glow
+          Positioned(
+            child: Container(
+              width: 320,
+              height: 320,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [AppColors.primary, AppColors.accent],
-                  begin: Alignment.topLeft,
-                  end  : Alignment.bottomRight,
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    const Color(0xFF2D5BFF).withOpacity(0.25),
+                    Colors.transparent,
+                  ],
                 ),
-                borderRadius: BorderRadius.circular(24),
-                boxShadow: AppShadows.primary,
               ),
-              child: const Icon(
-                Icons.directions_bus_rounded,
-                color: Colors.white,
-                size : 40,
-              ),
+            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 2.seconds, begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2)),
+          ),
+          
+          Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // Glowing Icon Badge
+                Container(
+                  width: 96,
+                  height: 96,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF2D5BFF), Color(0xFF00F0FF)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(30),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF2D5BFF).withOpacity(0.5),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.directions_bus_filled_rounded,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.7, 0.7), end: const Offset(1, 1), curve: Curves.easeOutBack),
+                
+                const SizedBox(height: 28),
+                
+                Text(
+                  'SISTecChalo',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 34,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
+                ).animate().fadeIn(delay: 200.ms),
+                
+                const SizedBox(height: 6),
+                
+                Text(
+                  'REAL-TIME BUS TELEMETRY',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: const Color(0xFF00F0FF),
+                    letterSpacing: 3,
+                  ),
+                ).animate().fadeIn(delay: 400.ms),
+                
+                const SizedBox(height: 48),
+                
+                const SizedBox(
+                  width: 24,
+                  height: 24,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: Color(0xFF00F0FF),
+                  ),
+                ).animate().fadeIn(delay: 600.ms),
+              ],
             ),
-            const SizedBox(height: 24),
-            Text(
-              'SISTecChalo',
-              style: AppTextStyles.headlineMedium.copyWith(
-                color    : AppColors.text,
-              ),
-            ),
-            const SizedBox(height: 32),
-            const SizedBox(
-              width : 24,
-              height: 24,
-              child : CircularProgressIndicator(
-                strokeWidth: 2,
-                color      : AppColors.primary,
-              ),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

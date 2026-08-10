@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui' as ui;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -14,6 +15,7 @@ import '../models/route_model.dart';
 import '../models/bus_model.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'fleet_radar_screen.dart';
 import 'schedule_screen.dart';
@@ -41,7 +43,7 @@ class _UserDashboardState extends State<UserDashboard> {
   final List<Map<String, dynamic>> _alertHistory = [];
   bool _isSosActive = false;
 
-  // ── New Feature State ──────────────────────────────────────────────────────
+  bool _isDriveMode = false;
   int? _etaMinutes;          // ETA to user's assigned pickup stop
   bool _etaLoading = false;
   bool _delaySubscribed = false; // Whether user subscribed to delay alerts
@@ -59,17 +61,7 @@ class _UserDashboardState extends State<UserDashboard> {
     try {
       final List<dynamic> data = await _apiService.get(endpoint, requiresAuth: !auth.isGuest);
       if (!mounted) return;
-      setState(() {
-        _routes = data.map((r) => RouteModel.fromJson(r)).toList();
-        _isLoading = false;
-        
-        if (auth.currentUser?.routeId != null) {
-          final matched = _routes.where((r) => r.id == auth.currentUser!.routeId);
-          _selectedRoute = matched.isNotEmpty ? matched.first : (_routes.isNotEmpty ? _routes.first : null);
-        } else if (_routes.isNotEmpty) {
-          _selectedRoute = _routes.first;
-        }
-      });
+      _routes = data.map((r) => RouteModel.fromJson(r)).toList();
       
       final busEndpoint = auth.isGuest ? 'guest/buses' : 'buses';
       final List<dynamic> busData = await _apiService.get(busEndpoint, requiresAuth: !auth.isGuest);
@@ -77,8 +69,43 @@ class _UserDashboardState extends State<UserDashboard> {
       
       final busStore = Provider.of<BusStore>(context, listen: false);
       busStore.seedBuses(busData);
+
+      // Read saved route preference from local storage
+      String? savedRouteId;
+      try {
+        const storage = FlutterSecureStorage();
+        savedRouteId = await storage.read(key: 'last_selected_route_id');
+      } catch (_) {}
+
+      // Smart route resolution order:
+      // 1. User's profile assigned routeId
+      // 2. Previously selected route saved in storage
+      // 3. Route of a currently LIVE online bus
+      // 4. Fallback: first route
+      RouteModel? targetRoute;
+      if (auth.currentUser?.routeId != null) {
+        final matched = _routes.where((r) => r.id == auth.currentUser!.routeId);
+        if (matched.isNotEmpty) targetRoute = matched.first;
+      }
       
+      if (targetRoute == null && savedRouteId != null) {
+        final matched = _routes.where((r) => r.id == savedRouteId);
+        if (matched.isNotEmpty) targetRoute = matched.first;
+      }
+
+      if (targetRoute == null && busStore.allBuses.isNotEmpty) {
+        final onlineBuses = busStore.allBuses.where((b) => b.status != 'Offline').toList();
+        if (onlineBuses.isNotEmpty) {
+          final matched = _routes.where((r) => r.id == onlineBuses.first.routeId);
+          if (matched.isNotEmpty) targetRoute = matched.first;
+        }
+      }
+
+      targetRoute ??= (_routes.isNotEmpty ? _routes.first : null);
+
       setState(() {
+        _selectedRoute = targetRoute;
+        _isLoading = false;
         _updateActiveBus(busStore);
       });
 
@@ -111,12 +138,12 @@ class _UserDashboardState extends State<UserDashboard> {
           
           NotificationService().showNotification(
             title: 'SISTecChalo Alert: Bus Nearby',
-            body: data['message'] ?? 'Your shuttle is arriving!',
+            body: data['message'] ?? 'Your bus is arriving!',
           );
 
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Shuttle arriving at ${data['stopName']}!'),
+              content: Text('Bus arriving at ${data['stopName']}!'),
               backgroundColor: const Color(0xFF2D5BFF),
               behavior: SnackBarBehavior.floating,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -338,133 +365,156 @@ class _UserDashboardState extends State<UserDashboard> {
   }
 
   Widget _buildFloatingHeader(BusStore busStore) {
+    if (_isDriveMode) return const SizedBox.shrink();
     final socketService = Provider.of<SocketService>(context, listen: false);
     final auth = Provider.of<AuthService>(context, listen: false);
     final topPadding = MediaQuery.of(context).padding.top;
     return Positioned(
-      top: topPadding + 10, left: 16, right: 16,
-      child: Container(
-        constraints: const BoxConstraints(minHeight: 56),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E).withOpacity(0.96),
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 16, offset: const Offset(0, 4))],
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            GestureDetector(
-              onTap: () {
-                _tapCounter++;
-                if (_tapCounter >= 3) {
-                  setState(() => _showDebugOverlay = !_showDebugOverlay);
-                  _tapCounter = 0;
-                }
-                Future.delayed(1.seconds, () => _tapCounter = 0);
-              },
-              child: Container(
-                width: 34, height: 34,
-                decoration: BoxDecoration(
-                  color: const Color(0xFF2D5BFF).withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.directions_bus_filled_rounded, color: Color(0xFF2D5BFF), size: 17),
-              ),
+      top: topPadding + 8, left: 16, right: 16,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: BackdropFilter(
+          filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 56),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            decoration: BoxDecoration(
+              color: const Color(0xFF0F172A).withOpacity(0.85),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF2D5BFF).withOpacity(0.25)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.4),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                )
+              ],
             ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Shuttle Tracker',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 1,
-                      height: 1.2,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Row(
-                    children: [
-                      ValueListenableBuilder<DateTime?>(
-                        valueListenable: socketService.lastDataReceived,
-                        builder: (context, lastPacket, _) {
-                          return Container(
-                            width: 5, height: 5,
-                            key: ValueKey(lastPacket?.millisecondsSinceEpoch ?? 0),
-                            decoration: const BoxDecoration(
-                              color: Colors.blueAccent,
-                              shape: BoxShape.circle,
-                            ),
-                          ).animate(key: ValueKey(lastPacket?.millisecondsSinceEpoch ?? 0))
-                           .scale(begin: const Offset(1,1), end: const Offset(2, 2), duration: 200.ms)
-                           .fadeOut(duration: 400.ms);
-                        },
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                GestureDetector(
+                  onTap: () {
+                    _tapCounter++;
+                    if (_tapCounter >= 3) {
+                      setState(() => _showDebugOverlay = !_showDebugOverlay);
+                      _tapCounter = 0;
+                    }
+                    Future.delayed(1.seconds, () => _tapCounter = 0);
+                  },
+                  child: Container(
+                    width: 38, height: 38,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2D5BFF), Color(0xFF6C5CE7)],
                       ),
-                      const SizedBox(width: 5),
-                      Flexible(
-                        child: Text(
-                          _selectedRoute?.name ?? 'Tap ⇄ to select route',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: _selectedRoute != null ? Colors.blueAccent : Colors.white30,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                          maxLines: 1,
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF2D5BFF).withOpacity(0.4),
+                          blurRadius: 8,
+                        )
+                      ],
+                    ),
+                    child: const Icon(Icons.directions_bus_filled_rounded, color: Colors.white, size: 19),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'BUS TRACKER',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.2,
+                          height: 1.2,
                         ),
+                      ),
+                      const SizedBox(height: 2),
+                      Row(
+                        children: [
+                          ValueListenableBuilder<DateTime?>(
+                            valueListenable: socketService.lastDataReceived,
+                            builder: (context, lastPacket, _) {
+                              return Container(
+                                width: 6, height: 6,
+                                key: ValueKey(lastPacket?.millisecondsSinceEpoch ?? 0),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFF38EF7D),
+                                  shape: BoxShape.circle,
+                                  boxShadow: [BoxShadow(color: Color(0xFF38EF7D), blurRadius: 6)],
+                                ),
+                              ).animate(key: ValueKey(lastPacket?.millisecondsSinceEpoch ?? 0))
+                               .scale(begin: const Offset(1,1), end: const Offset(1.8, 1.8), duration: 200.ms)
+                               .fadeOut(duration: 400.ms);
+                            },
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              _selectedRoute?.name ?? 'Tap ⇄ to select route',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: _selectedRoute != null ? const Color(0xFF38EF7D) : Colors.white38,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                height: 1.2,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                              maxLines: 1,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: _showRouteSelection,
-              child: Container(
-                width: 34, height: 34,
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.05),
-                  borderRadius: BorderRadius.circular(10),
                 ),
-                child: const Icon(Icons.swap_horiz_rounded, color: Colors.white60, size: 18),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onLongPress: () => _triggerSOS(auth),
-              onTap: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('⚠️ Hold down to send Emergency SOS!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-                    backgroundColor: Colors.redAccent,
-                    behavior: SnackBarBehavior.floating,
-                    duration: const Duration(seconds: 2),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                GestureDetector(
+                  onTap: _showRouteSelection,
+                  child: Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    ),
+                    child: const Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 20),
                   ),
-                );
-              },
-              child: Container(
-                width: 34, height: 34,
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.redAccent.withOpacity(0.3)),
                 ),
-                child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 17),
-              ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onLongPress: () => _triggerSOS(auth),
+                  onTap: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('⚠️ Hold down to send Emergency SOS!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                        backgroundColor: Colors.redAccent,
+                        behavior: SnackBarBehavior.floating,
+                        duration: const Duration(seconds: 2),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    width: 36, height: 36,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
+                    ),
+                    child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 19),
+                  ),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-      ).animate().fadeIn().slideY(begin: -0.1),
+      ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.1),
     );
   }
 
@@ -492,6 +542,9 @@ class _UserDashboardState extends State<UserDashboard> {
             b.status != 'Offline'
           ).toList(),
           selectedRoute: _selectedRoute,
+          onDriveModeChanged: (isDrive) {
+            setState(() => _isDriveMode = isDrive);
+          },
         ),
         DraggableScrollableSheet(
           initialChildSize: 0.3,
@@ -517,110 +570,179 @@ class _UserDashboardState extends State<UserDashboard> {
                    Text('Ready for Departure', style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
                    Text('Select a route to track your transit.', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.white38, height: 1.5)),
                    const SizedBox(height: 40),
-                   _buildActionCard('Active Fleet Radar', 'View all shuttle locations', Icons.radar_rounded, () {
+                   _buildActionCard('Active Fleet Radar', 'View all bus locations', Icons.radar_rounded, () {
                      Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetRadarScreen()));
                    }),
                    const SizedBox(height: 16),
-                   _buildActionCard('Select Route', 'Synchronize with a specific shuttle channel', Icons.alt_route_rounded, _showRouteSelection),
+                   _buildActionCard('Select Route', 'Synchronize with a specific bus channel', Icons.alt_route_rounded, _showRouteSelection),
                 ] else ...[
-                   Row(
-                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                     children: [
-                       Expanded(
-                         child: Column(
-                           crossAxisAlignment: CrossAxisAlignment.start,
-                           children: [
-                             Text(_selectedRoute!.name, style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.w900, color: Colors.white), overflow: TextOverflow.ellipsis),
-                             const SizedBox(height: 6),
-                             Row(
-                               children: [
-                                 if (_activeBus != null && _activeBus!.status != 'Offline') ...[
-                                   Container(
-                                     width: 8, height: 8,
-                                     decoration: const BoxDecoration(
-                                       color: Color(0xFF00C853),
-                                       shape: BoxShape.circle,
-                                       boxShadow: [BoxShadow(color: Color(0xFF00C853), blurRadius: 8)],
-                                     ),
-                                   ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.4, 1.4)),
-                                   const SizedBox(width: 6),
-                                   Text('LIVE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: const Color(0xFF00C853), letterSpacing: 2)),
-                                   const SizedBox(width: 10),
-                                   if (_activeBus!.speed > 0) ...[
-                                     const Icon(Icons.speed_rounded, color: Colors.blueAccent, size: 11),
-                                     const SizedBox(width: 3),
-                                     Text('${_activeBus!.speed.toInt()} KM/H', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: Colors.blueAccent, letterSpacing: 1)),
-                                   ],
-                                 ] else ...[
-                                   Container(width: 8, height: 8, decoration: const BoxDecoration(color: Colors.white24, shape: BoxShape.circle)),
-                                   const SizedBox(width: 6),
-                                   Text('OFFLINE', style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)),
-                                 ],
-                               ],
-                             ),
-                           ],
-                         ),
-                       ),
-                       // Socket tracking status pill
-                       ValueListenableBuilder<DateTime?>(
-                         valueListenable: Provider.of<SocketService>(context, listen: false).lastDataReceived,
-                         builder: (context, lastPacket, _) {
-                           final isRecent = lastPacket != null && 
-                               DateTime.now().difference(lastPacket).inSeconds < 15;
-                           return AnimatedContainer(
-                             duration: const Duration(milliseconds: 400),
-                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                             decoration: BoxDecoration(
-                               color: isRecent ? const Color(0xFF00C853).withOpacity(0.1) : Colors.white.withOpacity(0.04),
-                               borderRadius: BorderRadius.circular(14),
-                               border: Border.all(color: isRecent ? const Color(0xFF00C853).withOpacity(0.3) : Colors.white12),
-                             ),
-                             child: Row(
-                               mainAxisSize: MainAxisSize.min,
-                               children: [
-                                 Icon(
-                                   isRecent ? Icons.wifi_tethering_rounded : Icons.wifi_tethering_off_rounded,
-                                   color: isRecent ? const Color(0xFF00C853) : Colors.white24,
-                                   size: 11,
-                                 ),
-                                 const SizedBox(width: 4),
-                                 Text(
-                                   isRecent ? 'TRACKING' : 'WAITING',
-                                   style: GoogleFonts.plusJakartaSans(
-                                     color: isRecent ? const Color(0xFF00C853) : Colors.white24,
-                                     fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1,
-                                   ),
-                                 ),
-                               ],
-                             ),
-                           );
-                         },
-                       ),
-                     ],
-                   ),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _selectedRoute!.name,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 17,
+                                  fontWeight: FontWeight.w900,
+                                  color: Colors.white,
+                                  letterSpacing: -0.3,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.visible,
+                              ),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 6,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  if (_activeBus != null && _activeBus!.status != 'Offline') ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00C853).withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: const Color(0xFF00C853).withOpacity(0.4)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 7, height: 7,
+                                            decoration: const BoxDecoration(
+                                              color: Color(0xFF00C853),
+                                              shape: BoxShape.circle,
+                                              boxShadow: [BoxShadow(color: Color(0xFF00C853), blurRadius: 8)],
+                                            ),
+                                          ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.4, 1.4)),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'LIVE',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w900,
+                                              color: const Color(0xFF00C853),
+                                              letterSpacing: 1.2,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ] else ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withOpacity(0.05),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.white38, shape: BoxShape.circle)),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            'OFFLINE',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w900,
+                                              color: Colors.white38,
+                                              letterSpacing: 1.2,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                  if (_activeBus != null) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF2D5BFF).withOpacity(0.12),
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(color: const Color(0xFF2D5BFF).withOpacity(0.3)),
+                                      ),
+                                      child: Text(
+                                        'BUS #${_activeBus!.id.substring(math.max(0, _activeBus!.id.length - 4)).toUpperCase()}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w900,
+                                          color: const Color(0xFF2D5BFF),
+                                          letterSpacing: 1,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // Socket tracking status pill
+                        ValueListenableBuilder<DateTime?>(
+                          valueListenable: Provider.of<SocketService>(context, listen: false).lastDataReceived,
+                          builder: (context, lastPacket, _) {
+                            final isRecent = lastPacket != null && 
+                                DateTime.now().difference(lastPacket).inSeconds < 15;
+                            return AnimatedContainer(
+                              duration: const Duration(milliseconds: 400),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: isRecent ? const Color(0xFF00C853).withOpacity(0.12) : Colors.white.withOpacity(0.04),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: isRecent ? const Color(0xFF00C853).withOpacity(0.4) : Colors.white12),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    isRecent ? Icons.wifi_tethering_rounded : Icons.wifi_tethering_off_rounded,
+                                    color: isRecent ? const Color(0xFF00C853) : Colors.white38,
+                                    size: 13,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    isRecent ? 'TRACKING' : 'STANDBY',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: isRecent ? const Color(0xFF00C853) : Colors.white38,
+                                      fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ),
 
-                   const SizedBox(height: 35),
-                   _buildStatGrid(),
-                   const SizedBox(height: 35),
-                   if (_activeBus != null && _activeBus!.status != 'Offline')
-                     LinearTrackingView(bus: _activeBus!, route: _selectedRoute!)
-                   else
-                     _buildStopsList(),
+                    const SizedBox(height: 35),
+                    _buildStatGrid(),
+                    const SizedBox(height: 35),
+                    if (_activeBus != null && _activeBus!.status != 'Offline')
+                      LinearTrackingView(bus: _activeBus!, route: _selectedRoute!)
+                    else
+                      _buildStopsList(),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
-        ),
-      ],
-    );
-  }
+        ],
+      );
+    }
 
   Widget _buildStatGrid() {
     final isLive = _activeBus != null && _activeBus!.status != 'Offline';
     final auth = Provider.of<AuthService>(context, listen: false);
     final hasPickup = (auth.currentUser?.pickupPoint ?? '').isNotEmpty;
 
-    // Prefer real stop-specific ETA fetched from backend
     String etaDisplay = '--';
     if (_etaLoading) {
       etaDisplay = '...';
@@ -637,91 +759,97 @@ class _UserDashboardState extends State<UserDashboard> {
         Row(
           children: [
             Expanded(
-              child: GestureDetector(
-                onTap: hasPickup && isLive ? _fetchETA : null,
-                child: Stack(
-                  children: [
-                    _buildStatItem(
-                      hasPickup ? 'ETA TO STOP' : 'ETA',
-                      etaDisplay,
-                      Icons.timer_outlined,
-                    ),
-                    if (hasPickup && isLive)
-                      Positioned(
-                        top: 10, right: 10,
-                        child: Icon(
-                          Icons.refresh_rounded,
-                          color: const Color(0xFF2D5BFF).withOpacity(0.5),
-                          size: 14,
-                        ),
-                      ),
-                  ],
-                ),
+              child: _buildStatItem(
+                label: hasPickup ? 'ETA TO STOP' : 'ETA',
+                val: etaDisplay,
+                icon: Icons.timer_outlined,
+                iconColor: const Color(0xFF2D5BFF),
+                onTapAction: (hasPickup && isLive) ? _fetchETA : null,
+                actionIcon: (hasPickup && isLive) ? Icons.refresh_rounded : null,
               ),
             ),
-            const SizedBox(width: 16),
-            Expanded(child: _buildStatItem('VELOCITY', isLive ? '${_activeBus!.speed.toInt()} KM/H' : '--', Icons.speed_rounded)),
+            const SizedBox(width: 14),
+            Expanded(
+              child: _buildStatItem(
+                label: 'VELOCITY',
+                val: isLive ? '${_activeBus!.speed.toInt()} KM/H' : '--',
+                icon: Icons.speed_rounded,
+                iconColor: const Color(0xFF00F0FF),
+              ),
+            ),
           ],
         ),
         if (hasPickup && _selectedRoute != null) ...[
-          const SizedBox(height: 12),
-          Text(
-            'MY STOP: ${auth.currentUser!.pickupPoint!.toUpperCase()}',
-            style: GoogleFonts.plusJakartaSans(
-              color: Colors.blueAccent.withOpacity(0.6),
-              fontSize: 9,
-              fontWeight: FontWeight.w900,
-              letterSpacing: 1.5,
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.blueAccent.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.location_on_rounded, color: Colors.blueAccent, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'MY STOP: ${auth.currentUser!.pickupPoint!.toUpperCase()}',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
-        const SizedBox(height: 20),
-        // Quick Actions Row - Scrollable for responsiveness
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          physics: const BouncingScrollPhysics(),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 110,
-                child: _buildQuickAction(
-                  icon: Icons.schedule_rounded,
-                  label: 'SCHEDULE',
-                  color: Colors.blueAccent,
-                  onTap: _selectedRoute != null
-                      ? () => Navigator.push(context, MaterialPageRoute(
-                            builder: (_) => ScheduleScreen(route: _selectedRoute!)))
-                      : null,
-                ),
+        const SizedBox(height: 24),
+        // Quick Actions Row (Equal width expanded items)
+        Row(
+          children: [
+            Expanded(
+              child: _buildQuickAction(
+                icon: Icons.schedule_rounded,
+                label: 'SCHEDULE',
+                color: const Color(0xFF2D5BFF),
+                onTap: _selectedRoute != null
+                    ? () => Navigator.push(context, MaterialPageRoute(
+                          builder: (_) => ScheduleScreen(route: _selectedRoute!)))
+                    : null,
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 110,
-                child: _buildQuickAction(
-                  icon: _delaySubscribed
-                      ? Icons.notifications_active_rounded
-                      : Icons.notifications_none_rounded,
-                  label: _delaySubscribed ? 'NOTIFYING' : 'NOTIFY LATE',
-                  color: _delaySubscribed ? const Color(0xFF38EF7D) : const Color(0xFFFFB347),
-                  onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
-                ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildQuickAction(
+                icon: _delaySubscribed
+                    ? Icons.notifications_active_rounded
+                    : Icons.notifications_none_rounded,
+                label: _delaySubscribed ? 'NOTIFYING' : 'NOTIFY LATE',
+                color: _delaySubscribed ? const Color(0xFF38EF7D) : const Color(0xFFFFB347),
+                onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
               ),
-              const SizedBox(width: 12),
-              SizedBox(
-                width: 110,
-                child: _buildQuickAction(
-                  icon: Icons.report_gmailerrorred_rounded,
-                  label: 'REPORT',
-                  color: Colors.redAccent,
-                  onTap: () => Navigator.push(context, MaterialPageRoute(
-                        builder: (_) => ComplaintScreen(
-                          selectedRoute: _selectedRoute,
-                          activeBus: _activeBus,
-                        ))),
-                ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: _buildQuickAction(
+                icon: Icons.report_gmailerrorred_rounded,
+                label: 'REPORT',
+                color: Colors.redAccent,
+                onTap: () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ComplaintScreen(
+                        selectedRoute: _selectedRoute,
+                        activeBus: _activeBus,
+                      ))),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ],
     );
@@ -757,7 +885,7 @@ class _UserDashboardState extends State<UserDashboard> {
               label,
               style: GoogleFonts.plusJakartaSans(
                 color: disabled ? Colors.white24 : color,
-                fontSize: 8,
+                fontSize: 8.5,
                 fontWeight: FontWeight.w900,
                 letterSpacing: 0.8,
               ),
@@ -768,51 +896,83 @@ class _UserDashboardState extends State<UserDashboard> {
     );
   }
 
-  Widget _buildStatItem(String label, String val, IconData icon) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final double pad = constraints.maxWidth < 130 ? 12.0 : 16.0;
-        final double iconSize = constraints.maxWidth < 130 ? 16.0 : 20.0;
-        final double valFontSize = constraints.maxWidth < 130 ? 16.0 : 20.0;
-        return Container(
-          padding: EdgeInsets.all(pad),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.white.withOpacity(0.03)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(icon, color: const Color(0xFF2D5BFF), size: iconSize),
-              const SizedBox(height: 10),
-              FittedBox(
-                fit: BoxFit.scaleDown,
-                child: Text(
-                  val,
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: valFontSize,
-                    fontWeight: FontWeight.w900,
+  Widget _buildStatItem({
+    required String label,
+    required String val,
+    required IconData icon,
+    Color iconColor = const Color(0xFF2D5BFF),
+    VoidCallback? onTapAction,
+    IconData? actionIcon,
+  }) {
+    return GestureDetector(
+      onTap: onTapAction,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E293B).withOpacity(0.6),
+          borderRadius: BorderRadius.circular(22),
+          border: Border.all(color: Colors.white.withOpacity(0.06)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            )
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: iconColor.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(12),
                   ),
+                  child: Icon(icon, color: iconColor, size: 18),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                label,
+                if (actionIcon != null)
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(actionIcon, color: iconColor.withOpacity(0.8), size: 14),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                val,
                 style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white24,
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -0.5,
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
-        );
-      }
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white38,
+                fontSize: 9,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1521,13 +1681,17 @@ class _UserDashboardState extends State<UserDashboard> {
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                        onTap: () {
+                        onTap: () async {
                           final busStore = Provider.of<BusStore>(context, listen: false);
                           setState(() {
                             _selectedRoute = route;
                             _updateActiveBus(busStore);
                           });
-                          Navigator.pop(context);
+                          try {
+                            const storage = FlutterSecureStorage();
+                            await storage.write(key: 'last_selected_route_id', value: route.id);
+                          } catch (_) {}
+                          if (context.mounted) Navigator.pop(context);
                         },
                         leading: Container(
                           padding: const EdgeInsets.all(10),

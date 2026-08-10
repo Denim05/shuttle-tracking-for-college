@@ -21,11 +21,11 @@ class LinearTrackingView extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: const Color(0xFF0F1219),
+        color: const Color(0xFF1E293B).withOpacity(0.5),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
         boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10)),
+          BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 24, offset: const Offset(0, 10)),
         ],
       ),
       child: Column(
@@ -49,11 +49,12 @@ class LinearTrackingView extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      route.name,
+                      'ROUTE STOPS & TIMELINE',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 20,
+                        fontSize: 16,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
+                        letterSpacing: 0.5,
                       ),
                     ),
                     Text(
