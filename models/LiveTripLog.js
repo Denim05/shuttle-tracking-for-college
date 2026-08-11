@@ -13,6 +13,7 @@ const liveTripLogSchema = new mongoose.Schema({
     stopName: { type: String, required: true },
     reachedTime: { type: Date, default: Date.now }
   }],
+  tripType: { type: String, enum: ['pickup', 'dropoff'], default: 'pickup' },
   status: { type: String, enum: ['Active', 'Completed'], default: 'Active' }
 });
 

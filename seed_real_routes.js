@@ -705,6 +705,7 @@ async function seed(shouldDisconnect = true) {
   });
 
   // Now, create Routes, Drivers, and Buses in a single iteration!
+  const usedUsernames = new Set();
   for (let ri = 0; ri < ROUTES.length; ri++) {
     const r = ROUTES[ri];
     
@@ -727,25 +728,33 @@ async function seed(shouldDisconnect = true) {
     }
     const finalRouteName = `${baseRouteName} (Bus no: ${displayBusNo})`;
 
-    // Create a dedicated Route document for this single bus schedule
-    const stopsWithNames = r.stops.map(stop => ({ name: stop.name }));
+    // Require geocode helper for real stop coordinates
+    const { geocodeStopName } = require('./geocode_stops');
+    const stopsWithCoords = [];
+    const polylineCoords = [];
+    for (const stop of r.stops) {
+      const coords = await geocodeStopName(stop.name, true);
+      stopsWithCoords.push({ name: stop.name, lat: coords.lat, lng: coords.lng });
+      polylineCoords.push({ latitude: coords.lat, longitude: coords.lng });
+    }
+
     const route = await Route.create({
       name: finalRouteName,
       color: r.color,
-      stops: stopsWithNames,
-      coordinates: [], // Empty — no fake polyline
+      stops: stopsWithCoords,
+      coordinates: polylineCoords,
     });
 
     // Create driver
     // Generate clean driver username: driver01, driverT-4, driverECCO
     const baseUsername = `driver${r.busNo}`.replace(/\s+/g, '').replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
-    
     let username = baseUsername;
     let suffix = 2;
-    while (await Driver.findOne({ username: username })) {
+    while (usedUsernames.has(username)) {
       username = `${baseUsername}${suffix}`;
       suffix++;
     }
+    usedUsernames.add(username);
     
     const driver = await Driver.create({
       username: username,

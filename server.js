@@ -3072,62 +3072,107 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
             const dayIndex  = tripDate.getDate() + tripDate.getMonth() * 31;
             const jitter    = (dayIndex * 7 + busNumSeed * 3) % 10; // 0-9 mins jitter
 
-            // Departure from first stop
+            // ── TRIP 1: PICKUP (MORNING: 07:00 - 08:00 AM) ──
             const departH = baseDepartureHour;
             const departM = baseDepartureMinute + jitter;
-            const departureTime = `${String(departH).padStart(2,'0')}:${String(departM).padStart(2,'0')} AM`;
+            const departureTimePickup = `${String(departH).padStart(2,'0')}:${String(departM).padStart(2,'0')} AM`;
+            const baseDuration = 40 + Math.min(stopNames.length * 2, 30);
+            const durationPickup = baseDuration + ((dayIndex * 3) % 15);
+            const isDelayedPickup = durationPickup > baseDuration + 8;
+            const arrivalMinsPickup = departH * 60 + departM + durationPickup;
+            const arrHPickup = Math.floor(arrivalMinsPickup / 60) % 24;
+            const arrMPickup = arrivalMinsPickup % 60;
+            const arrivalTimePickup = `${String(arrHPickup).padStart(2,'0')}:${String(arrMPickup).padStart(2,'0')} AM`;
 
-            // Trip duration: base 45–70 mins depending on stop count
-            const baseDuration   = 40 + Math.min(stopNames.length * 2, 30);
-            const actualDuration = baseDuration + ((dayIndex * 3) % 15); // ±0–15 min variation
-            const isDelayed      = actualDuration > baseDuration + 8;
-
-            // Arrival at campus
-            const arrivalTotalMins = departH * 60 + departM + actualDuration;
-            const arrH = Math.floor(arrivalTotalMins / 60) % 24;
-            const arrM = arrivalTotalMins % 60;
-            const arrivalTime = `${String(arrH).padStart(2,'0')}:${String(arrM).padStart(2,'0')} AM`;
-
-            // Speed & occupancy
-            const avgSpeed     = parseFloat((28 + (dayIndex % 10)).toFixed(1));
-            const maxSpeed     = parseFloat((avgSpeed + 8 + (dayIndex % 6)).toFixed(1));
-            const studentCount = 25 + ((dayIndex * 3 + busNumSeed) % 35); // 25–60
-
-            // Per-stop pickup timeline (evenly spaced)
-            const stopTimeline = stopNames.map((sName, idx) => {
-                const stopMins = departH * 60 + departM + Math.round((actualDuration / (stopNames.length || 1)) * idx);
+            const stopTimelinePickup = stopNames.map((sName, idx) => {
+                const stopMins = departH * 60 + departM + Math.round((durationPickup / (stopNames.length || 1)) * idx);
                 const sH = Math.floor(stopMins / 60) % 24;
                 const sM = stopMins % 60;
-                const isFirst  = idx === 0;
-                const isLast   = idx === stopNames.length - 1;
                 return {
                     stopNumber: idx + 1,
-                    stopName:   sName,
-                    time:       `${String(sH).padStart(2,'0')}:${String(sM).padStart(2,'0')}`,
-                    isOrigin:   isFirst,
-                    isCampus:   isLast,
+                    stopName: sName,
+                    time: `${String(sH).padStart(2,'0')}:${String(sM).padStart(2,'0')} AM`,
+                    isOrigin: idx === 0,
+                    isCampus: idx === stopNames.length - 1,
                 };
             });
 
+            // ── TRIP 2: DROP-OFF (EVENING: 04:30 - 05:30 PM) ──
+            const departHEvening = 16; // 4 PM
+            const departMEvening = 30 + (jitter % 15);
+            const departureTimeDropoff = `${String(departHEvening - 12).padStart(2,'0')}:${String(departMEvening).padStart(2,'0')} PM`;
+            const durationDropoff = baseDuration + ((dayIndex * 5) % 12);
+            const isDelayedDropoff = durationDropoff > baseDuration + 8;
+            const arrivalMinsDropoff = departHEvening * 60 + departMEvening + durationDropoff;
+            const arrHDropoff = Math.floor(arrivalMinsDropoff / 60) % 24;
+            const arrMDropoff = arrivalMinsDropoff % 60;
+            const arrHDropoffDisplay = arrHDropoff > 12 ? arrHDropoff - 12 : arrHDropoff;
+            const arrivalTimeDropoff = `${String(arrHDropoffDisplay).padStart(2,'0')}:${String(arrMDropoff).padStart(2,'0')} PM`;
+
+            // Reverse stop list for drop-off timeline (Campus -> City)
+            const reversedStops = [...stopNames].reverse();
+            const stopTimelineDropoff = reversedStops.map((sName, idx) => {
+                const stopMins = departHEvening * 60 + departMEvening + Math.round((durationDropoff / (reversedStops.length || 1)) * idx);
+                const sH = Math.floor(stopMins / 60) % 24;
+                const sM = stopMins % 60;
+                const displayH = sH > 12 ? sH - 12 : sH;
+                return {
+                    stopNumber: idx + 1,
+                    stopName: sName,
+                    time: `${String(displayH).padStart(2,'0')}:${String(sM).padStart(2,'0')} PM`,
+                    isCampus: idx === 0,
+                    isOrigin: idx === reversedStops.length - 1,
+                };
+            });
+
+            const avgSpeed = parseFloat((28 + (dayIndex % 10)).toFixed(1));
+            const studentCountPickup = 30 + ((dayIndex * 3 + busNumSeed) % 25);
+            const studentCountDropoff = 28 + ((dayIndex * 4 + busNumSeed) % 25);
+
             const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
             dailyRecords.push({
-                date:              tripDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }),
-                dayName:           dayNames[dayOfWeek],
-                busNumber:         bus.busNumber || 'N/A',
+                date: tripDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }),
+                dayName: dayNames[dayOfWeek],
+                busNumber: bus.busNumber || 'N/A',
                 driverName,
-                routeName:         bus.routeName,
-                originStop:        firstStop,
-                destinationStop:   lastStop,
-                departureTime,
-                arrivalTime,
-                tripDurationMins:  actualDuration,
-                totalStops:        stopNames.length,
-                studentCount,
-                avgSpeedKmh:       avgSpeed,
-                maxSpeedKmh:       maxSpeed,
-                status:            isDelayed ? 'Delayed' : 'On-time',
-                delayMins:         isDelayed ? actualDuration - baseDuration : 0,
-                stopTimeline,
+                routeName: bus.routeName,
+                // Pickup Trip
+                pickupTrip: {
+                    type: 'pickup',
+                    label: 'Trip 1: Morning Pickup (City ➔ College)',
+                    originStop: firstStop,
+                    destinationStop: lastStop,
+                    departureTime: departureTimePickup,
+                    arrivalTime: arrivalTimePickup,
+                    tripDurationMins: durationPickup,
+                    studentCount: studentCountPickup,
+                    avgSpeedKmh: avgSpeed,
+                    status: isDelayedPickup ? 'Delayed' : 'On-time',
+                    stopTimeline: stopTimelinePickup
+                },
+                // Drop-off Trip
+                dropoffTrip: {
+                    type: 'dropoff',
+                    label: 'Trip 2: Evening Drop-off (College ➔ City)',
+                    originStop: lastStop,
+                    destinationStop: firstStop,
+                    departureTime: departureTimeDropoff,
+                    arrivalTime: arrivalTimeDropoff,
+                    tripDurationMins: durationDropoff,
+                    studentCount: studentCountDropoff,
+                    avgSpeedKmh: avgSpeed,
+                    status: isDelayedDropoff ? 'Delayed' : 'On-time',
+                    stopTimeline: stopTimelineDropoff
+                },
+                // Legacy flat properties for backward compatibility
+                departureTime: departureTimePickup,
+                arrivalTime: arrivalTimePickup,
+                tripDurationMins: durationPickup,
+                totalStops: stopNames.length,
+                studentCount: studentCountPickup + studentCountDropoff,
+                avgSpeedKmh: avgSpeed,
+                status: (isDelayedPickup || isDelayedDropoff) ? 'Delayed' : 'On-time',
+                stopTimeline: stopTimelinePickup,
             });
         }
 
@@ -3241,6 +3286,10 @@ io.on('connection', (socket) => {
 
             process.stdout.write(`📍 [LIVE] Bus: ${bus.busNumber} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Speed: ${speed.toFixed(1)} KM/H\r`);
 
+            // ── DUAL TRIP DIRECTION: 'pickup' (Stop -> College) vs 'dropoff' (College -> Stop) ──
+            const tripType = (data.tripType === 'dropoff' || data.tripType === 'evening') ? 'dropoff' : 'pickup';
+            bus.tripType = tripType;
+
             // ── LIVE TRIP LOG: Auto-create today's trip if not exists ──────────────
             const todayStr = new Date().toISOString().split('T')[0];
             let tripLog = await LiveTripLog.findOne({ busId: bus._id.toString(), date: todayStr, status: 'Active' });
@@ -3256,9 +3305,10 @@ io.on('connection', (socket) => {
                     routeName:  bus.routeName || 'Unassigned',
                     date:       todayStr,
                     startTime:  new Date(),
+                    tripType:   tripType,
                     status:     'Active'
                 });
-                console.log(`🚀 [TRIP START] New live trip log created for Bus ${bus.busNumber} on ${todayStr}`);
+                console.log(`🚀 [TRIP START] New live ${tripType.toUpperCase()} trip log created for Bus ${bus.busNumber} on ${todayStr}`);
             }
 
             // Update DB
@@ -3269,12 +3319,13 @@ io.on('connection', (socket) => {
             bus.lastUpdated = new Date();
             bus.status = speed > 2 ? 'On-time' : bus.status;
             
-            // Calculate ETAs and Geofencing
+            // Calculate ETAs and Geofencing against directional stops order
             const etas = [];
             if (bus.routeId) {
                 const route = await Route.findById(bus.routeId);
                 if (route && route.stops) {
-                    const upcomingStops = route.stops.slice(0, 5);
+                    const stopsList = tripType === 'dropoff' ? [...route.stops].reverse() : route.stops;
+                    const upcomingStops = stopsList.slice(0, 5);
                     
                     for (const stop of upcomingStops) {
                         if (stop.lat && stop.lng) {
@@ -3436,6 +3487,48 @@ app.post('/api/manager/seed', async (req, res) => {
     }
 });
 
+// --- GEOCODE ALL STOPS API ROUTE ---
+app.post('/api/manager/geocode-stops', async (req, res) => {
+    try {
+        console.log('📍 [Manager API] Triggering stop geocoding...');
+        const { geocodeAllStops } = require('./geocode_stops');
+        await geocodeAllStops();
+        res.json({ success: true, message: "All route stops successfully geocoded with lat/lng coordinates!" });
+    } catch (_err) {
+        console.error("Geocode Error:", _err);
+        res.status(500).json({ error: "Failed to geocode stops" });
+    }
+});
+
+// --- UPDATE ROUTE STOPS & COORDINATES ---
+app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
+    try {
+        const { stops } = req.body;
+        if (!Array.isArray(stops)) {
+            return res.status(400).json({ error: 'stops array is required' });
+        }
+        const route = await Route.findById(req.params.id);
+        if (!route) return res.status(404).json({ error: 'Route not found' });
+
+        route.stops = stops.map(s => ({
+            name: s.name,
+            lat: s.lat ? parseFloat(s.lat) : undefined,
+            lng: s.lng ? parseFloat(s.lng) : undefined
+        }));
+
+        // Re-generate polyline coordinates from valid stop lat/lngs
+        route.coordinates = route.stops
+            .filter(s => s.lat != null && s.lng != null)
+            .map(s => ({ latitude: s.lat, longitude: s.lng }));
+
+        await route.save();
+        res.json({ success: true, route });
+    } catch (err) {
+        console.error('Update route stops error:', err);
+        res.status(500).json({ error: 'Failed to update route stops' });
+    }
+});
+
 // ─── ETA TO MY STOP ─────────────────────────────────────────────────────────
 // GET /api/eta?routeId=...&stopName=...
 // Returns minutes until the active bus on a route reaches the named stop.
@@ -3474,6 +3567,8 @@ app.get('/api/eta', async (req, res) => {
             busLat: bus.currentLat,
             busLng: bus.currentLng,
             speed: bus.speed,
+            tripType: bus.tripType || 'pickup',
+            directionLabel: bus.tripType === 'dropoff' ? 'College ➔ Stop (Drop-off)' : 'Stop ➔ College (Pickup)',
             lastUpdated: bus.lastUpdated,
         });
     } catch (_err) {
