@@ -881,13 +881,20 @@ class _UserDashboardState extends State<UserDashboard> {
           children: [
             Icon(icon, color: disabled ? Colors.white24 : color, size: 20),
             const SizedBox(height: 6),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                color: disabled ? Colors.white24 : color,
-                fontSize: 8.5,
-                fontWeight: FontWeight.w900,
-                letterSpacing: 0.8,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: disabled ? Colors.white24 : color,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.3,
+                  ),
+                  maxLines: 1,
+                ),
               ),
             ),
           ],

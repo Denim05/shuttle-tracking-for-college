@@ -618,11 +618,36 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   ],
                                 ),
                                 const SizedBox(height: 12),
-                                Row(
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
                                     _buildBadge(bus.occupancy, _getOccupancyColor(bus.occupancy)),
-                                    const SizedBox(width: 8),
                                     _buildBadge(bus.status, _getStatusColor(bus.status)),
+                                    // ── Prominent Report & Download Button on Every Bus Card ──
+                                    GestureDetector(
+                                      onTap: () => _showBusReportSheet(bus),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: Colors.blueAccent.withOpacity(0.15),
+                                          borderRadius: BorderRadius.circular(10),
+                                          border: Border.all(color: Colors.blueAccent.withOpacity(0.4)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            const Icon(Icons.picture_as_pdf_rounded, color: Colors.blueAccent, size: 12),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'REPORT',
+                                              style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],
@@ -3144,6 +3169,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
   Map<String, dynamic>? _report;
   String? _error;
   final Set<int> _expandedDays = {};
+  String _filterTripType = 'all'; // 'all', 'pickup', 'dropoff'
 
   @override
   void initState() {
@@ -3204,7 +3230,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       const Icon(Icons.download_rounded, color: Colors.blueAccent, size: 16),
                       const SizedBox(width: 6),
-                      Text('EXPORT',
+                      Text('EXPORT REPORT',
                           style: GoogleFonts.plusJakartaSans(
                               color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w900)),
                     ]),
@@ -3304,219 +3330,273 @@ class _BusReportSheetState extends State<_BusReportSheet> {
         ),
         const SizedBox(height: 28),
 
-        // Daily Log Header
+        // Trip Type Filter Segmented Bar
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Text('DAILY OPERATIONS LOG',
               style: GoogleFonts.plusJakartaSans(
                   color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 2)),
-          Text('${dailyRecords.length} ENTRIES',
+          Text('${dailyRecords.length} DAYS LOGGED',
               style: GoogleFonts.plusJakartaSans(
                   color: Colors.white24, fontSize: 9, fontWeight: FontWeight.w800)),
         ]),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
+
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161421),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
+          ),
+          child: Row(
+            children: [
+              _buildFilterBtn('all', 'ALL TRIPS', icon: Icons.clear_all_rounded),
+              _buildFilterBtn('pickup', 'PICKUP', icon: Icons.wb_sunny_rounded),
+              _buildFilterBtn('dropoff', 'DROP-OFF', icon: Icons.nights_stay_rounded),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
 
         // Daily Records
         ...dailyRecords.asMap().entries.map((entry) {
           final idx      = entry.key;
           final record   = entry.value as Map<String, dynamic>;
-          final isOnTime = record['status'] == 'On-time';
-          final accent   = isOnTime ? Colors.blueAccent : Colors.orangeAccent;
+          final pickup   = record['pickupTrip'] as Map<String, dynamic>?;
+          final dropoff  = record['dropoffTrip'] as Map<String, dynamic>?;
           final expanded = _expandedDays.contains(idx);
-          final timeline = (record['stopTimeline'] as List<dynamic>?) ?? [];
+
+          final showPickup  = _filterTripType == 'all' || _filterTripType == 'pickup';
+          final showDropoff = _filterTripType == 'all' || _filterTripType == 'dropoff';
 
           return Container(
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.only(bottom: 16),
             decoration: BoxDecoration(
               color: const Color(0xFF1A1A2E),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: accent.withOpacity(0.15)),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
             ),
             child: Column(children: [
-              // Day summary row
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  // Date chip
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: accent.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: accent.withOpacity(0.25)),
-                    ),
-                    child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      Text(record['dayName']?.toString() ?? '',
-                          style: GoogleFonts.plusJakartaSans(
-                              color: accent, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1)),
-                      Text(
-                        (record['date']?.toString() ?? '').split(' ').first,
-                        style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white, fontSize: 13, fontWeight: FontWeight.w900),
-                      ),
-                      Text(
-                        (record['date']?.toString() ?? '').split(' ').skip(1).join(' '),
-                        style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white54, fontSize: 8, fontWeight: FontWeight.w700),
-                      ),
-                    ]),
-                  ),
-                  const SizedBox(width: 14),
-                  // Timings + stats
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      // Departure -> Arrival row
-                      Row(children: [
-                        const Icon(Icons.arrow_circle_right_rounded, color: Colors.greenAccent, size: 12),
-                        const SizedBox(width: 4),
-                        Text(record['departureTime']?.toString() ?? '',
-                            style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6),
-                          child: Text('->',
-                              style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 11)),
+              // Date Header Header
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.03),
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.deepPurpleAccent.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(8),
                         ),
-                        const Icon(Icons.school_rounded, color: Colors.cyanAccent, size: 12),
-                        const SizedBox(width: 4),
-                        Text(record['arrivalTime']?.toString() ?? '',
-                            style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w700)),
-                      ]),
-                      const SizedBox(height: 6),
-                      // Route info
+                        child: Text(
+                          record['dayName']?.toString().toUpperCase() ?? 'DAY',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
                       Text(
-                        '${record['originStop'] ?? ''} -> ${record['destinationStop'] ?? ''}',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9.5),
-                        overflow: TextOverflow.ellipsis,
+                        record['date']?.toString() ?? '',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w900),
                       ),
-                      const SizedBox(height: 5),
-                      // Stats chips
-                      Wrap(spacing: 6, runSpacing: 4, children: [
-                        _statChip(Icons.timer_rounded, '${record['tripDurationMins']} min'),
-                        _statChip(Icons.people_rounded, '${record['studentCount']} students'),
-                        _statChip(Icons.speed_rounded, '${record['avgSpeedKmh']} km/h avg'),
-                        _statChip(Icons.directions_run_rounded, '${record['maxSpeedKmh']} km/h max'),
-                        _statChip(Icons.place_rounded, '${record['totalStops']} stops'),
-                        _statChip(Icons.person_rounded, record['driverName']?.toString() ?? 'N/A'),
-                      ]),
                     ]),
-                  ),
-                  const SizedBox(width: 8),
-                  // Status badge + expand toggle
-                  Column(mainAxisSize: MainAxisSize.min, children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: accent.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: accent.withOpacity(0.25)),
-                      ),
-                      child: Text(
-                        isOnTime ? 'ON\nTIME' : 'LATE',
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
-                            color: accent, fontSize: 7, fontWeight: FontWeight.w900, letterSpacing: 0.8),
-                      ),
-                    ),
-                    if (!isOnTime && (record['delayMins'] ?? 0) > 0) ...[
-                      const SizedBox(height: 3),
-                      Text('+${record['delayMins']}m',
-                          style: GoogleFonts.plusJakartaSans(
-                              color: Colors.orangeAccent, fontSize: 8, fontWeight: FontWeight.w700)),
-                    ],
-                    if (timeline.isNotEmpty) ...[
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: () => setState(() {
-                          if (expanded) _expandedDays.remove(idx); else _expandedDays.add(idx);
-                        }),
+                    GestureDetector(
+                      onTap: () => setState(() {
+                        if (expanded) {
+                          _expandedDays.remove(idx);
+                        } else {
+                          _expandedDays.add(idx);
+                        }
+                      }),
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle),
                         child: Icon(
-                          expanded
-                              ? Icons.keyboard_arrow_up_rounded
-                              : Icons.keyboard_arrow_down_rounded,
-                          color: Colors.white24,
+                          expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+                          color: Colors.white70,
                           size: 20,
                         ),
                       ),
-                    ],
-                  ]),
-                ]),
+                    ),
+                  ],
+                ),
               ),
 
-              // Expandable stop timeline
-              if (expanded && timeline.isNotEmpty) ...[
-                const Divider(color: Colors.white10, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('STOP-BY-STOP PICKUP TIMELINE',
-                        style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                    const SizedBox(height: 10),
-                    ...timeline.asMap().entries.map((stopEntry) {
-                      final stop    = stopEntry.value as Map<String, dynamic>;
-                      final isFirst = stop['isOrigin'] == true;
-                      final isLast  = stop['isCampus'] == true;
-                      final dotCol  = isFirst
-                          ? Colors.greenAccent
-                          : isLast
-                              ? Colors.cyanAccent
-                              : Colors.white24;
-                      return Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Column(children: [
-                            Container(
-                              width: 9,
-                              height: 9,
-                              decoration: BoxDecoration(
-                                color: dotCol,
-                                shape: BoxShape.circle,
-                                boxShadow: [BoxShadow(color: dotCol.withOpacity(0.5), blurRadius: 5)],
-                              ),
-                            ),
-                            if (stopEntry.key < timeline.length - 1)
-                              Container(width: 1, height: 24, color: Colors.white10),
-                          ]),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Padding(
-                              padding: const EdgeInsets.only(bottom: 8),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Flexible(
-                                    child: Text(
-                                      stop['stopName']?.toString() ?? '',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: isFirst || isLast ? Colors.white : Colors.white54,
-                                        fontSize: 11,
-                                        fontWeight: isFirst || isLast
-                                            ? FontWeight.w800
-                                            : FontWeight.w500,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                  Text(
-                                    stop['time']?.toString() ?? '',
-                                    style: GoogleFonts.plusJakartaSans(
-                                        color: dotCol, fontSize: 10, fontWeight: FontWeight.w800),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      );
-                    }),
-                  ]),
+              // Trip 1: Morning Pickup Card
+              if (showPickup && pickup != null)
+                _buildTripDetailCard(
+                  trip: pickup,
+                  color: Colors.blueAccent,
+                  icon: Icons.wb_sunny_rounded,
+                  expanded: expanded,
                 ),
-              ],
+
+              if (showPickup && showDropoff && pickup != null && dropoff != null)
+                const Divider(color: Colors.white10, height: 1),
+
+              // Trip 2: Evening Dropoff Card
+              if (showDropoff && dropoff != null)
+                _buildTripDetailCard(
+                  trip: dropoff,
+                  color: Colors.orangeAccent,
+                  icon: Icons.nights_stay_rounded,
+                  expanded: expanded,
+                ),
             ]),
-          ).animate().fadeIn(delay: (idx * 35).ms).slideY(begin: 0.08);
+          );
         }),
       ],
+    );
+  }
+
+  Widget _buildFilterBtn(String key, String label, {IconData? icon}) {
+    final isSelected = _filterTripType == key;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => setState(() => _filterTripType = key),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? Colors.deepPurpleAccent : Colors.transparent,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 13, color: isSelected ? Colors.white : Colors.white38),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.plusJakartaSans(
+                  color: isSelected ? Colors.white : Colors.white38,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTripDetailCard({
+    required Map<String, dynamic> trip,
+    required Color color,
+    required IconData icon,
+    required bool expanded,
+  }) {
+    final isOnTime = trip['status'] == 'On-time';
+    final timeline = (trip['stopTimeline'] as List<dynamic>?) ?? [];
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: color, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  trip['label']?.toString().toUpperCase() ?? 'TRIP LOG',
+                  style: GoogleFonts.plusJakartaSans(color: color, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: (isOnTime ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: (isOnTime ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.3)),
+                ),
+                child: Text(
+                  isOnTime ? 'ON-TIME' : 'DELAYED',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: isOnTime ? Colors.greenAccent : Colors.orangeAccent,
+                    fontSize: 8,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Text(
+                '${trip['departureTime']} ➔ ${trip['arrivalTime']}',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800),
+              ),
+              const Spacer(),
+              Text(
+                '${trip['tripDurationMins']} MINS',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${trip['originStop']} ➔ ${trip['destinationStop']}',
+            style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: [
+              _statChip(Icons.people_rounded, '${trip['studentCount']} commuters'),
+              _statChip(Icons.speed_rounded, '${trip['avgSpeedKmh']} km/h avg'),
+              _statChip(Icons.place_rounded, '${timeline.length} stops'),
+            ],
+          ),
+          if (expanded && timeline.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Divider(color: Colors.white10, height: 1),
+            const SizedBox(height: 10),
+            Text(
+              'STOP-BY-STOP TIMELINE (${trip['type'] == 'dropoff' ? 'REVERSE DROP-OFF' : 'PICKUP'})',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+            ),
+            const SizedBox(height: 8),
+            ...timeline.asMap().entries.map((stopEntry) {
+              final stop = stopEntry.value as Map<String, dynamic>;
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 3),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                        const SizedBox(width: 8),
+                        Text(
+                          stop['stopName']?.toString() ?? '',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      stop['time']?.toString() ?? '',
+                      style: GoogleFonts.plusJakartaSans(color: color, fontSize: 10, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ],
+      ),
     );
   }
 

@@ -13,6 +13,7 @@ const busSchema = new mongoose.Schema({
   status: { type: String, enum: ['On-time', 'Delayed', 'Offline'], default: 'Offline' },
   driverId: String, // Link to User
   occupancy: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Low' },
+  tripType: { type: String, enum: ['pickup', 'dropoff'], default: 'pickup' },
   etas: [{
     stopName: String,
     minutes: Number

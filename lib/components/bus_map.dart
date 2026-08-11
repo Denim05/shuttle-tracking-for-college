@@ -1335,7 +1335,25 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        const Icon(Icons.eco_rounded, color: Color(0xFF38EF7D), size: 16),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: (_focusedBus?.isDropoff ?? false) ? Colors.orangeAccent.withOpacity(0.2) : Colors.blueAccent.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: (_focusedBus?.isDropoff ?? false) ? Colors.orangeAccent : Colors.blueAccent,
+                              width: 1,
+                            ),
+                          ),
+                          child: Text(
+                            (_focusedBus?.isDropoff ?? false) ? '🌇 CAMPUS➔CITY' : '🌅 CITY➔CAMPUS',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: (_focusedBus?.isDropoff ?? false) ? Colors.orangeAccent : Colors.blueAccent,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 2),
@@ -1558,7 +1576,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         if (widget.showMapControls)
           Positioned(
             right: 16,
-            top: MediaQuery.of(context).padding.top + 76,
+            top: MediaQuery.of(context).padding.top + (_isDriveMode ? 148 : 76),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
@@ -1606,7 +1624,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           Positioned(
             top: MediaQuery.of(context).padding.top + 76,
             left: 16,
-            right: 72, // Leave space for right sidebar icons
+            right: 16,
             child: _buildTurnByTurnCard(),
           ),
           Positioned(

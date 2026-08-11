@@ -38,6 +38,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
   List<dynamic> _buses = [];
   String? _selectedBusId;
   RouteModel? _selectedRoute;
+  String _selectedTripType = 'pickup'; // 'pickup' (City -> College) or 'dropoff' (College -> City)
   bool _isSosActive = false;
   Timer? _heartbeatTimer;
   final ValueNotifier<DateTime?> _lastEmitTime = ValueNotifier<DateTime?>(null);
@@ -368,6 +369,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       'heading': _currentPosition!.heading >= 0 ? _currentPosition!.heading : 0.0,
       'speed': double.parse(_speedKmH.toStringAsFixed(1)), // Round to 1dp
       'status': 'On-time',
+      'tripType': _selectedTripType,
       'timestamp': DateTime.now().toIso8601String(),
     });
     
@@ -553,6 +555,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           _buildTrackerCard(),
                           const SizedBox(height: 32),
                           _buildBusSelector(),
+                          const SizedBox(height: 16),
+                          _buildTripDirectionSelector(),
                           const SizedBox(height: 20),
                           _buildStartButton(),
                           const SizedBox(height: 24),
@@ -832,6 +836,107 @@ class _DriverDashboardState extends State<DriverDashboard> {
             if (bus != null) _fetchRouteDetails(bus['routeId']);
           },
         ),
+      ),
+    );
+  }
+
+  Widget _buildTripDirectionSelector() {
+    final isPickup = _selectedTripType == 'pickup';
+    return Container(
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: const Color(0xFF161421),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (_selectedTripType != 'pickup') {
+                  setState(() => _selectedTripType = 'pickup');
+                  if (_isOnline) _emitLocation();
+                }
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                decoration: BoxDecoration(
+                  gradient: isPickup
+                      ? const LinearGradient(colors: [Colors.deepPurpleAccent, Colors.blueAccent])
+                      : null,
+                  color: isPickup ? null : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: isPickup
+                      ? [BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 12)]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.wb_sunny_rounded, color: isPickup ? Colors.amberAccent : Colors.white38, size: 16),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'PICKUP (City➔Campus)',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: isPickup ? Colors.white : Colors.white54,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: GestureDetector(
+              onTap: () {
+                if (_selectedTripType != 'dropoff') {
+                  setState(() => _selectedTripType = 'dropoff');
+                  if (_isOnline) _emitLocation();
+                }
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                decoration: BoxDecoration(
+                  gradient: !isPickup
+                      ? const LinearGradient(colors: [Colors.orangeAccent, Colors.deepOrangeAccent])
+                      : null,
+                  color: !isPickup ? null : Colors.transparent,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: !isPickup
+                      ? [BoxShadow(color: Colors.orangeAccent.withOpacity(0.3), blurRadius: 12)]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.nights_stay_rounded, color: !isPickup ? Colors.amberAccent : Colors.white38, size: 16),
+                    const SizedBox(width: 6),
+                    Flexible(
+                      child: Text(
+                        'DROP-OFF (Campus➔City)',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: !isPickup ? Colors.white : Colors.white54,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 11,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

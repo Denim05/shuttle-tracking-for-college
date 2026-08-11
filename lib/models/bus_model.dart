@@ -10,6 +10,7 @@ class Bus {
   final String status; // 'On-time', 'Delayed', 'Offline'
   final String? driverId;
   final String occupancy; // 'Low', 'Medium', 'High'
+  final String tripType; // 'pickup' (Stop -> College) or 'dropoff' (College -> Stop)
   final List<BusETA> etas;
   final DateTime lastUpdated;
 
@@ -25,9 +26,13 @@ class Bus {
     required this.status,
     this.driverId,
     this.occupancy = 'Low',
+    this.tripType = 'pickup',
     this.etas = const [],
     required this.lastUpdated,
   });
+
+  bool get isDropoff => tripType == 'dropoff';
+  String get directionLabel => isDropoff ? 'College ➔ Stop' : 'Stop ➔ College';
 
   factory Bus.fromJson(Map<String, dynamic> json) {
     return Bus(
@@ -42,6 +47,7 @@ class Bus {
       status: json['status'] ?? 'Offline',
       driverId: json['driverId']?.toString(),
       occupancy: json['occupancy'] ?? 'Low',
+      tripType: json['tripType'] ?? 'pickup',
       etas: (json['etas'] as List? ?? [])
           .map((e) => BusETA.fromJson(e))
           .toList(),
