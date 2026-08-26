@@ -243,6 +243,14 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
+// Dedicated Brute-Force Rate Limiter for Login Endpoint
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 15, // Max 15 login attempts per 15 minutes per IP
+    message: { error: 'Too many login attempts. Please try again after 15 minutes.' }
+});
+app.use('/api/auth/login', loginLimiter);
+
 // MongoDB Connection
 // Force 'SISTecChalo' database in the URI if it's missing or set to 'test'
 const rawUri = process.env.MONGODB_URI;
@@ -768,10 +776,10 @@ const broadcastStats = async () => {
  * @returns {Object} JSON response with JWT token and user details.
  */
 app.post('/api/auth/login', async (req, res) => {
-    console.log(`📡 [Auth] Login request: ${JSON.stringify(req.body)}`);
     const username = req.body.username?.trim();
     const password = req.body.password;
     let role = req.body.role?.trim();
+    console.log(`📡 [Auth] Login request for username: "${username || 'empty'}" (role: ${role || 'any'})`);
     
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password are required' });
