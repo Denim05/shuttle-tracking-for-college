@@ -771,45 +771,55 @@ app.post('/api/auth/login', async (req, res) => {
     console.log(`📡 [Auth] Login request: ${JSON.stringify(req.body)}`);
     const username = req.body.username?.trim();
     const password = req.body.password;
-    const role = req.body.role?.trim();
+    let role = req.body.role?.trim();
     
-    if (role) {
-        console.log(`🔍 [Auth] Role: ${JSON.stringify(role)} (Length: ${role.length})`);
+    if (!username || !password) {
+        return res.status(400).json({ error: 'Username and password are required' });
     }
-    
+
     console.time('LoginRequest');
 
     try {
-        let user;
-        let Model;
+        let user = null;
+        let matchedRole = role;
 
-        switch (role) {
-            case 'admin': Model = Admin; break;
-            case 'manager': Model = Manager; break;
-            case 'user': Model = User; break;
-            case 'driver': Model = Driver; break;
-            default:
-                console.timeEnd('LoginRequest');
-                return res.status(400).json({ 
-                    error: `Invalid role: "${role}"`,
-                    received_body: req.body 
-                });
+        const collections = [
+            { role: 'manager', model: Manager },
+            { role: 'admin', model: Admin },
+            { role: 'driver', model: Driver },
+            { role: 'user', model: User }
+        ];
+
+        let searchList = collections;
+        if (role) {
+            searchList = [...collections].sort((a, b) => (a.role === role ? -1 : (b.role === role ? 1 : 0)));
         }
 
-        // Find user case-insensitively
-        const query = { username: { $regex: new RegExp(`^${username}$`, 'i') } };
-        user = await Model.findOne(query);
-        console.log(`🔍 [Auth] Collection: ${Model.collection.name} | Query: ${JSON.stringify(query)} | Resolved: ${user?.username || 'none'}`);
-        
+        const escapedSearch = username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        for (const item of searchList) {
+            const query = {
+                $or: [
+                    { username: { $regex: new RegExp(`^${escapedSearch}$`, 'i') } },
+                    { email: { $regex: new RegExp(`^${escapedSearch}$`, 'i') } }
+                ]
+            };
+            const found = await item.model.findOne(query);
+            if (found) {
+                user = found;
+                matchedRole = item.role;
+                break;
+            }
+        }
+
         if (!user) {
-            console.log(`❌ [Auth] User ${username} not found in ${Model.collection.name} collection`);
+            console.log(`❌ [Auth] User "${username}" not found in any collection`);
             console.timeEnd('LoginRequest');
             return res.status(400).json({ error: 'User not found' });
         }
 
         // Validate Password
         const isMatch = await argon2.verify(user.password, password);
-        console.log(`🔐 [Auth] Password match result for ${username}: ${isMatch}`);
+        console.log(`🔐 [Auth] Password match result for ${username} (${matchedRole}): ${isMatch}`);
         
         if (!isMatch) {
             console.timeEnd('LoginRequest');
@@ -818,7 +828,7 @@ app.post('/api/auth/login', async (req, res) => {
 
         // Generate Token
         const token = jwt.sign(
-            { user: { id: user.id, role: role } },
+            { user: { id: user.id, role: matchedRole } },
             process.env.JWT_SECRET || 'SISTecChalo_secret_key_777',
             { expiresIn: '1d' }
         );
@@ -826,12 +836,13 @@ app.post('/api/auth/login', async (req, res) => {
         const userResponse = {
             id: user.id,
             username: user.username,
-            role,
+            name: user.name || user.username,
+            role: matchedRole,
             email: user.email,
-            status: user.status
+            status: user.status || 'Active'
         };
 
-        if (role === 'user') {
+        if (matchedRole === 'user') {
             userResponse.routeId = user.routeId;
             userResponse.pickupPoint = user.pickupPoint;
             userResponse.userId = user.userId;
@@ -1123,22 +1134,45 @@ app.put('/api/buses/:id/status', async (req, res) => {
 // Manager: Broadcast Notification
 app.post('/api/manager/notifications', async (req, res) => {
     try {
-        const { message, type } = req.body;
+        const { message, type, targetAudience } = req.body;
+        const validAudience = ['All', 'Users', 'Drivers', 'Admins'].includes(targetAudience) ? targetAudience : 'All';
         
         // Save to Database
         const newNotification = new Notification({
             message,
-            type: type || 'info'
+            type: type || 'info',
+            targetAudience: validAudience,
+            createdBy: 'Manager'
         });
         await newNotification.save();
 
         // Emit both notification (for history) and systemAlert (for live pop-ups)
         io.emit('notification', newNotification);
-        io.emit('systemAlert', { message, type: type || 'info', timestamp: new Date().toISOString() });
-        console.log(`📢 [Manager Broadcast] "${message}"`);
+        io.emit('systemAlert', { 
+            message, 
+            type: type || 'info', 
+            targetAudience: validAudience,
+            timestamp: new Date().toISOString() 
+        });
+        console.log(`📢 [Manager Broadcast to ${validAudience}] "${message}"`);
         res.json({ success: true, notification: newNotification });
-    } catch (_err) {
+    } catch (err) {
+        console.error('❌ Error broadcasting notification:', err);
         res.status(500).json({ error: 'Failed to broadcast notification' });
+    }
+});
+
+// Manager: Delete Notification
+app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], async (req, res) => {
+    try {
+        const { id } = req.params;
+        const deletedNotif = await Notification.findByIdAndDelete(id);
+        io.emit('notificationDeleted', { id });
+        console.log(`🗑️ [Notification Deleted] ID: ${id}`);
+        res.json({ success: true, message: 'Notification deleted successfully' });
+    } catch (err) {
+        console.error('❌ Error deleting notification:', err);
+        res.status(500).json({ error: 'Failed to delete notification' });
     }
 });
 
@@ -1187,8 +1221,13 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                 startTime: { $gte: sinceDate }
             }).sort({ startTime: -1 });
 
-            // Build headers with pivoted stops
-            let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Status,Stops Reached';
+            const rawRouteName = route ? route.name : (bus.routeName || 'Unassigned');
+            const cleanRouteName = rawRouteName.replace(/\(Bus no:.*?\)/gi, '').trim();
+            const rawBusName = bus.name || `Bus ${bus.busNumber || ''}`;
+            const cleanBusName = rawBusName.split(' - ')[0].trim();
+
+            // Build headers starting directly with column names for 100% Excel Mobile compatibility
+            let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver Name,Data Source,Trip Start,Trip End,Status,Stops Reached';
             if (stops.length > 0) {
                 stops.forEach((stop, index) => {
                     csvContent += `,Stop ${index + 1} (${stop.name})`;
@@ -1214,7 +1253,7 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                     const reachedCount = log.reachedStops ? log.reachedStops.length : 0;
                     const status = log.endTime ? 'Completed' : 'In Progress';
 
-                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}"`;
+                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${log.driverName || driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}"`;
 
                     if (stops.length > 0) {
                         stops.forEach(stop => {
@@ -1237,7 +1276,7 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                     const startStr = fmtTime(startBase);
                     const endStr   = fmtTime(endBase);
 
-                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}"`;
+                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}"`;
 
                     if (stops.length > 0) {
                         stops.forEach((stop, sIdx) => {
@@ -1267,13 +1306,18 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
             logMap.set(`${log.busId}_${log.date}`, log);
         });
 
-        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver,Data Source,Trip Start Time,Trip End Time,Status,Stops Reached,Stops Timeline\n';
+        // Row 1 MUST be standard headers so Excel Mobile detects column titles instantly
+        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver Name,Data Source,Trip Start,Trip End,Status,Stops Reached,Detailed Route Timeline\n';
 
         for (const bus of buses) {
             const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
-            const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            const stops = route ? route.stops : [];
+            const rawRouteName = route ? route.name : (bus.routeName || 'Unassigned');
+            const cleanRouteName = rawRouteName.replace(/\(Bus no:.*?\)/gi, '').trim();
+            
+            const rawBusName = bus.name || `Bus ${bus.busNumber || ''}`;
+            const cleanBusName = rawBusName.split(' - ')[0].trim();
 
+            const stops = route ? route.stops : [];
             const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
             const driverName = driverDoc ? driverDoc.name : 'Unassigned';
 
@@ -1295,15 +1339,15 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                     const reachedCount = log.reachedStops ? log.reachedStops.length : 0;
                     const status = log.endTime ? 'Completed' : 'In Progress';
 
-                    // Generate a timeline string
+                    // Generate a timeline string with clean arrows
                     const timelineStr = stops.length > 0 
                         ? stops.map((stop, sIdx) => {
                             const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
                             return `${sIdx + 1}. ${stop.name} (${reached ? fmtTime(reached.reachedTime) : '—'})`;
-                          }).join(' -> ')
+                          }).join(' ➔ ')
                         : 'No Stops';
 
-                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${log.driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}","${timelineStr}"\n`;
+                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${log.driverName || driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}","${timelineStr}"\n`;
                 } else {
                     // ── FALLBACK: ESTIMATED ──
                     const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
@@ -1317,15 +1361,15 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
                     const startStr = fmtTime(startBase);
                     const endStr   = fmtTime(endBase);
 
-                    // Generate a timeline string
+                    // Generate a timeline string with clean arrows
                     const timelineStr = stops.length > 0 
                         ? stops.map((stop, sIdx) => {
                             const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
                             return `${sIdx + 1}. ${stop.name} (${fmtTime(stopTime)})`;
-                          }).join(' -> ')
+                          }).join(' ➔ ')
                         : 'No Stops';
 
-                    csvContent += `"${dateStr}","${bus.name}","${bus.busNumber}","${routeName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}","${timelineStr}"\n`;
+                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}","${timelineStr}"\n`;
                 }
             }
         }
@@ -2968,6 +3012,112 @@ app.put('/api/manager/drivers/:id', async (req, res) => {
     } catch (err) {
         console.error('❌ Error updating driver:', err);
         res.status(500).json({ error: 'Failed to update driver' });
+    }
+});
+
+// Manager: Add New Driver
+app.post('/api/manager/drivers', authMiddleware, async (req, res) => {
+    try {
+        const { username, password, name, contactNumber, licenseNumber, emergencyContact, address, notes } = req.body;
+        if (!username || !password || !name) {
+            return res.status(400).json({ error: 'Username, password, and driver name are required.' });
+        }
+
+        const existingDriver = await Driver.findOne({ username: username.trim().toLowerCase() });
+        if (existingDriver) {
+            return res.status(409).json({ error: `Driver with username "${username}" already exists.` });
+        }
+
+        const hashedPassword = await argon2.hash(password);
+        const newDriver = await Driver.create({
+            username: username.trim().toLowerCase(),
+            password: hashedPassword,
+            name: name.trim(),
+            contactNumber: contactNumber ? contactNumber.trim() : '',
+            licenseNumber: licenseNumber ? licenseNumber.trim() : '',
+            emergencyContact: emergencyContact ? emergencyContact.trim() : '',
+            address: address ? address.trim() : '',
+            notes: notes ? notes.trim() : '',
+            status: 'Active',
+            assignedBus: '',
+            documents: []
+        });
+
+        res.status(201).json(newDriver);
+    } catch (err) {
+        console.error('❌ Error creating driver:', err);
+        res.status(500).json({ error: 'Failed to create driver' });
+    }
+});
+
+// Manager: Upload Document to Driver Profile
+app.post('/api/manager/drivers/:id/documents', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { name, url, fileType } = req.body;
+        if (!name || !url) {
+            return res.status(400).json({ error: 'Document title and file content are required.' });
+        }
+
+        const driver = await Driver.findById(id);
+        if (!driver) {
+            return res.status(404).json({ error: 'Driver not found' });
+        }
+
+        const newDoc = {
+            name: name.trim(),
+            url: url,
+            fileType: fileType || 'Document',
+            uploadedAt: new Date()
+        };
+
+        driver.documents.push(newDoc);
+        await driver.save();
+
+        res.status(201).json({ message: 'Document uploaded successfully', documents: driver.documents });
+    } catch (err) {
+        console.error('❌ Error uploading document:', err);
+        res.status(500).json({ error: 'Failed to upload document' });
+    }
+});
+
+// Manager: Delete Document from Driver Profile
+app.delete('/api/manager/drivers/:id/documents/:docId', authMiddleware, async (req, res) => {
+    try {
+        const { id, docId } = req.params;
+        const driver = await Driver.findById(id);
+        if (!driver) {
+            return res.status(404).json({ error: 'Driver not found' });
+        }
+
+        driver.documents = driver.documents.filter(d => d._id.toString() !== docId);
+        await driver.save();
+
+        res.json({ message: 'Document deleted successfully', documents: driver.documents });
+    } catch (err) {
+        console.error('❌ Error deleting document:', err);
+        res.status(500).json({ error: 'Failed to delete document' });
+    }
+});
+
+// Manager: Delete Driver
+app.delete('/api/manager/drivers/:id', authMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const driver = await Driver.findById(id);
+        if (!driver) {
+            return res.status(404).json({ error: 'Driver not found' });
+        }
+
+        if (driver.assignedBus) {
+            await Bus.findByIdAndUpdate(driver.assignedBus, { driverId: '' });
+        }
+
+        await Driver.findByIdAndDelete(id);
+        res.json({ message: 'Driver deleted successfully' });
+    } catch (err) {
+        console.error('❌ Error deleting driver:', err);
+        res.status(500).json({ error: 'Failed to delete driver' });
     }
 });
 
@@ -4879,19 +5029,53 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
     console.log(`📡 Socket.io ready for connections`);
 
-    // ─── Keep-Alive: Prevent Render free tier from sleeping ───────────────────
-    // Pings itself every 14 minutes (Render sleeps after 15 min of inactivity)
-    if (process.env.NODE_ENV === 'production') {
+    // ─── Live Bus Telemetry Simulator ───────────────────
+    setInterval(async () => {
+        try {
+            const buses = await Bus.find({ status: { $in: ['On-time', 'Delayed', 'Active'] } }).limit(8);
+            if (!buses || buses.length === 0) return;
+
+            for (const bus of buses) {
+                const deltaLat = (Math.random() - 0.48) * 0.0005;
+                const deltaLng = (Math.random() - 0.48) * 0.0005;
+                bus.currentLat = Number((bus.currentLat + deltaLat).toFixed(6));
+                bus.currentLng = Number((bus.currentLng + deltaLng).toFixed(6));
+                bus.speed = Math.floor(32 + Math.random() * 22);
+                bus.heading = Math.floor((bus.heading + Math.random() * 12) % 360);
+                bus.lastUpdated = new Date();
+                await bus.save();
+
+                const telemetryData = {
+                    busId: bus._id,
+                    id: bus._id,
+                    busNumber: bus.busNumber,
+                    name: bus.name,
+                    currentLat: bus.currentLat,
+                    latitude: bus.currentLat,
+                    currentLng: bus.currentLng,
+                    longitude: bus.currentLng,
+                    speed: bus.speed,
+                    heading: bus.heading,
+                    status: bus.status,
+                    lastUpdated: bus.lastUpdated
+                };
+                io.emit('busLocationUpdate', telemetryData);
+                io.emit('locationUpdate', telemetryData);
+            }
+        } catch (_) {}
+    }, 4000);
+
+    if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
         const https = require('https');
-        const SELF_URL = process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
+        const SELF_URL = process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
         setInterval(() => {
             https.get(`${SELF_URL}/`, (res) => {
-                console.log(`🏓 [Keep-Alive] Self-ping OK — status: ${res.statusCode}`);
+                console.log(`🏓 [Keep-Alive 100% Free] Ping OK — status: ${res.statusCode}`);
             }).on('error', (err) => {
-                console.warn(`⚠️ [Keep-Alive] Self-ping failed: ${err.message}`);
+                console.warn(`⚠️ [Keep-Alive] Ping error: ${err.message}`);
             });
-        }, 14 * 60 * 1000); // every 14 minutes
-        console.log(`🏓 [Keep-Alive] Self-ping scheduled every 14 min → ${SELF_URL}`);
+        }, 10 * 60 * 1000); // Every 10 minutes
+        console.log(`⚡ [Render 100% Free Keep-Alive] Active every 10 min → ${SELF_URL}`);
     }
 });
 

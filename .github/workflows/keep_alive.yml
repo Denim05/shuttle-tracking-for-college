@@ -1,0 +1,16 @@
+name: Render 100% Free Keep-Alive Pinger
+
+on:
+  schedule:
+    # Run every 10 minutes 24/7/365
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-render-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend Service
+        run: |
+          echo "🏓 Pinging Render backend to keep server 100% awake..."
+          curl -s -f -I https://smart-shuttle-backend-2h13.onrender.com/ || echo "⚠️ Backend ping sent"
