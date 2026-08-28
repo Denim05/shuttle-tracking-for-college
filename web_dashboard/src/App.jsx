@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import Navbar from './components/Navbar';
 import Sidebar from './components/Sidebar';
 import Login from './pages/Login';
+import MasterTrafficDashboard from './pages/MasterTrafficDashboard';
 import DashboardOverview from './pages/DashboardOverview';
 import FleetRadarMap from './pages/FleetRadarMap';
 import RegistrationsManager from './pages/RegistrationsManager';
@@ -66,6 +67,13 @@ export default function App() {
     return <Login onLoginSuccess={(loggedInUser) => setUser(loggedInUser)} />;
   }
 
+  // Full-screen executive layout matching reference image when in Master Traffic view ('overview')
+  if (activeTab === 'overview') {
+    return (
+      <MasterTrafficDashboard activeTab={activeTab} setActiveTab={setActiveTab} />
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#060911] text-gray-100 flex flex-col font-sans">
       
@@ -97,7 +105,7 @@ export default function App() {
               transition={{ duration: 0.25 }}
             >
               {activeTab === 'overview' && (
-                <DashboardOverview setActiveTab={setActiveTab} />
+                <MasterTrafficDashboard activeTab={activeTab} setActiveTab={setActiveTab} />
               )}
 
               {activeTab === 'radar' && (
