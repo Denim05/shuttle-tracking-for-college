@@ -10,6 +10,7 @@ class LiveNotification {
   final String id;
   final String message;
   final String type; // 'info' | 'warning' | 'critical'
+  final String targetAudience; // 'All' | 'Users' | 'Drivers' | 'Admins'
   final DateTime timestamp;
   bool isRead;
 
@@ -17,16 +18,18 @@ class LiveNotification {
     required this.id,
     required this.message,
     required this.type,
+    this.targetAudience = 'All',
     required this.timestamp,
     this.isRead = false,
   });
 
   factory LiveNotification.fromJson(Map<String, dynamic> json) {
     return LiveNotification(
-      id        : json['_id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      message   : json['message']?.toString() ?? '',
-      type      : json['type']?.toString() ?? 'info',
-      timestamp : json['createdAt'] != null
+      id            : json['_id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      message       : json['message']?.toString() ?? '',
+      type          : json['type']?.toString() ?? 'info',
+      targetAudience: json['targetAudience']?.toString() ?? 'All',
+      timestamp     : json['createdAt'] != null
           ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
           : DateTime.now(),
     );
@@ -66,7 +69,49 @@ class BusStore extends ChangeNotifier {
 
   // ─── Public Getters ─────────────────────────────────────────────────────
 
-  List<Bus> get allBuses => _buses.values.toList();
+  List<Bus> get allBuses {
+    final list = _buses.values.toList();
+    list.sort((a, b) {
+      String getBusKey(Bus bus) {
+        final match = RegExp(r'Bus\s+no:\s*([A-Za-z0-9\-]+)', caseSensitive: false).firstMatch(bus.routeName);
+        if (match != null) return match.group(1)!;
+        final match2 = RegExp(r'Bus\s+([A-Za-z0-9\-]+)', caseSensitive: false).firstMatch(bus.routeName);
+        if (match2 != null) return match2.group(1)!;
+        return bus.routeName;
+      }
+
+      final aKey = getBusKey(a);
+      final bKey = getBusKey(b);
+
+      final aIsNum = RegExp(r'^\d+$').hasMatch(aKey);
+      final bIsNum = RegExp(r'^\d+$').hasMatch(bKey);
+
+      if (aIsNum && bIsNum) {
+        final aInt = int.tryParse(aKey) ?? 0;
+        final bInt = int.tryParse(bKey) ?? 0;
+        if (aInt != bInt) return aInt.compareTo(bInt);
+      } else if (aIsNum) {
+        return -1;
+      } else if (bIsNum) {
+        return 1;
+      }
+
+      final aIsT = RegExp(r'^T-\d+$', caseSensitive: false).hasMatch(aKey);
+      final bIsT = RegExp(r'^T-\d+$', caseSensitive: false).hasMatch(bKey);
+      if (aIsT && bIsT) {
+        final aInt = int.tryParse(aKey.replaceAll(RegExp(r'\D'), '')) ?? 0;
+        final bInt = int.tryParse(bKey.replaceAll(RegExp(r'\D'), '')) ?? 0;
+        if (aInt != bInt) return aInt.compareTo(bInt);
+      } else if (aIsT) {
+        return -1;
+      } else if (bIsT) {
+        return 1;
+      }
+
+      return aKey.compareTo(bKey);
+    });
+    return list;
+  }
 
   List<Bus> get activeBuses {
     final cutoff = DateTime.now().subtract(const Duration(seconds: _staleSecs));
@@ -124,6 +169,12 @@ class BusStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Remove a specific notification by ID.
+  void removeNotification(String id) {
+    _notifications.removeWhere((n) => n.id == id);
+    notifyListeners();
+  }
+
   // ─── Seeding ────────────────────────────────────────────────────────────
 
   void seedBuses(List<dynamic> json) {
@@ -142,6 +193,21 @@ class BusStore extends ChangeNotifier {
     _socketService.listenToBusUpdates(_onBusUpdate);
     _socketService.listenToBusApproach(_onBusApproach);
     _socketService.listenToNotifications(_onNotification);
+    _socketService.listenToNotificationDeleted(_onNotificationDeleted);
+  }
+
+  void _onNotificationDeleted(dynamic data) {
+    try {
+      final Map<String, dynamic> json = data is Map<String, dynamic>
+          ? data
+          : Map<String, dynamic>.from(data as Map);
+      final String? id = json['id']?.toString();
+      if (id != null) {
+        removeNotification(id);
+      }
+    } catch (e) {
+      debugPrint('BusStore._onNotificationDeleted error: $e');
+    }
   }
 
   void _onBusUpdate(dynamic data) {

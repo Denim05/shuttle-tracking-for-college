@@ -43,6 +43,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   final TextEditingController _bulkSemesterController = TextEditingController();
   String _selectedUserSemesterFilter = 'All';
   bool _isSending = false;
+  String _selectedTargetAudience = 'All';
   List<Map<String, String>> _bulkParsedSubmissions = [];
   bool _isBulkSaving = false;
 
@@ -718,104 +719,864 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   Widget _buildDriverTab() {
-    if (_drivers.isEmpty) return _buildEmptyState('No drivers available', Icons.person_off_rounded);
-    
-    return RefreshIndicator(
-      onRefresh: _loadData,
-      child: ListView.builder(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-        itemCount: _drivers.length,
-        itemBuilder: (context, index) {
-          final driver = _drivers[index];
-          final bool isActive = driver['status'] != 'Suspended';
+    return Column(
+      children: [
+        // Action Header Card
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'TOTAL DRIVERS: ${_drivers.length}',
+                      style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 1),
+                    ),
+                    Text(
+                      'Manage profiles, licenses & documents',
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: _showAddDriverDialog,
+                icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
+                label: Text('Add Driver', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 11)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blueAccent.withOpacity(0.15),
+                  foregroundColor: Colors.blueAccent,
+                  side: BorderSide(color: Colors.blueAccent.withOpacity(0.3)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                ),
+              ),
+            ],
+          ),
+        ),
 
-          // Lookup clean bus name
+        // List View
+        Expanded(
+          child: _drivers.isEmpty
+              ? _buildEmptyState('No drivers available', Icons.person_off_rounded)
+              : RefreshIndicator(
+                  onRefresh: _loadData,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+                    itemCount: _drivers.length,
+                    itemBuilder: (context, index) {
+                      final driver = _drivers[index];
+                      final bool isActive = driver['status'] != 'Suspended';
+                      final String license = driver['licenseNumber']?.toString().isNotEmpty == true
+                          ? driver['licenseNumber'].toString()
+                          : 'No License';
+                      final String phone = driver['contactNumber']?.toString().isNotEmpty == true
+                          ? driver['contactNumber'].toString()
+                          : '';
+
+                      final assignedBusId = driver['assignedBus'];
+                      final bus = _rawBuses.firstWhere(
+                        (b) => b['_id'] == assignedBusId, 
+                        orElse: () => null
+                      );
+                      final String assignedBusText = bus != null 
+                          ? (() {
+                              final String busName = bus['name']?.toString() ?? '';
+                              final String busLabel = busName.contains(' - ') 
+                                  ? busName.split(' - ').first 
+                                  : 'Bus';
+                              final String busNum = bus['busNumber']?.toString() ?? 'N/A';
+                              final String cleanPlate = (busNum.isNotEmpty && busNum != 'N/A') 
+                                  ? ' ($busNum)' 
+                                  : '';
+                              return '$busLabel$cleanPlate';
+                            })().toUpperCase()
+                          : 'UNASSIGNED';
+
+                      return _buildGlassCard(
+                        index: index,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Top Row: Avatar + Driver Name & Info + Status + Menu
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Container(
+                                  height: 44, width: 44,
+                                  decoration: BoxDecoration(
+                                    gradient: LinearGradient(
+                                      colors: [
+                                        (isActive ? Colors.blueAccent : Colors.redAccent).withOpacity(0.2),
+                                        (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withOpacity(0.08),
+                                      ],
+                                    ),
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: (isActive ? Colors.blueAccent : Colors.redAccent).withOpacity(0.3)),
+                                  ),
+                                  child: Icon(Icons.shield_rounded, color: isActive ? Colors.blueAccent : Colors.redAccent, size: 22),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        (driver['name'] ?? driver['username']).toString().toUpperCase(),
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 15,
+                                          letterSpacing: 0.5,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        phone.isNotEmpty ? '@${driver['username']}  •  📞 $phone' : '@${driver['username']}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: Colors.white54,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                _buildStatusChip(isActive ? 'OPERATIONAL' : 'SUSPENDED', isActive),
+                                PopupMenuButton<String>(
+                                  icon: const Icon(Icons.more_vert_rounded, color: Colors.white38),
+                                  color: const Color(0xFF1E1E1E),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(15),
+                                    side: const BorderSide(color: Colors.white10),
+                                  ),
+                                  onSelected: (value) async {
+                                    if (value == 'Profile') {
+                                      _showDriverProfileSheet(driver);
+                                    } else if (value == 'AssignBus') {
+                                      _showAssignBusDialog(driver);
+                                    } else if (value == 'Delete') {
+                                      _deleteDriver(driver['_id']);
+                                    } else {
+                                      final newStatus = value == 'Suspend' ? 'Suspended' : 'Active';
+                                      await _apiService.put('manager/drivers/${driver['_id']}', {'status': newStatus});
+                                      _loadData();
+                                    }
+                                  },
+                                  itemBuilder: (context) => [
+                                    PopupMenuItem(
+                                      value: 'Profile',
+                                      child: Text('Profile & Documents', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    ),
+                                    PopupMenuItem(
+                                      value: isActive ? 'Suspend' : 'Activate',
+                                      child: Text(isActive ? 'Suspend Driver' : 'Activate Driver', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'AssignBus',
+                                      child: Text('Assign Bus', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'Delete',
+                                      child: Text('Delete Driver', style: GoogleFonts.plusJakartaSans(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // Middle Info Badges Row (Assigned Bus & License Number)
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 6,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Container(
+                                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 80),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blueAccent.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.blueAccent.withOpacity(0.25)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.directions_bus_rounded, color: Colors.blueAccent, size: 13),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'BUS: $assignedBusText',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            color: Colors.blueAccent,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 80),
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepPurpleAccent.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.25)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.card_membership_rounded, color: Colors.deepPurpleAccent, size: 13),
+                                      const SizedBox(width: 6),
+                                      Flexible(
+                                        child: Text(
+                                          'LICENSE: $license',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            color: Colors.deepPurpleAccent,
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+
+                            const SizedBox(height: 12),
+
+                            // Bottom Action Button: Profile & Documents
+                            InkWell(
+                              onTap: () => _showDriverProfileSheet(driver),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 14),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.deepPurpleAccent.withOpacity(0.18),
+                                      Colors.blueAccent.withOpacity(0.08),
+                                    ],
+                                  ),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                                ),
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    const Icon(Icons.folder_shared_rounded, color: Colors.blueAccent, size: 16),
+                                    const SizedBox(width: 8),
+                                    Flexible(
+                                      child: Text(
+                                        'Profile & Important Documents',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white38, size: 11),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ).animate().fadeIn(delay: (index * 100).ms).slideY(begin: 0.2);
+                    },
+                  ),
+                ),
+        ),
+      ],
+    );
+  }
+
+  void _showAddDriverDialog() {
+    final nameCtrl = TextEditingController();
+    final usernameCtrl = TextEditingController();
+    final passwordCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+    final licenseCtrl = TextEditingController();
+    final emergencyCtrl = TextEditingController();
+    final addressCtrl = TextEditingController();
+    final notesCtrl = TextEditingController();
+    bool isSubmitting = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.blueAccent.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.person_add_alt_1_rounded, color: Colors.blueAccent, size: 20),
+              ),
+              const SizedBox(width: 12),
+              Text(
+                'Add New Driver',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _buildStyledDialogTextField(nameCtrl, 'Driver Full Name *', Icons.person_outline_rounded),
+                const SizedBox(height: 12),
+                _buildStyledDialogTextField(usernameCtrl, 'Username * (e.g. driver31)', Icons.badge_outlined),
+                const SizedBox(height: 12),
+                _buildStyledDialogTextField(passwordCtrl, 'Initial Password *', Icons.lock_outline_rounded, isPassword: true),
+                const SizedBox(height: 12),
+                _buildStyledDialogTextField(phoneCtrl, 'Contact Phone Number', Icons.phone_android_rounded, keyboardType: TextInputType.phone),
+                const SizedBox(height: 12),
+                _buildStyledDialogTextField(licenseCtrl, 'Driving License Number', Icons.card_membership_rounded),
+                const SizedBox(height: 12),
+                _buildStyledDialogTextField(emergencyCtrl, 'Emergency Contact Phone', Icons.contact_phone_rounded, keyboardType: TextInputType.phone),
+                const SizedBox(height: 12),
+                _buildStyledDialogTextField(addressCtrl, 'Address / Notes', Icons.home_work_rounded),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: isSubmitting ? null : () => Navigator.pop(context),
+              child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              onPressed: isSubmitting
+                  ? null
+                  : () async {
+                      if (nameCtrl.text.trim().isEmpty || usernameCtrl.text.trim().isEmpty || passwordCtrl.text.trim().isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Please fill in Name, Username, and Password'), backgroundColor: Colors.orange),
+                        );
+                        return;
+                      }
+                      setDialogState(() => isSubmitting = true);
+                      try {
+                        await _apiService.post('manager/drivers', {
+                          'name': nameCtrl.text.trim(),
+                          'username': usernameCtrl.text.trim(),
+                          'password': passwordCtrl.text.trim(),
+                          'contactNumber': phoneCtrl.text.trim(),
+                          'licenseNumber': licenseCtrl.text.trim(),
+                          'emergencyContact': emergencyCtrl.text.trim(),
+                          'address': addressCtrl.text.trim(),
+                          'notes': notesCtrl.text.trim(),
+                        });
+                        if (mounted && context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Driver created successfully!'), backgroundColor: Colors.green),
+                          );
+                          _loadData();
+                        }
+                      } catch (e) {
+                        setDialogState(() => isSubmitting = false);
+                        if (mounted && context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text('Failed: ${e.toString().replaceAll('ApiException(409):', '').replaceAll('Exception:', '').trim()}'), backgroundColor: Colors.redAccent),
+                          );
+                        }
+                      }
+                    },
+              child: isSubmitting
+                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : Text('Create Driver', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStyledDialogTextField(
+    TextEditingController controller,
+    String label,
+    IconData icon, {
+    bool isPassword = false,
+    TextInputType keyboardType = TextInputType.text,
+  }) {
+    return TextField(
+      controller: controller,
+      obscureText: isPassword,
+      keyboardType: keyboardType,
+      style: const TextStyle(color: Colors.white, fontSize: 13),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.white38, fontSize: 11),
+        prefixIcon: Icon(icon, color: Colors.blueAccent, size: 18),
+        filled: true,
+        fillColor: Colors.white.withOpacity(0.04),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: Colors.blueAccent),
+        ),
+      ),
+    );
+  }
+
+  void _showDriverProfileSheet(Map<String, dynamic> initialDriver) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final driver = _drivers.firstWhere(
+            (d) => d['_id'] == initialDriver['_id'],
+            orElse: () => initialDriver,
+          );
+
+          final bool isActive = driver['status'] != 'Suspended';
           final assignedBusId = driver['assignedBus'];
           final bus = _rawBuses.firstWhere(
             (b) => b['_id'] == assignedBusId, 
             orElse: () => null
           );
           final String assignedBusText = bus != null 
-              ? (() {
-                  final String busName = bus['name']?.toString() ?? '';
-                  final String busLabel = busName.contains(' - ') 
-                      ? busName.split(' - ').first 
-                      : 'Bus';
-                  final String busNum = bus['busNumber']?.toString() ?? 'N/A';
-                  final String cleanPlate = (busNum.isNotEmpty && busNum != 'N/A') 
-                      ? ' ($busNum)' 
-                      : '';
-                  return '$busLabel$cleanPlate';
-                })().toUpperCase()
+              ? '${bus['name'] ?? 'Bus'} (${bus['busNumber'] ?? ''})'
               : 'UNASSIGNED';
 
-          return _buildGlassCard(
-            index: index,
-            child: Row(
+          final List<dynamic> documents = driver['documents'] is List ? driver['documents'] : [];
+
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: const BoxDecoration(
+              color: Color(0xFF18181B),
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              border: Border(top: BorderSide(color: Colors.white12)),
+            ),
+            child: Column(
               children: [
                 Container(
-                  height: 54, width: 54,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withOpacity(0.2),
-                        (isActive ? Colors.blueAccent : Colors.redAccent).withOpacity(0.05),
-                      ],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withOpacity(0.3)),
-                  ),
-                  child: Icon(Icons.shield_rounded, color: isActive ? Colors.blueAccent : Colors.redAccent),
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 40, height: 4,
+                  decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)),
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+                  child: Row(
                     children: [
-                      Text(
-                        (driver['name'] ?? driver['username']).toUpperCase(),
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16, letterSpacing: 0.5),
+                      Container(
+                        height: 56, width: 56,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.blueAccent.withOpacity(0.25),
+                              Colors.deepPurpleAccent.withOpacity(0.1),
+                            ],
+                          ),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.blueAccent.withOpacity(0.4)),
+                        ),
+                        child: const Icon(Icons.shield_rounded, color: Colors.blueAccent, size: 28),
                       ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'ASSIGNED: $assignedBusText',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.w700, letterSpacing: 1),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              (driver['name'] ?? driver['username']).toString().toUpperCase(),
+                              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Username: @${driver['username']}',
+                              style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11),
+                            ),
+                          ],
+                        ),
                       ),
+                      _buildStatusChip(isActive ? 'OPERATIONAL' : 'SUSPENDED', isActive),
                     ],
                   ),
                 ),
-                _buildStatusChip(isActive ? 'OPERATIONAL' : 'SUSPENDED', isActive),
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert_rounded, color: Colors.white38),
-                  color: const Color(0xFF1E1E1E),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(15),
-                    side: const BorderSide(color: Colors.white10),
+
+                const Divider(color: Colors.white10, height: 1),
+
+                Expanded(
+                  child: ListView(
+                    padding: const EdgeInsets.all(20),
+                    children: [
+                      Text(
+                        'DRIVER DETAILS & CONTACT',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                      ),
+                      const SizedBox(height: 12),
+                      _buildDriverDetailTile(Icons.phone_android_rounded, 'PHONE NUMBER', driver['contactNumber']?.toString().isNotEmpty == true ? driver['contactNumber'].toString() : 'Not Provided'),
+                      const SizedBox(height: 8),
+                      _buildDriverDetailTile(Icons.card_membership_rounded, 'LICENSE NUMBER', driver['licenseNumber']?.toString().isNotEmpty == true ? driver['licenseNumber'].toString() : 'Not Provided'),
+                      const SizedBox(height: 8),
+                      _buildDriverDetailTile(Icons.contact_phone_rounded, 'EMERGENCY CONTACT', driver['emergencyContact']?.toString().isNotEmpty == true ? driver['emergencyContact'].toString() : 'Not Provided'),
+                      const SizedBox(height: 8),
+                      _buildDriverDetailTile(Icons.directions_bus_rounded, 'ASSIGNED VEHICLE', assignedBusText),
+                      const SizedBox(height: 8),
+                      _buildDriverDetailTile(Icons.home_work_rounded, 'ADDRESS / NOTES', driver['address']?.toString().isNotEmpty == true ? driver['address'].toString() : (driver['notes']?.toString() ?? 'None')),
+
+                      const SizedBox(height: 24),
+
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'IMPORTANT DOCUMENTS (${documents.length})',
+                                style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                              ),
+                              Text(
+                                'License copy, ID proof, medical certs',
+                                style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+                              ),
+                            ],
+                          ),
+                          ElevatedButton.icon(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blueAccent.withOpacity(0.15),
+                              foregroundColor: Colors.blueAccent,
+                              side: BorderSide(color: Colors.blueAccent.withOpacity(0.3)),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onPressed: () => _uploadDriverDocument(driver, setSheetState),
+                            icon: const Icon(Icons.upload_file_rounded, size: 16),
+                            label: Text('Upload Doc', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 11)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      if (documents.isEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(24),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.02),
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: Colors.white.withOpacity(0.05)),
+                          ),
+                          child: Column(
+                            children: [
+                              const Icon(Icons.folder_open_rounded, color: Colors.white24, size: 36),
+                              const SizedBox(height: 8),
+                              Text('No documents uploaded yet', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12)),
+                              const SizedBox(height: 4),
+                              Text('Click "Upload Doc" to attach license copies or certificates', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10), textAlign: TextAlign.center),
+                            ],
+                          ),
+                        )
+                      else
+                        ...documents.map((doc) {
+                          final String docName = doc['name']?.toString() ?? 'Document';
+                          final String docType = doc['fileType']?.toString() ?? 'File';
+                          final String url = doc['url']?.toString() ?? '';
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 8),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.03),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.deepPurpleAccent.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    docType.toLowerCase().contains('pdf') ? Icons.picture_as_pdf_rounded : Icons.description_rounded,
+                                    color: Colors.deepPurpleAccent, size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        docName,
+                                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        docType.toUpperCase(),
+                                        style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.visibility_rounded, color: Colors.blueAccent, size: 20),
+                                  onPressed: () => _viewDriverDocument(docName, url),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                  onPressed: () => _deleteDriverDocument(driver['_id'].toString(), doc['_id'].toString(), setSheetState),
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                    ],
                   ),
-                  onSelected: (value) async {
-                    if (value == 'AssignBus') {
-                      _showAssignBusDialog(driver);
-                    } else {
-                      final newStatus = value == 'Suspend' ? 'Suspended' : 'Active';
-                      await _apiService.put('manager/drivers/${driver['_id']}', {'status': newStatus});
-                      _loadData();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: isActive ? 'Suspend' : 'Activate',
-                      child: Text(isActive ? 'Suspend' : 'Activate', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                    PopupMenuItem(
-                      value: 'AssignBus',
-                      child: Text('Assign Bus', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
-                    ),
-                  ],
                 ),
               ],
             ),
-          ).animate().fadeIn(delay: (index * 100).ms).slideY(begin: 0.2);
+          );
         },
+      ),
+    );
+  }
+
+  Widget _buildDriverDetailTile(IconData icon, String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.06)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.blueAccent, size: 18),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: 0.8)),
+                const SizedBox(height: 2),
+                Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _uploadDriverDocument(Map<String, dynamic> driver, StateSetter setSheetState) async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.any,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      if (file.bytes == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not read file data'), backgroundColor: Colors.redAccent),
+          );
+        }
+        return;
+      }
+
+      final ext = file.extension?.toLowerCase() ?? 'file';
+      final mime = ext == 'pdf' ? 'application/pdf' : (ext == 'png' ? 'image/png' : 'image/jpeg');
+      final base64Str = base64Encode(file.bytes!);
+      final dataUri = 'data:$mime;base64,$base64Str';
+
+      final titleCtrl = TextEditingController(text: file.name);
+
+      if (!mounted) return;
+
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Document Title', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
+          content: TextField(
+            controller: titleCtrl,
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: const InputDecoration(
+              labelText: 'Document Name (e.g. Driving License)',
+              labelStyle: TextStyle(color: Colors.white38, fontSize: 11),
+              enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueAccent),
+              onPressed: () async {
+                final docTitle = titleCtrl.text.trim().isNotEmpty ? titleCtrl.text.trim() : file.name;
+                Navigator.pop(ctx);
+
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Uploading document...'), backgroundColor: Colors.blueAccent),
+                );
+
+                try {
+                  await _apiService.post('manager/drivers/${driver['_id']}/documents', {
+                    'name': docTitle,
+                    'url': dataUri,
+                    'fileType': ext.toUpperCase(),
+                  });
+                  await _loadData();
+                  setSheetState(() {});
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Document uploaded successfully!'), backgroundColor: Colors.green),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Upload failed: $e'), backgroundColor: Colors.redAccent),
+                    );
+                  }
+                }
+              },
+              child: Text('Save & Upload', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      );
+    } catch (e) {
+      debugPrint('File picker error: $e');
+    }
+  }
+
+  void _viewDriverDocument(String title, String url) async {
+    if (url.startsWith('data:')) {
+      if (url.contains('image')) {
+        final base64Content = url.split(',').last;
+        final bytes = base64Decode(base64Content);
+        showDialog(
+          context: context,
+          builder: (ctx) => Dialog(
+            backgroundColor: const Color(0xFF1E1E1E),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                ),
+                Image.memory(bytes, fit: BoxFit.contain),
+                TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+              ],
+            ),
+          ),
+        );
+        return;
+      }
+    }
+
+    try {
+      final uri = Uri.parse(url);
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Document saved ($title). Unable to open external viewer.'), backgroundColor: Colors.blueAccent),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteDriverDocument(String driverId, String docId, StateSetter setSheetState) async {
+    try {
+      await _apiService.delete('manager/drivers/$driverId/documents/$docId');
+      await _loadData();
+      setSheetState(() {});
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Document removed'), backgroundColor: Colors.green),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to delete document: $e'), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  Future<void> _deleteDriver(String driverId) async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1E1E1E),
+        title: Text('Delete Driver', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to permanently delete this driver account?', style: GoogleFonts.plusJakartaSans(color: Colors.white70)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38))),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                await _apiService.delete('manager/drivers/$driverId');
+                _loadData();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Driver deleted successfully'), backgroundColor: Colors.green),
+                  );
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Delete failed: $e'), backgroundColor: Colors.redAccent),
+                  );
+                }
+              }
+            },
+            child: Text('Delete', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
       ),
     );
   }
@@ -1957,6 +2718,49 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
+  Widget _buildAudienceChip(String value, String label, Color accentColor) {
+    final bool isSelected = _selectedTargetAudience == value;
+    return ChoiceChip(
+      label: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          color: isSelected ? Colors.white : Colors.white60,
+          fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+          fontSize: 12,
+        ),
+      ),
+      selected: isSelected,
+      selectedColor: accentColor.withOpacity(0.3),
+      backgroundColor: const Color(0xFF2A2A2A),
+      side: BorderSide(
+        color: isSelected ? accentColor : Colors.white10,
+        width: isSelected ? 1.5 : 1.0,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      onSelected: (bool selected) {
+        if (selected) {
+          setState(() {
+            _selectedTargetAudience = value;
+          });
+        }
+      },
+    );
+  }
+
+  Color _getAudienceColor(String? audience) {
+    final aud = (audience ?? 'All').toLowerCase();
+    switch (aud) {
+      case 'users':
+        return Colors.cyanAccent;
+      case 'drivers':
+        return Colors.amberAccent;
+      case 'admins':
+        return Colors.purpleAccent;
+      default:
+        return Colors.blueAccent;
+    }
+  }
+
   Widget _buildAlertTab() {
     return Consumer<BusStore>(
       builder: (context, busStore, _) {
@@ -1971,7 +2775,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             // ── Broadcast Composer ─────────────────────────────────────
             Text('Broadcast Message', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900, letterSpacing: 1)),
             const SizedBox(height: 8),
-            Text('Send notifications to all app users.', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w500)),
+            Text('Send notifications to targeted app user groups.', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 14, fontWeight: FontWeight.w500)),
             const SizedBox(height: 24),
             Container(
               padding: const EdgeInsets.all(24),
@@ -1984,13 +2788,42 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 ]
               ),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Audience Selector Chips
+                  Text(
+                    'SELECT TARGET AUDIENCE',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white54,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildAudienceChip('All', '🌐 Everyone', Colors.blueAccent),
+                        const SizedBox(width: 8),
+                        _buildAudienceChip('Users', '🎓 Students', Colors.cyanAccent),
+                        const SizedBox(width: 8),
+                        _buildAudienceChip('Drivers', '🚌 Drivers', Colors.amberAccent),
+                        const SizedBox(width: 8),
+                        _buildAudienceChip('Admins', '🛡️ Admins', Colors.purpleAccent),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Divider(color: Colors.white10),
+                  const SizedBox(height: 12),
                   TextField(
                     controller: _notifController,
                     maxLines: 4,
                     style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 16),
                     decoration: InputDecoration(
-                      hintText: 'Enter mission-critical directive...',
+                      hintText: 'Enter directive message for ${_selectedTargetAudience == 'All' ? 'everyone' : _selectedTargetAudience.toLowerCase()}...',
                       hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24),
                       border: InputBorder.none,
                     ),
@@ -2003,14 +2836,17 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       setState(() => _isSending = true);
                       final messenger = ScaffoldMessenger.of(context);
                       try {
-                        await _apiService.post('manager/notifications', {'message': msg});
+                        await _apiService.post('manager/notifications', {
+                          'message': msg,
+                          'targetAudience': _selectedTargetAudience,
+                        });
                         if (!mounted) return;
                         _notifController.clear();
                         messenger.showSnackBar(
                           SnackBar(
                             backgroundColor: Colors.blueAccent,
                             behavior: SnackBarBehavior.floating,
-                            content: Text('Message sent successfully', style: GoogleFonts.plusJakartaSans(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                            content: Text('Broadcast sent to ${_selectedTargetAudience.toUpperCase()}', style: GoogleFonts.plusJakartaSans(color: Colors.black, fontWeight: FontWeight.w900, letterSpacing: 1)),
                           ),
                         );
                       } catch (e) {
@@ -2097,9 +2933,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 final n = entry.value;
                 final isInfo = n.type == 'info';
                 final accent = isInfo ? Colors.deepPurpleAccent : Colors.redAccent;
+                final String targetAudienceText = (n.targetAudience.isEmpty ? 'All' : n.targetAudience);
+                final audienceColor = _getAudienceColor(targetAudienceText);
+
                 return Container(
                   margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(18),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.circular(20),
@@ -2121,13 +2960,76 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('DIRECTIVE', style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Text('DIRECTIVE', style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: audienceColor.withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: audienceColor.withOpacity(0.3)),
+                                  ),
+                                  child: Text(
+                                    'TO: ${targetAudienceText.toUpperCase()}',
+                                    style: GoogleFonts.plusJakartaSans(color: audienceColor, fontSize: 8, fontWeight: FontWeight.w900),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
                             Text(n.message, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
                             const SizedBox(height: 6),
                             Text(_formatTime(n.timestamp), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold)),
                           ],
                         ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, color: Colors.white38, size: 18),
+                        tooltip: 'Delete Notification',
+                        onPressed: () async {
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: const Color(0xFF1E1E1E),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                              title: Text('Delete Notification', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                              content: Text('Are you sure you want to delete this notification broadcast?', style: GoogleFonts.plusJakartaSans(color: Colors.white70)),
+                              actions: [
+                                TextButton(
+                                  onPressed: () => Navigator.pop(ctx, false),
+                                  child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white54)),
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
+                                  onPressed: () => Navigator.pop(ctx, true),
+                                  child: Text('Delete', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+                                ),
+                              ],
+                            ),
+                          );
+
+                          if (confirm == true) {
+                            try {
+                              await _apiService.delete('manager/notifications/${n.id}');
+                            } catch (_) {
+                              try {
+                                await _apiService.delete('notifications/${n.id}');
+                              } catch (_) {}
+                            }
+                            busStore.removeNotification(n.id);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Notification deleted', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                                  backgroundColor: Colors.redAccent,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                        },
                       ),
                     ],
                   ),
@@ -2140,7 +3042,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     ).animate().fadeIn().slideY(begin: 0.1);
   }
 
-  String _formatTime(DateTime dt) {
+  String _formatTime(DateTime? dt) {
+    if (dt == null) return 'JUST NOW';
     final diff = DateTime.now().difference(dt);
     if (diff.inSeconds < 60) return 'JUST NOW';
     if (diff.inMinutes < 60) return '${diff.inMinutes} MINS AGO';

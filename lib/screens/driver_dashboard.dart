@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -244,17 +245,37 @@ class _DriverDashboardState extends State<DriverDashboard> {
     }
 
     setState(() => _isOnline = true);
-    _positionStream = Geolocator.getPositionStream(
-      locationSettings: AndroidSettings(
+
+    late LocationSettings locationSettings;
+    if (defaultTargetPlatform == TargetPlatform.android) {
+      locationSettings = AndroidSettings(
         accuracy: LocationAccuracy.bestForNavigation,
         distanceFilter: 0,
         intervalDuration: const Duration(milliseconds: 800),
         foregroundNotificationConfig: const ForegroundNotificationConfig(
-          notificationTitle: 'SISTecChalo Tracking',
-          notificationText: 'Broadcasting your location to students',
+          notificationTitle: 'SISTecChalo Live Tracking',
+          notificationText: 'Broadcasting shuttle location to students',
           enableWakeLock: true,
         ),
-      ),
+      );
+    } else if (defaultTargetPlatform == TargetPlatform.iOS || defaultTargetPlatform == TargetPlatform.macOS) {
+      locationSettings = AppleSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        activityType: ActivityType.automotiveNavigation,
+        distanceFilter: 0,
+        pauseLocationUpdatesAutomatically: false,
+        showBackgroundLocationIndicator: true,
+        allowBackgroundLocationUpdates: true,
+      );
+    } else {
+      locationSettings = const LocationSettings(
+        accuracy: LocationAccuracy.bestForNavigation,
+        distanceFilter: 0,
+      );
+    }
+
+    _positionStream = Geolocator.getPositionStream(
+      locationSettings: locationSettings,
     ).listen(
       (Position position) {
         if (!mounted) return;

@@ -2702,14 +2702,39 @@ app.delete('/api/manager/buses/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// Add a new Route
+// Add a new Route with Automatic Geocoding
 app.post('/api/manager/routes', authMiddleware, async (req, res) => {
     try {
-        const route = new Route(req.body);
+        const { geocodeStopName } = require('./geocode_stops');
+        const routeData = { ...req.body };
+
+        if (Array.isArray(routeData.stops)) {
+            const geocodedStops = [];
+            for (const stop of routeData.stops) {
+                let lat = stop.lat != null ? parseFloat(stop.lat) : null;
+                let lng = stop.lng != null ? parseFloat(stop.lng) : null;
+
+                if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+                    const coords = await geocodeStopName(stop.name);
+                    lat = coords.lat;
+                    lng = coords.lng;
+                }
+                geocodedStops.push({ name: stop.name, lat, lng });
+            }
+            routeData.stops = geocodedStops;
+
+            // Generate polyline coordinates from valid geocoded stops
+            routeData.coordinates = geocodedStops
+                .filter(s => s.lat != null && s.lng != null)
+                .map(s => ({ latitude: s.lat, longitude: s.lng }));
+        }
+
+        const route = new Route(routeData);
         await route.save();
         broadcastStats();
         res.status(201).json(route);
     } catch (_err) {
+        console.error('Error creating route:', _err);
         res.status(500).json({ error: 'Failed to create route' });
     }
 });
@@ -3420,7 +3445,23 @@ io.on('connection', (socket) => {
         }
     });
 
-                socket.on('locationUpdate', async (data) => {
+    socket.on('joinRoute', (routeId) => {
+        if (routeId) {
+            const roomName = `route_${routeId}`;
+            socket.join(roomName);
+            console.log(`🚪 Socket ${socket.id} joined room: ${roomName}`);
+        }
+    });
+
+    socket.on('leaveRoute', (routeId) => {
+        if (routeId) {
+            const roomName = `route_${routeId}`;
+            socket.leave(roomName);
+            console.log(`🚪 Socket ${socket.id} left room: ${roomName}`);
+        }
+    });
+
+    socket.on('locationUpdate', async (data) => {
         const incomingBusId = (data.busId || data.id || data._id || '').toString();
         
         try {
@@ -3598,8 +3639,11 @@ io.on('connection', (socket) => {
             bus.etas = etas;
             await bus.save();
 
-            // Broadcast real device data only
+            // Broadcast real device data (Global & Route-specific Room)
             io.emit('busLocationUpdate', bus);
+            if (bus.routeId) {
+                io.to(`route_${bus.routeId.toString()}`).emit('busLocationUpdate', bus);
+            }
 
         } catch (err) {
             console.error('❌ [TRACKING ERROR]:', err.message);
@@ -3658,7 +3702,7 @@ app.post('/api/manager/geocode-stops', async (req, res) => {
     }
 });
 
-// --- UPDATE ROUTE STOPS & COORDINATES ---
+// --- UPDATE ROUTE STOPS & AUTOMATIC GEOCODING ---
 app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
     try {
         const { stops } = req.body;
@@ -3668,14 +3712,25 @@ app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
         const route = await Route.findById(req.params.id);
         if (!route) return res.status(404).json({ error: 'Route not found' });
 
-        route.stops = stops.map(s => ({
-            name: s.name,
-            lat: s.lat ? parseFloat(s.lat) : undefined,
-            lng: s.lng ? parseFloat(s.lng) : undefined
-        }));
+        const { geocodeStopName } = require('./geocode_stops');
+        const updatedStops = [];
 
-        // Re-generate polyline coordinates from valid stop lat/lngs
-        route.coordinates = route.stops
+        for (const s of stops) {
+            let lat = s.lat != null ? parseFloat(s.lat) : null;
+            let lng = s.lng != null ? parseFloat(s.lng) : null;
+
+            if (lat == null || lng == null || isNaN(lat) || isNaN(lng)) {
+                const coords = await geocodeStopName(s.name);
+                lat = coords.lat;
+                lng = coords.lng;
+            }
+            updatedStops.push({ name: s.name, lat, lng });
+        }
+
+        route.stops = updatedStops;
+
+        // Re-generate polyline coordinates from valid geocoded stop lat/lngs
+        route.coordinates = updatedStops
             .filter(s => s.lat != null && s.lng != null)
             .map(s => ({ latitude: s.lat, longitude: s.lng }));
 

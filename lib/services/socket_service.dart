@@ -202,6 +202,9 @@ class SocketService with ChangeNotifier {
   void listenToNotifications(Function(dynamic) callback) =>
       _on('notification', callback);
 
+  void listenToNotificationDeleted(Function(dynamic) callback) =>
+      _on('notificationDeleted', callback);
+
   /// Listens for bus delay events emitted by manager or server.
   void listenToBusDelayed(Function(dynamic) callback) =>
       _on('busDelayed', callback);
@@ -238,6 +241,18 @@ class SocketService with ChangeNotifier {
     }
     _socket?.emit('tripEnd', {'busId': busId});
     debugPrint('🏁 Emitted tripEnd for Bus $busId');
+  }
+
+  void joinRoute(String routeId) {
+    if (_socket == null || !_socket!.connected) return;
+    _socket?.emit('joinRoute', routeId);
+    debugPrint('🚪 Joined Socket Room: route_$routeId');
+  }
+
+  void leaveRoute(String routeId) {
+    if (_socket == null || !_socket!.connected) return;
+    _socket?.emit('leaveRoute', routeId);
+    debugPrint('🚪 Left Socket Room: route_$routeId');
   }
 
   void emitNotification(Map<String, dynamic> data) =>
