@@ -186,34 +186,36 @@ export default function RouteManager() {
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-gray-400 mb-1">Latitude</label>
+                    <label className="block text-gray-400 mb-1">Latitude (Optional)</label>
                     <input 
-                      type="number" 
+                      type="text" 
                       step="any"
-                      value={newStopLat}
+                      placeholder="Auto-resolved if empty"
+                      value={newStopLat || ''}
                       onChange={(e) => setNewStopLat(e.target.value)}
                       className="w-full glass-input px-3 py-2 rounded-xl"
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-400 mb-1">Longitude</label>
+                    <label className="block text-gray-400 mb-1">Longitude (Optional)</label>
                     <input 
-                      type="number" 
+                      type="text" 
                       step="any"
-                      value={newStopLng}
+                      placeholder="Auto-resolved if empty"
+                      value={newStopLng || ''}
                       onChange={(e) => setNewStopLng(e.target.value)}
                       className="w-full glass-input px-3 py-2 rounded-xl"
                     />
                   </div>
                 </div>
 
-                <p className="text-[10px] text-gray-500 italic">💡 Tip: Click anywhere on the map to automatically pin coordinates.</p>
+                <p className="text-[10px] text-cyan-400 font-medium">✨ Auto-Geocoding Enabled: Type a stop name like "Indrapuri" or "MP Nagar" and coordinates will resolve automatically!</p>
 
                 <button
                   onClick={handleAddStopToRoute}
-                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2.5 rounded-xl transition"
+                  className="w-full bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2.5 rounded-xl transition shadow-lg glow-cyan"
                 >
-                  Add Stop
+                  Add Stop to Route
                 </button>
               </div>
             </div>
