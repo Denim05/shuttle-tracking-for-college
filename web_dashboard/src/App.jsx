@@ -67,13 +67,6 @@ export default function App() {
     return <Login onLoginSuccess={(loggedInUser) => setUser(loggedInUser)} />;
   }
 
-  // Full-screen executive layout matching reference image when in Master Traffic view ('overview')
-  if (activeTab === 'overview') {
-    return (
-      <MasterTrafficDashboard activeTab={activeTab} setActiveTab={setActiveTab} />
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#060911] text-gray-100 flex flex-col font-sans">
       
@@ -105,7 +98,7 @@ export default function App() {
               transition={{ duration: 0.25 }}
             >
               {activeTab === 'overview' && (
-                <MasterTrafficDashboard activeTab={activeTab} setActiveTab={setActiveTab} />
+                <DashboardOverview setActiveTab={setActiveTab} />
               )}
 
               {activeTab === 'radar' && (
