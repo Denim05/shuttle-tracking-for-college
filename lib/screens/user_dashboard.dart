@@ -1817,7 +1817,7 @@ class _UserDashboardState extends State<UserDashboard> {
     final Map<String, dynamic> qrData = {
       'studentId': user?.id ?? 'STUDENT_001',
       'studentName': user?.username ?? 'Student',
-      'rollNumber': user?.rollNumber ?? user?.username ?? 'SISTEC-2026',
+      'rollNumber': user?.userId ?? user?.username ?? 'SISTEC-2026',
       'routeName': _selectedRoute?.name ?? 'Campus Express',
       'pickupPoint': user?.pickupPoint ?? 'Assigned Stop',
       'validUntil': '2026-06-30',
@@ -1913,13 +1913,13 @@ class _UserDashboardState extends State<UserDashboard> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                     decoration: BoxDecoration(
-                      color: Colors.emeraldAccent.withOpacity(0.2),
+                      color: Colors.greenAccent.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.emeraldAccent.withOpacity(0.4)),
+                      border: Border.all(color: Colors.greenAccent.withOpacity(0.4)),
                     ),
                     child: Text(
                       'ACTIVE',
-                      style: GoogleFonts.spaceGrotesk(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.emeraldAccent),
+                      style: GoogleFonts.spaceGrotesk(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.greenAccent),
                     ),
                   ),
                 ],
