@@ -191,9 +191,27 @@ class BusStore extends ChangeNotifier {
 
   void _initListeners() {
     _socketService.listenToBusUpdates(_onBusUpdate);
+    _socketService.listenToBusCreated(_onBusUpdate);
+    _socketService.listenToBusUpdated(_onBusUpdate);
+    _socketService.listenToBusDeleted(_onBusDeleted);
     _socketService.listenToBusApproach(_onBusApproach);
     _socketService.listenToNotifications(_onNotification);
     _socketService.listenToNotificationDeleted(_onNotificationDeleted);
+  }
+
+  void _onBusDeleted(dynamic data) {
+    try {
+      final Map<String, dynamic> json = data is Map<String, dynamic>
+          ? data
+          : Map<String, dynamic>.from(data as Map);
+      final String? id = json['id']?.toString() ?? json['_id']?.toString();
+      if (id != null) {
+        _buses.remove(id);
+        notifyListeners();
+      }
+    } catch (e) {
+      debugPrint('BusStore._onBusDeleted error: $e');
+    }
   }
 
   void _onNotificationDeleted(dynamic data) {

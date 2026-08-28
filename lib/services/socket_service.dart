@@ -209,6 +209,13 @@ class SocketService with ChangeNotifier {
   void listenToBusDelayed(Function(dynamic) callback) =>
       _on('busDelayed', callback);
 
+  void listenToBusCreated(Function(dynamic) callback) => _on('busCreated', callback);
+  void listenToBusUpdated(Function(dynamic) callback) => _on('busUpdated', callback);
+  void listenToBusDeleted(Function(dynamic) callback) => _on('busDeleted', callback);
+  void listenToRouteCreated(Function(dynamic) callback) => _on('routeCreated', callback);
+  void listenToRouteUpdated(Function(dynamic) callback) => _on('routeUpdated', callback);
+  void listenToRouteDeleted(Function(dynamic) callback) => _on('routeDeleted', callback);
+
   void off(String event) => _socket?.off(event);
 
   // ─── Emit Methods ────────────────────────────────────────────────────────
