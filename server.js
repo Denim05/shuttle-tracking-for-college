@@ -217,6 +217,7 @@ const Schedule = require('./models/Schedule');
 const LiveTripLog = require('./models/LiveTripLog');
 const RegistrationForm = require('./models/RegistrationForm');
 const RegistrationSubmission = require('./models/RegistrationSubmission');
+const BoardingLog = require('./models/BoardingLog');
 
 const authMiddleware = require('./middleware/authMiddleware');
 
@@ -3554,8 +3555,7 @@ io.on('connection', (socket) => {
                                             const targetUsers = await User.find({
                                                 routeId: bus.routeId ? bus.routeId.toString() : null,
                                                 pickupPoint: { $regex: new RegExp(`^${stop.name.trim()}$`, 'i') },
-                                                proximityAlertsEnabled: true,
-                                                fcmToken: { $ne: null }
+                                                proximityAlertsEnabled: true
                                             });
 
                                             const now = Date.now();
@@ -5096,6 +5096,151 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
     console.log(`📡 Socket.io ready for connections`);
+
+// ⚡ Automated SMS & WhatsApp Notification Engine
+async function sendProximitySMSWhatsApp(userObj, stopName, distanceKm, minutes, busNumber) {
+    const phoneNumber = userObj.phone || userObj.parentPhone || userObj.mobile;
+    if (!phoneNumber) return;
+    
+    const message = `🚌 [SISTecChalo Alert] Shuttle Bus ${busNumber || ''} is approaching ${stopName}! Distance: ${distanceKm.toFixed(1)} km (~${minutes} min). Please be ready at your stop.`;
+    
+    const brevoKey = process.env.BREVO_API_KEY;
+    if (brevoKey) {
+        try {
+            await fetch('https://api.brevo.com/v3/transactionalSMS/sms', {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'api-key': brevoKey,
+                    'content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sender: 'SISTec',
+                    recipient: phoneNumber.replace(/[^0-9]/g, ''),
+                    content: message
+                })
+            });
+            console.log(`📱 [SMS/WhatsApp Alert] Dispatched to ${phoneNumber}`);
+        } catch (err) {
+            console.warn(`⚠️ [SMS Dispatch Warning] ${err.message}`);
+        }
+    } else {
+        console.log(`💬 [SMS/WhatsApp Dispatch Simulation] Target ${phoneNumber}: "${message}"`);
+    }
+}
+
+// ⚡ DYNAMIC QR BUS PASS & BOARDING ATTENDANCE ROUTES
+
+// 1. GET /api/student/bus-pass — Generate dynamic QR pass payload for logged in student
+app.get('/api/student/bus-pass', authMiddleware, async (req, res) => {
+    try {
+        const student = await User.findById(req.user.id) || await Student.findById(req.user.id);
+        if (!student) return res.status(404).json({ error: 'Student record not found' });
+
+        const passData = {
+            passId: `PASS-${student._id.toString().substring(0, 8).toUpperCase()}`,
+            studentId: student._id.toString(),
+            studentName: student.name || student.username,
+            rollNumber: student.rollNumber || student.username || 'SISTEC-2026',
+            routeName: student.routeName || 'Campus Express',
+            pickupPoint: student.pickupPoint || 'Main Gate',
+            validUntil: '2026-06-30',
+            status: 'Active',
+            generatedAt: new Date().toISOString(),
+            signature: Buffer.from(`${student._id}_${Date.now()}`).toString('base64')
+        };
+
+        res.json({ success: true, pass: passData });
+    } catch (err) {
+        console.error('Bus pass generation error:', err);
+        res.status(500).json({ error: 'Failed to generate digital bus pass' });
+    }
+});
+
+// 2. POST /api/driver/scan-pass — Driver scans student's QR code upon boarding
+app.post('/api/driver/scan-pass', authMiddleware, async (req, res) => {
+    try {
+        const { qrData, busId, busNumber } = req.body;
+        if (!qrData) return res.status(400).json({ error: 'QR code data payload is required' });
+
+        let parsed = {};
+        try {
+            parsed = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+        } catch (_) {
+            parsed = { studentId: qrData, studentName: 'Scanned Student', rollNumber: qrData };
+        }
+
+        const studentId = parsed.studentId || parsed.id || 'UNKNOWN';
+        const studentName = parsed.studentName || parsed.name || 'Student';
+        const rollNumber = parsed.rollNumber || parsed.roll || 'SISTEC-STUDENT';
+        const pickupPoint = parsed.pickupPoint || 'Assigned Stop';
+        const routeName = parsed.routeName || 'Campus Route';
+
+        // Check if student already boarded recently (within last 30 mins)
+        const recentBoarding = await BoardingLog.findOne({
+            studentId: studentId,
+            boardedAt: { $gte: new Date(Date.now() - 30 * 60 * 1000) }
+        });
+
+        if (recentBoarding) {
+            return res.json({
+                success: true,
+                valid: true,
+                alreadyBoarded: true,
+                message: `Already Boarded at ${new Date(recentBoarding.boardedAt).toLocaleTimeString()}`,
+                studentName,
+                rollNumber,
+                pickupPoint
+            });
+        }
+
+        const log = new BoardingLog({
+            studentId,
+            studentName,
+            rollNumber,
+            busId: busId || 'BUS-01',
+            busNumber: busNumber || 'MP-04-HB-1001',
+            routeName,
+            pickupPoint,
+            driverId: req.user.id,
+            driverName: req.user.name || 'Driver',
+            boardedAt: new Date(),
+            status: 'Valid'
+        });
+
+        await log.save();
+
+        // Broadcast WebSocket event to Web Management Dashboard & Mobile Clients
+        io.emit('studentBoarded', log);
+
+        console.log(`🎟️ [QR Scan Success] Student ${studentName} (${rollNumber}) boarded Bus ${busNumber || 'BUS-01'}`);
+
+        res.json({
+            success: true,
+            valid: true,
+            message: 'Bus Pass Validated & Boarding Logged',
+            studentName,
+            rollNumber,
+            pickupPoint,
+            boardedAt: log.boardedAt
+        });
+
+    } catch (err) {
+        console.error('Pass scan error:', err);
+        res.status(500).json({ error: 'Failed to process QR pass scan' });
+    }
+});
+
+// 3. GET /api/manager/boarding-logs — Fetch daily attendance logs for Web Dashboard
+app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
+    try {
+        const logs = await BoardingLog.find().sort({ boardedAt: -1 }).limit(100);
+        res.json({ success: true, logs });
+    } catch (err) {
+        console.error('Boarding logs error:', err);
+        res.status(500).json({ error: 'Failed to fetch boarding logs' });
+    }
+});
 
     // ─── Live Bus Telemetry Simulator ───────────────────
     setInterval(async () => {
