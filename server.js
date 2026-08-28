@@ -2681,6 +2681,8 @@ app.post('/api/manager/buses', authMiddleware, async (req, res) => {
     try {
         const bus = new Bus(req.body);
         await bus.save();
+        io.emit('busCreated', bus);
+        io.emit('busUpdated', bus);
         broadcastStats();
         res.status(201).json(bus);
     } catch (_err) {
@@ -2692,6 +2694,7 @@ app.post('/api/manager/buses', authMiddleware, async (req, res) => {
 app.put('/api/manager/buses/:id', authMiddleware, async (req, res) => {
     try {
         const bus = await Bus.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        io.emit('busUpdated', bus);
         res.json(bus);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to update bus' });
@@ -2702,6 +2705,7 @@ app.put('/api/manager/buses/:id', authMiddleware, async (req, res) => {
 app.delete('/api/manager/buses/:id', authMiddleware, async (req, res) => {
     try {
         await Bus.findByIdAndDelete(req.params.id);
+        io.emit('busDeleted', { id: req.params.id });
         broadcastStats();
         res.json({ message: 'Bus deleted successfully' });
     } catch (_err) {
@@ -2738,6 +2742,8 @@ app.post('/api/manager/routes', authMiddleware, async (req, res) => {
 
         const route = new Route(routeData);
         await route.save();
+        io.emit('routeCreated', route);
+        io.emit('routeUpdated', route);
         broadcastStats();
         res.status(201).json(route);
     } catch (_err) {
@@ -2750,6 +2756,7 @@ app.post('/api/manager/routes', authMiddleware, async (req, res) => {
 app.delete('/api/manager/routes/:id', authMiddleware, async (req, res) => {
     try {
         await Route.findByIdAndDelete(req.params.id);
+        io.emit('routeDeleted', { id: req.params.id });
         broadcastStats();
         res.json({ message: 'Route deleted successfully' });
     } catch (_err) {
@@ -3741,6 +3748,7 @@ app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
             .map(s => ({ latitude: s.lat, longitude: s.lng }));
 
         await route.save();
+        io.emit('routeUpdated', route);
         res.json({ success: true, route });
     } catch (err) {
         console.error('Update route stops error:', err);
