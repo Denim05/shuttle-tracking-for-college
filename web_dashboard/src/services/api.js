@@ -71,4 +71,10 @@ export const reportAPI = {
   getBusSummary: (busId) => api.get(`/api/manager/reports/bus/${busId}/summary`),
 };
 
+export const fuelAPI = {
+  getFuelLogs: () => api.get('/api/manager/fuel-logs'),
+  getFuelAnalytics: () => api.get('/api/manager/fuel-analytics'),
+  logFuelRefill: (data) => api.post('/api/driver/fuel-log', data),
+};
+
 export default api;

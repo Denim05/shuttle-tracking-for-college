@@ -512,6 +512,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
                         Row(
                           children: [
                             IconButton(
+                              icon: const Icon(Icons.local_gas_station_rounded, color: Colors.amberAccent, size: 20),
+                              onPressed: () => _showFuelRefillDialog(context),
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.amberAccent.withOpacity(0.12),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton(
                               icon: const Icon(Icons.person_outline_rounded, color: Colors.white70, size: 20),
                               onPressed: () {
                                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
@@ -1145,6 +1154,160 @@ class _DriverDashboardState extends State<DriverDashboard> {
           ),
         );
       }),
+    );
+  }
+
+  void _showFuelRefillDialog(BuildContext context) {
+    final odoController = TextEditingController();
+    final litersController = TextEditingController();
+    final costController = TextEditingController();
+    final stationController = TextEditingController(text: 'Indian Oil');
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+          child: Container(
+            padding: const EdgeInsets.all(28),
+            decoration: BoxDecoration(
+              color: const Color(0xFF141221),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
+              border: Border.all(color: Colors.amberAccent.withValues(alpha: 0.3)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2)))),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    const Icon(Icons.local_gas_station_rounded, color: Colors.amberAccent, size: 24),
+                    const SizedBox(width: 10),
+                    Text('LOG FUEL REFILL', style: GoogleFonts.spaceGrotesk(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.5)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+
+                TextField(
+                  controller: odoController,
+                  keyboardType: TextInputType.number,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Current Odometer (km)',
+                    labelStyle: const TextStyle(color: Colors.white54),
+                    prefixIcon: const Icon(Icons.speed_rounded, color: Colors.amberAccent),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1B2E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: litersController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Fuel (Liters)',
+                          labelStyle: const TextStyle(color: Colors.white54),
+                          prefixIcon: const Icon(Icons.water_drop_rounded, color: Colors.cyanAccent),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1B2E),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: costController,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          labelText: 'Amount (₹)',
+                          labelStyle: const TextStyle(color: Colors.white54),
+                          prefixIcon: const Icon(Icons.currency_rupee_rounded, color: Colors.greenAccent),
+                          filled: true,
+                          fillColor: const Color(0xFF1E1B2E),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                TextField(
+                  controller: stationController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    labelText: 'Fuel Station Name',
+                    labelStyle: const TextStyle(color: Colors.white54),
+                    prefixIcon: const Icon(Icons.storefront_rounded, color: Colors.white70),
+                    filled: true,
+                    fillColor: const Color(0xFF1E1B2E),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: isSubmitting ? null : () async {
+                      if (odoController.text.isEmpty || litersController.text.isEmpty || costController.text.isEmpty) {
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all required fuel fields.')));
+                        return;
+                      }
+                      setModalState(() => isSubmitting = true);
+                      try {
+                        await _apiService.post('driver/fuel-log', body: {
+                          'busId': _selectedBusId ?? 'BUS_01',
+                          'odometerKm': double.parse(odoController.text),
+                          'liters': double.parse(litersController.text),
+                          'totalCost': double.parse(costController.text),
+                          'fuelStation': stationController.text
+                        });
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              backgroundColor: const Color(0xFF1B2E1E),
+                              content: Text('⛽ Fuel Refill Logged Successfully!', style: GoogleFonts.plusJakartaSans(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+                        }
+                      } finally {
+                        setModalState(() => isSubmitting = false);
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.amberAccent,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                    ),
+                    child: isSubmitting 
+                      ? const CircularProgressIndicator(color: Colors.black)
+                      : Text('SUBMIT REFILL LOG', style: GoogleFonts.spaceGrotesk(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black, letterSpacing: 1)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

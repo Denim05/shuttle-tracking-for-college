@@ -218,6 +218,7 @@ const LiveTripLog = require('./models/LiveTripLog');
 const RegistrationForm = require('./models/RegistrationForm');
 const RegistrationSubmission = require('./models/RegistrationSubmission');
 const BoardingLog = require('./models/BoardingLog');
+const FuelLog = require('./models/FuelLog');
 
 const authMiddleware = require('./middleware/authMiddleware');
 
@@ -5097,13 +5098,40 @@ server.listen(PORT, '0.0.0.0', () => {
     console.log(`\n🚀 Server running on port ${PORT}`);
     console.log(`📡 Socket.io ready for connections`);
 
-// ⚡ Automated SMS & WhatsApp Notification Engine
+// ⚡ Automated SMS & WhatsApp Geofence Proximity Notification Engine
 async function sendProximitySMSWhatsApp(userObj, stopName, distanceKm, minutes, busNumber) {
     const phoneNumber = userObj.phone || userObj.parentPhone || userObj.mobile;
     if (!phoneNumber) return;
     
-    const message = `🚌 [SISTecChalo Alert] Shuttle Bus ${busNumber || ''} is approaching ${stopName}! Distance: ${distanceKm.toFixed(1)} km (~${minutes} min). Please be ready at your stop.`;
+    const formattedPhone = phoneNumber.replace(/[^0-9]/g, '');
+    const whatsAppMessage = `🟢 *SISTecChalo WhatsApp Alert*\n\n🚌 Shuttle Bus *${busNumber || 'Express'}* is approaching your stop *${stopName}*!\n📍 *Distance*: ${distanceKm.toFixed(1)} km\n⏱️ *ETA*: ~${minutes} min\n\nPlease proceed to your pickup point safely.`;
     
+    // 1. WhatsApp Business Cloud API / Twilio WhatsApp Webhook
+    const whatsAppToken = process.env.WHATSAPP_API_TOKEN;
+    const whatsAppPhoneId = process.env.WHATSAPP_PHONE_ID;
+    
+    if (whatsAppToken && whatsAppPhoneId) {
+        try {
+            await fetch(`https://graph.facebook.com/v18.0/${whatsAppPhoneId}/messages`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${whatsAppToken}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messaging_product: 'whatsapp',
+                    to: formattedPhone.length === 10 ? `91${formattedPhone}` : formattedPhone,
+                    type: 'text',
+                    text: { body: whatsAppMessage }
+                })
+            });
+            console.log(`💬 [WhatsApp Cloud API] Arrival notification sent to +${formattedPhone}`);
+        } catch (err) {
+            console.warn(`⚠️ [WhatsApp API Warning] ${err.message}`);
+        }
+    }
+    
+    // 2. Brevo SMS / Twilio Fallback
     const brevoKey = process.env.BREVO_API_KEY;
     if (brevoKey) {
         try {
@@ -5116,18 +5144,119 @@ async function sendProximitySMSWhatsApp(userObj, stopName, distanceKm, minutes, 
                 },
                 body: JSON.stringify({
                     sender: 'SISTec',
-                    recipient: phoneNumber.replace(/[^0-9]/g, ''),
-                    content: message
+                    recipient: formattedPhone,
+                    content: `[SISTecChalo] Bus ${busNumber || ''} is approaching ${stopName}! Distance: ${distanceKm.toFixed(1)}km (~${minutes} min).`
                 })
             });
-            console.log(`📱 [SMS/WhatsApp Alert] Dispatched to ${phoneNumber}`);
+            console.log(`📱 [Transactional SMS] Proximity SMS dispatched to ${formattedPhone}`);
         } catch (err) {
-            console.warn(`⚠️ [SMS Dispatch Warning] ${err.message}`);
+            console.warn(`⚠️ [SMS Warning] ${err.message}`);
         }
     } else {
-        console.log(`💬 [SMS/WhatsApp Dispatch Simulation] Target ${phoneNumber}: "${message}"`);
+        console.log(`💬 [WhatsApp / SMS Alert Simulation] Target ${formattedPhone}: "${whatsAppMessage}"`);
     }
 }
+
+// ⚡ FUEL MILEAGE & VEHICLE COST MANAGER ROUTES
+
+// 1. POST /api/driver/fuel-log — Driver logs fuel refill entry
+app.post('/api/driver/fuel-log', authMiddleware, async (req, res) => {
+    try {
+        const { busId, busNumber, odometerKm, liters, totalCost, fuelStation, receiptImage } = req.body;
+        if (!busId || !odometerKm || !liters || !totalCost) {
+            return res.status(400).json({ error: 'busId, odometerKm, liters, and totalCost are required' });
+        }
+
+        const odo = Number(odometerKm);
+        const ltr = Number(liters);
+        const cost = Number(totalCost);
+
+        // Find previous fuel log for mileage calculation (km / liter)
+        const previousLog = await FuelLog.findOne({ busId }).sort({ refillDate: -1 });
+        let mileage = 0.0;
+        if (previousLog && odo > previousLog.odometerKm && ltr > 0) {
+            const distanceDriven = odo - previousLog.odometerKm;
+            mileage = Number((distanceDriven / ltr).toFixed(2));
+        } else {
+            mileage = 4.5; // Default average shuttle bus km/L
+        }
+
+        const log = new FuelLog({
+            busId,
+            busNumber: busNumber || 'MP-04-HB-1001',
+            driverId: req.user.id,
+            driverName: req.user.name || req.user.username || 'Driver',
+            odometerKm: odo,
+            liters: ltr,
+            totalCost: cost,
+            fuelPricePerLiter: Number((cost / ltr).toFixed(2)),
+            fuelStation: fuelStation || 'Indian Oil',
+            receiptImage: receiptImage || null,
+            mileageKmPerLiter: mileage,
+            refillDate: new Date()
+        });
+
+        await log.save();
+
+        // Broadcast fuel event over WebSockets
+        io.emit('fuelLogAdded', log);
+
+        console.log(`⛽ [Fuel Logged] Bus ${busNumber} — ${ltr}L @ ₹${cost} (Mileage: ${mileage} km/L)`);
+
+        res.json({
+            success: true,
+            message: 'Fuel refill logged successfully',
+            log
+        });
+    } catch (err) {
+        console.error('Fuel log error:', err);
+        res.status(500).json({ error: 'Failed to record fuel log' });
+    }
+});
+
+// 2. GET /api/manager/fuel-logs — Manager fetches refill history
+app.get('/api/manager/fuel-logs', authMiddleware, async (req, res) => {
+    try {
+        const logs = await FuelLog.find().sort({ refillDate: -1 }).limit(100);
+        res.json({ success: true, logs });
+    } catch (err) {
+        console.error('Fuel logs fetch error:', err);
+        res.status(500).json({ error: 'Failed to fetch fuel logs' });
+    }
+});
+
+// 3. GET /api/manager/fuel-analytics — Fleet fuel & mileage KPI summary
+app.get('/api/manager/fuel-analytics', authMiddleware, async (req, res) => {
+    try {
+        const logs = await FuelLog.find();
+        let totalSpend = 0;
+        let totalLiters = 0;
+        let validMileageCount = 0;
+        let mileageSum = 0;
+
+        logs.forEach(log => {
+            totalSpend += log.totalCost || 0;
+            totalLiters += log.liters || 0;
+            if (log.mileageKmPerLiter && log.mileageKmPerLiter > 0) {
+                mileageSum += log.mileageKmPerLiter;
+                validMileageCount++;
+            }
+        });
+
+        const avgMileage = validMileageCount > 0 ? Number((mileageSum / validMileageCount).toFixed(2)) : 4.5;
+
+        res.json({
+            success: true,
+            totalSpend,
+            totalLiters: Number(totalLiters.toFixed(1)),
+            avgMileage,
+            totalRefills: logs.length
+        });
+    } catch (err) {
+        console.error('Fuel analytics error:', err);
+        res.status(500).json({ error: 'Failed to compute fuel analytics' });
+    }
+});
 
 // ⚡ DYNAMIC QR BUS PASS & BOARDING ATTENDANCE ROUTES
 
