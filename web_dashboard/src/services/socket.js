@@ -52,6 +52,20 @@ class SocketService {
     this.socket.on('broadcastStats', callback);
   }
 
+  onRouteChanged(callback) {
+    if (!this.socket) this.connect();
+    this.socket.on('routeCreated', callback);
+    this.socket.on('routeUpdated', callback);
+    this.socket.on('routeDeleted', callback);
+  }
+
+  onBusChanged(callback) {
+    if (!this.socket) this.connect();
+    this.socket.on('busCreated', callback);
+    this.socket.on('busUpdated', callback);
+    this.socket.on('busDeleted', callback);
+  }
+
   off(eventName, callback) {
     if (this.socket) {
       this.socket.off(eventName, callback);
