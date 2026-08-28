@@ -234,6 +234,11 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
+// ⚡ 100% Free Keep-Alive Health Endpoint for Render & UptimeRobot
+app.get(['/api/health', '/health'], (req, res) => {
+    res.status(200).json({ status: 'ok', service: 'SISTecChalo Backend', uptime: Math.round(process.uptime()), timestamp: new Date().toISOString() });
+});
+
 // Rate Limiting
 app.set('trust proxy', 1); // Trust reverse proxy (e.g. Render) to get correct client IP
 const limiter = rateLimit({
@@ -5128,18 +5133,19 @@ server.listen(PORT, '0.0.0.0', () => {
         } catch (_) {}
     }, 4000);
 
-    if (process.env.NODE_ENV === 'production' || process.env.RENDER) {
-        const https = require('https');
-        const SELF_URL = process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
-        setInterval(() => {
-            https.get(`${SELF_URL}/`, (res) => {
-                console.log(`🏓 [Keep-Alive 100% Free] Ping OK — status: ${res.statusCode}`);
-            }).on('error', (err) => {
-                console.warn(`⚠️ [Keep-Alive] Ping error: ${err.message}`);
-            });
-        }, 10 * 60 * 1000); // Every 10 minutes
-        console.log(`⚡ [Render 100% Free Keep-Alive] Active every 10 min → ${SELF_URL}`);
-    }
+    // ⚡ RENDER 100% FREE KEEP-ALIVE ENGINE (Prevents 15-min idle sleep)
+    const SELF_URL = process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
+    const httpProtocol = SELF_URL.startsWith('https') ? require('https') : require('http');
+
+    setInterval(() => {
+        httpProtocol.get(`${SELF_URL}/api/health`, (res) => {
+            console.log(`🏓 [Render Free Keep-Alive 24/7] Self-Ping OK — status: ${res.statusCode}`);
+        }).on('error', (err) => {
+            console.warn(`⚠️ [Render Free Keep-Alive] Self-Ping warn: ${err.message}`);
+        });
+    }, 8 * 60 * 1000); // Ping every 8 minutes (Render sleep threshold is 15 minutes)
+
+    console.log(`⚡ [Render 100% Free Keep-Alive] Active every 8 min → ${SELF_URL}/api/health`);
 });
 
 
