@@ -57,6 +57,7 @@ export const registrationAPI = {
   unapprove: (id) => api.put(`/api/manager/registrations/${id}/unapprove`),
   reject: (id, note) => api.put(`/api/manager/registrations/${id}/reject`, { note }),
   bulkApprove: (submissionIds) => api.post('/api/manager/registrations/bulk-approve', { submissionIds }),
+  getBoardingLogs: () => api.get('/api/manager/boarding-logs'),
 };
 
 export const notificationAPI = {

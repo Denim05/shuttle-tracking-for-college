@@ -16,6 +16,8 @@ import '../models/bus_model.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+import 'dart:convert';
 
 import 'fleet_radar_screen.dart';
 import 'schedule_screen.dart';
@@ -570,6 +572,10 @@ class _UserDashboardState extends State<UserDashboard> {
                    Text('Ready for Departure', style: GoogleFonts.plusJakartaSans(fontSize: 28, fontWeight: FontWeight.w900, color: Colors.white)),
                    Text('Select a route to track your transit.', style: GoogleFonts.plusJakartaSans(fontSize: 13, color: Colors.white38, height: 1.5)),
                    const SizedBox(height: 40),
+                   _buildActionCard('Digital Bus Pass', 'Scan QR code upon boarding shuttle', Icons.qr_code_2_rounded, () {
+                     _showDigitalBusPass(context, auth);
+                   }),
+                   const SizedBox(height: 16),
                    _buildActionCard('Active Fleet Radar', 'View all bus locations', Icons.radar_rounded, () {
                      Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetRadarScreen()));
                    }),
@@ -1803,6 +1809,126 @@ class _UserDashboardState extends State<UserDashboard> {
       baseColor: Colors.white.withOpacity(0.05),
       highlightColor: Colors.white.withOpacity(0.1),
       child: Column(children: List.generate(4, (i) => Container(height: 100, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))))),
+    );
+  }
+
+  void _showDigitalBusPass(BuildContext context, AuthService auth) {
+    final user = auth.currentUser;
+    final Map<String, dynamic> qrData = {
+      'studentId': user?.id ?? 'STUDENT_001',
+      'studentName': user?.username ?? 'Student',
+      'rollNumber': user?.rollNumber ?? user?.username ?? 'SISTEC-2026',
+      'routeName': _selectedRoute?.name ?? 'Campus Express',
+      'pickupPoint': user?.pickupPoint ?? 'Assigned Stop',
+      'validUntil': '2026-06-30',
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(28),
+        decoration: BoxDecoration(
+          color: const Color(0xFF141824),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
+          border: Border.all(color: Colors.cyanAccent.withOpacity(0.2)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.8), blurRadius: 40)],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.verified_rounded, color: Colors.cyanAccent, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  'DIGITAL BUS PASS',
+                  style: GoogleFonts.spaceGrotesk(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 2),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Scan upon boarding shuttle',
+              style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.white54),
+            ),
+            const SizedBox(height: 24),
+
+            // Dynamic QR Card
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [
+                  BoxShadow(color: Colors.cyanAccent.withOpacity(0.3), blurRadius: 20),
+                ],
+              ),
+              child: QrImageView(
+                data: jsonEncode(qrData),
+                version: QrVersions.auto,
+                size: 200.0,
+                eyeStyle: const QrEyeStyle(eyeShape: QrEyeShape.square, color: Color(0xFF0F172A)),
+                dataModuleStyle: const QrDataModuleStyle(dataModuleShape: QrDataModuleShape.square, color: Color(0xFF0F172A)),
+              ),
+            ),
+
+            const SizedBox(height: 24),
+            
+            // Student Info Badge
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E293B),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: Colors.cyanAccent.withOpacity(0.2),
+                    child: const Icon(Icons.person_rounded, color: Colors.cyanAccent),
+                  ),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          user?.username ?? 'Student Name',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
+                        Text(
+                          'Route: ${_selectedRoute?.name ?? "Campus Shuttle"}',
+                          style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.cyanAccent),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.emeraldAccent.withOpacity(0.2),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.emeraldAccent.withOpacity(0.4)),
+                    ),
+                    child: Text(
+                      'ACTIVE',
+                      style: GoogleFonts.spaceGrotesk(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.emeraldAccent),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
     );
   }
 }
