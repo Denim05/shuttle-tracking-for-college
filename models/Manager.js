@@ -8,6 +8,9 @@ const managerSchema = new mongoose.Schema({
   department: String,
   // Managers can grant specific rights or manage specific areas
   canManage: { type: [String], default: ['students', 'drivers', 'buses'] }, 
+  mustChangePassword: { type: Boolean, default: true },
+  loginAttempts: { type: Number, default: 0 },
+  lockUntil: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now }
 });
 

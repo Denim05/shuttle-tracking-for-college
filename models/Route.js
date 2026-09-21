@@ -10,7 +10,8 @@ const routeSchema = new mongoose.Schema({
   stops: [{
     name: String,
     lat: Number,
-    lng: Number
+    lng: Number,
+    time: String
   }]
 });
 

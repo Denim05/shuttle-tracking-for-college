@@ -20,6 +20,10 @@ const registrationSubmissionSchema = new mongoose.Schema({
   generatedUsername: { type: String },
   generatedPassword: { type: String }, // plain text, shown once to manager
   createdUserId: { type: String }, // the _id of the User document created on approval
+  // Email dispatch status
+  emailSent: { type: Boolean, default: false },
+  emailSentAt: { type: Date },
+  emailError: { type: String },
   submittedAt: { type: Date, default: Date.now },
   reviewedAt:  { type: Date },
 });

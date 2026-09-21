@@ -1,0 +1,1892 @@
+[
+  {
+    "busNo": "01",
+    "vehicleNo": "MP04 PA 3496",
+    "routeName": "MP04 PA 3496                              Gandinagar Route",
+    "driverName": "Ghanshyam  Nagar",
+    "driverPhone": "9770534112",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Gandhi Nagar",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Asharam Bapu Square",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Bhaskar Colony",
+        "time": "06:45 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Data Colony",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Panchwati",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Halalpur ( Bus Stand )",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Bairahgarh Police Station",
+        "time": "07:05 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Chirayu Hospital",
+        "time": "07:10 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Lalghati",
+        "time": "07:20 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Koh-E-Fiza",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Satae Bank Square",
+        "time": "07:27 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Royal Market",
+        "time": "07:29 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Imami gate",
+        "time": "07:31 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Peer Gate",
+        "time": "07:33 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Moti Masjid",
+        "time": "07:35 AM"
+      },
+      {
+        "sNo": 16,
+        "name": "Kamla Park",
+        "time": "07:37 AM"
+      },
+      {
+        "sNo": 17,
+        "name": "Poly Technic",
+        "time": "07:42 AM"
+      },
+      {
+        "sNo": 18,
+        "name": "Roshanpura",
+        "time": "07:45 AM"
+      },
+      {
+        "sNo": 19,
+        "name": "Jawahar Chowk",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 20,
+        "name": "Bharat Mata Square",
+        "time": "07:52 AM"
+      },
+      {
+        "sNo": 21,
+        "name": "23 Bataliyan",
+        "time": "07:55 AM"
+      },
+      {
+        "sNo": 22,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "02",
+    "vehicleNo": "MP04 PA 3498",
+    "routeName": "MP04 PA 3498                                Ashoka Gardan Route",
+    "driverName": "Rahul Verma",
+    "driverPhone": "9981838418",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ashoka Garden PanikiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Bogda Pull",
+        "time": "08:20 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Jinsi Square",
+        "time": "08:25 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "RoshanPura",
+        "time": "08:30 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Dipo",
+        "time": "08:35 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "03",
+    "vehicleNo": "MP04 PA 3498",
+    "routeName": "MP04 PA 3498                                Ashoka Gardan Route",
+    "driverName": "Praveen Pal",
+    "driverPhone": "7692879431",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "DwarkaDham SPS Campus",
+        "time": "06:30 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Lambakheda",
+        "time": "06:45 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Karond",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Bhanpur",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "ChholaMandir",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Best Prize",
+        "time": "07:06 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Kalyan Nagar",
+        "time": "07:07 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Shiv Mandir",
+        "time": "07:08 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Karond (Sabzi Mandi )",
+        "time": "07:10 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "DIG Bungla",
+        "time": "07:12 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Nadra Bus Stand",
+        "time": "07:17 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Bharat Talkies",
+        "time": "07:22 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Jahangirabad",
+        "time": "07:27 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "PHQ",
+        "time": "07:29 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Roshanpura",
+        "time": "07:43 AM"
+      },
+      {
+        "sNo": 16,
+        "name": "Bharat Mata Square",
+        "time": "07:47 AM"
+      },
+      {
+        "sNo": 17,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "04",
+    "vehicleNo": "MP04 PA 3504",
+    "routeName": "Kolar Road",
+    "driverName": "Mukesh Shisodiya",
+    "driverPhone": "8251047765",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "DPS School",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Bairagarh",
+        "time": "06:37 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "610 Kolar",
+        "time": "06:43 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Babadiya Kala",
+        "time": "06:53 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Aura Moll",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Shivay Complex",
+        "time": "07:03 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "10 No Shop",
+        "time": "07:10 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Arera Petrol Pump",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Patrakar Colony",
+        "time": "07:17 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Pancheel Nagar",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Vaishali Nagar",
+        "time": "07:30 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Nehru Nagar",
+        "time": "07:35 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "05",
+    "vehicleNo": "MP04 PA 3510",
+    "routeName": "MP04 PA 3510                         Ashoka Garden  Route",
+    "driverName": "Babloo  Meena",
+    "driverPhone": "8959307531",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ashoka Garden Pani kiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "06",
+    "vehicleNo": "MP04 PA 3510",
+    "routeName": "MP04 PA 3510                         Ashoka Garden  Route",
+    "driverName": "Raj Kumar",
+    "driverPhone": "8989878725",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Alipur",
+        "time": "06:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Old Bus Stand",
+        "time": "06:06 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Bhopal Naka",
+        "time": "06:07 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Bajaranga Colony",
+        "time": "06:08 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Colony Square",
+        "time": "06:09 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Banjari Mata",
+        "time": "06:10 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Kachanariya jod",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Kotri",
+        "time": "06:38 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Jat khedi jod",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Amlaha",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Bhadakhedi jod",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Goodwela",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Jhagriya By-pass Sehore",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Jhagriya",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "07",
+    "vehicleNo": "MP04 PA 3510",
+    "routeName": "MP04 PA 3510                         Ashoka Garden  Route",
+    "driverName": "Virendra",
+    "driverPhone": "7770873503",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Gehnu Kheda",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "D-Mart",
+        "time": "06:43 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "LalitaNagar",
+        "time": "06:44 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "NayaPura",
+        "time": "06:51 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Mandakini",
+        "time": "06:56 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "J.K.Hospital",
+        "time": "07:03 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Bansal Hospital",
+        "time": "07:12 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "10 Number",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Arera Petrol pump",
+        "time": "07:27 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "KolarTiraha",
+        "time": "07:30 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Punchsil Nagar",
+        "time": "07:33 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Vaishali Nagrar",
+        "time": "07:36 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Neheru Nagar Chauraha",
+        "time": "07:40 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Neheru Nagar Naya Basera",
+        "time": "07:45 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Dipo-100 daile Office",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 16,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "09",
+    "vehicleNo": "MP04 PA 3510",
+    "routeName": "MP04 PA 3510                         Ashoka Garden  Route",
+    "driverName": "Satish Tomar",
+    "driverPhone": "9111645969",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Satlapur",
+        "time": "06:15 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Vardhman",
+        "time": "06:25 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sarakiya",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "HEG/Mandideep",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Samardha",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Radhapuram",
+        "time": "06:56 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Pal Dhaba",
+        "time": "06:58 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Indus Town",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "11 Meal",
+        "time": "07:02 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Misrod",
+        "time": "07:05 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Ashima Mall",
+        "time": "07:10 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Danish Nagar",
+        "time": "07:12 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Bagsawaniya  Thana",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "SP",
+        "time": "07:17 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Narayan  Nagar",
+        "time": "07:20 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Ganesh  Mandir",
+        "time": "07:21 AM"
+      },
+      {
+        "sNo": 16,
+        "name": "BJP",
+        "time": "07:22 AM"
+      },
+      {
+        "sNo": 17,
+        "name": "Nutan  College",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 18,
+        "name": "Durga Petrol Pump",
+        "time": "07:27 AM"
+      },
+      {
+        "sNo": 19,
+        "name": "Narmada Bhawan",
+        "time": "07:30 AM"
+      },
+      {
+        "sNo": 20,
+        "name": "Panchsil  Nagar",
+        "time": "07:32 AM"
+      },
+      {
+        "sNo": 21,
+        "name": "Mata Mandir",
+        "time": "07:33 AM"
+      },
+      {
+        "sNo": 22,
+        "name": "PNT",
+        "time": "07:35 AM"
+      },
+      {
+        "sNo": 23,
+        "name": "Neheru Nagar  New Basti",
+        "time": "07:36 AM"
+      },
+      {
+        "sNo": 24,
+        "name": "Neheru  Nagar  Square",
+        "time": "07:40 AM"
+      },
+      {
+        "sNo": 25,
+        "name": "RatibadCampus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "10",
+    "vehicleNo": "MP04 PA 3523",
+    "routeName": "MP04 PA 3523                                                  Ashoka Gardan Route",
+    "driverName": "Devendra Parmar",
+    "driverPhone": "9111997080",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ashoka Garden PanikiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Bogda Pull",
+        "time": "08:20 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Jinsi Square",
+        "time": "08:25 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "RoshanPura",
+        "time": "08:30 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Dipo",
+        "time": "08:35 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "11",
+    "vehicleNo": "MP04 PA 3523",
+    "routeName": "MP04 PA 3523                                                  Ashoka Gardan Route",
+    "driverName": "Arjun Maran",
+    "driverPhone": "8964003485",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "SOS",
+        "time": "06:45 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Transport Nagar",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Patel Nagar",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Anand Nagar ( Police Choki )",
+        "time": "06:57 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ratna Giri Chourha",
+        "time": "06:59 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Viranda Van Nagar",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Tanatan Daba",
+        "time": "07:01 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Narela Chouraha",
+        "time": "07:02 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Ayodhya Nagar Square",
+        "time": "07:03 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Piplani Chouraha",
+        "time": "07:10 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Indrapuri",
+        "time": "07:11 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "ITI",
+        "time": "07:13 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Bijli Gate",
+        "time": "07:14 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Shubhash Nagar",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Vallab Bhavan",
+        "time": "07:20 AM"
+      },
+      {
+        "sNo": 16,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 1,
+        "name": "Neelbad",
+        "time": "08:00 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "13",
+    "vehicleNo": "MP04 PA 2288",
+    "routeName": "MP04 PA 2288                          Sehore Route",
+    "driverName": "Mukesh Verma",
+    "driverPhone": "9303557964",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bishan Khedi",
+        "time": "05:45 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Bhav Khedi",
+        "time": "05:55 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Khakar Kheda",
+        "time": "06:05 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Daite Colony",
+        "time": "06:15 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Kodiya",
+        "time": "06:30 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Ganesh Mandir",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Moti Baba Mandir",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Reliance Petrol Pump",
+        "time": "06:45 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Kohli Pura",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Ganga Ashram",
+        "time": "06:52 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Bhopal Naka",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Chanyak Puri",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Chanyak Puri (Vishal Mega Mart )",
+        "time": "07:05 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "14",
+    "vehicleNo": "MP04 PA 2290",
+    "routeName": "MP04 PA 2290                                  Fanda Route",
+    "driverName": "Sunil Kumar Prajapati",
+    "driverPhone": "9977246988",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Fanda",
+        "time": "06:25 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pipaliya",
+        "time": "06:30 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Padli Jod",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Kolas",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Naya Gano",
+        "time": "07:05 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Sastakhedi",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Tilakhedi",
+        "time": "07:20 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Deheriya",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Mundla",
+        "time": "07:27 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Narela",
+        "time": "07:30 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Khokariya",
+        "time": "07:35 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Kodiya",
+        "time": "07:40 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Kajlash",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Nanni",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "15",
+    "vehicleNo": "MP04 PA 2289",
+    "routeName": "MP04 PA 2289                                    Icchawar Route",
+    "driverName": "Krishna",
+    "driverPhone": "9977606876",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Diwadiya",
+        "time": "06:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Kushal Pura",
+        "time": "06:12 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Nayapura",
+        "time": "06:17 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Siradi",
+        "time": "06:30 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ichhawar ( Mandi )",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Icchawar ( Bus Stand )",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Icchawar ( Thana )",
+        "time": "06:42 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Kankadkheda",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Hasnabad",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Diet  colony",
+        "time": "07:05 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Indra Nagar",
+        "time": "07:10 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Khurchani",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "16",
+    "vehicleNo": "MP04 PA 2515",
+    "routeName": "MP04 PA 2515                                Ashta Route",
+    "driverName": "Kamlesh Nath",
+    "driverPhone": "9074915343",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Alipur",
+        "time": "06:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Old Bus Stand",
+        "time": "06:06 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Bhopal Naka",
+        "time": "06:07 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Bajaranga Colony",
+        "time": "06:08 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Colony Square",
+        "time": "06:09 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Banjari Mata",
+        "time": "06:10 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Kachanariya jod",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Kotri",
+        "time": "06:38 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Jat khedi jod",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Amlaha",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Bhadakhedi jod",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Goodwela",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Jhagriya By-pass Sehore",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Jhagriya",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "17",
+    "vehicleNo": "MP04 PA 3409",
+    "routeName": "MP04 PA 3409                             Ashoka Gardan Route",
+    "driverName": "Rijwan Ali",
+    "driverPhone": "9630580873",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ashoka Garden PanikiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "18",
+    "vehicleNo": "MP04 PA 3428",
+    "routeName": "MP04 PA 3428                                Ashoka Garden  Route",
+    "driverName": "Bagvan Singh Parmar",
+    "driverPhone": "7869117589",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ashoka Garden PanikiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "19",
+    "vehicleNo": "MP04 PA 3428",
+    "routeName": "MP04 PA 3428                                Ashoka Garden  Route",
+    "driverName": "Jitendra Prajapati",
+    "driverPhone": "8965815880",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Dodi",
+        "time": "06:20 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Tumda",
+        "time": "06:30 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sonkach",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Bakaniya",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Barkheda Salam",
+        "time": "07:25 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Bhouri",
+        "time": "07:30 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Kolu Kedi",
+        "time": "07:40 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Khajuri",
+        "time": "07:45 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Ithkedi",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Lakhapur",
+        "time": "07:52 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Mugaliya Chap",
+        "time": "07:55 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Kajlash",
+        "time": "08:00 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Kodiya",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Ratibad  Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "20",
+    "vehicleNo": "MP04 ZG 1196",
+    "routeName": "MP04 ZG 1196                              Ashoka Garden  Route",
+    "driverName": "Parshram",
+    "driverPhone": "7880131602",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ashoka Garden PanikiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "21",
+    "vehicleNo": "MP04 ZL 9712",
+    "routeName": "MP04 ZL 9712                                   Neelbad Route",
+    "driverName": "Ahad Ali",
+    "driverPhone": "9754654410",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Neelbad",
+        "time": "08:00 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "22",
+    "vehicleNo": "MP04 ZL 9712",
+    "routeName": "MP04 ZL 9712                                   Neelbad Route",
+    "driverName": "Kamlesh  Sing Gurjar",
+    "driverPhone": "9926999184",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Ashoka Garden PanikiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "23",
+    "vehicleNo": "MP04 ZL 9712",
+    "routeName": "MP04 ZL 9712                                   Neelbad Route",
+    "driverName": "Vinod Kumar",
+    "driverPhone": "8120270320",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Katara Hospital",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Katara Dastoor Hostel",
+        "time": "06:47 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Lahar Pur",
+        "time": "06:51 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Bagsewaniya Ojes Hospital",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Saket Nagar",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "AIIMS",
+        "time": "07:02 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Alkapuri",
+        "time": "07:05 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "DurgaMandir",
+        "time": "07:06 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Barkheda Pathani",
+        "time": "07:10 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Awadhpuri Thana",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Aadhar Sila Chaowk",
+        "time": "07:17 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Durga Chowk",
+        "time": "07:18 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Awadhpuri Tiraha",
+        "time": "07:20 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "Mahatma Gandhi Chauraha",
+        "time": "07:23 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Red Cross",
+        "time": "07:40 AM"
+      },
+      {
+        "sNo": 16,
+        "name": "Panchsil Nagar",
+        "time": "07:42 AM"
+      },
+      {
+        "sNo": 17,
+        "name": "Ratibad-Campus",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 1,
+        "name": "Dwarka Nagar",
+        "time": "08:00 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Bhopal Railway station Plat form-1",
+        "time": "08:05 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Pushpa Nagar",
+        "time": "08:07 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Sangam Tent House",
+        "time": "08:08 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "80-feet Road",
+        "time": "08:10 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Ashoka Garden PanikiTanki",
+        "time": "08:15 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Prabhat Square",
+        "time": "08:17 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Jinsi Chouraha",
+        "time": "09:15 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Ratibad Campus",
+        "time": "09:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "T-4",
+    "vehicleNo": "MP04 PA 4443",
+    "routeName": "MP04 PA 4443                          Rehti Route",
+    "driverName": "Sadik Shah",
+    "driverPhone": "9993987074",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Narsulla ganj",
+        "time": "05:00 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Aagra",
+        "time": "05:30 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Satrana",
+        "time": "05:45 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Ramgada",
+        "time": "05:50 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Soyat",
+        "time": "05:55 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Nipaniya",
+        "time": "06:05 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Kalvana",
+        "time": "06:15 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Bor Ghati",
+        "time": "06:20 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Kakerda",
+        "time": "06:30 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "kharee",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Naya Gaon",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Rehti",
+        "time": "06:45 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Jamuniya",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 14,
+        "name": "NadiyaKheda",
+        "time": "07:05 AM"
+      },
+      {
+        "sNo": 15,
+        "name": "Chakaldi",
+        "time": "07:15 AM"
+      },
+      {
+        "sNo": 16,
+        "name": "Kotra",
+        "time": "07:30 AM"
+      },
+      {
+        "sNo": 17,
+        "name": "Amdo",
+        "time": "07:50 AM"
+      },
+      {
+        "sNo": 18,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "T-5",
+    "vehicleNo": "MP04 PA 4443",
+    "routeName": "MP04 PA 4443                          Rehti Route",
+    "driverName": "Shubam Giri",
+    "driverPhone": "7354406323",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Mana Gaon",
+        "time": "05:30 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "St Jone School",
+        "time": "05:40 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Babai Bus Station",
+        "time": "05:45 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Nashirabad Chouraha",
+        "time": "05:50 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Resal Pur",
+        "time": "06:25 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Rohna Gaon",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Aandhyari",
+        "time": "06:45 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Bhopal Chouraha",
+        "time": "06:50 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Budhni Pull",
+        "time": "07:00 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "T-6",
+    "vehicleNo": "MP04 PA 4446",
+    "routeName": "MP04 PA 4446                          Rehti  Route",
+    "driverName": "Anand Gour",
+    "driverPhone": "7697227699",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Kharkedi",
+        "time": "05:00 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Kajlash",
+        "time": "05:05 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Hatnapur",
+        "time": "05:20 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Mogra",
+        "time": "05:30 AM"
+      },
+      {
+        "sNo": 5,
+        "name": "Bayan",
+        "time": "05:55 AM"
+      },
+      {
+        "sNo": 6,
+        "name": "Rehti",
+        "time": "06:15 AM"
+      },
+      {
+        "sNo": 7,
+        "name": "Malimaya",
+        "time": "06:20 AM"
+      },
+      {
+        "sNo": 8,
+        "name": "Anup Nagar",
+        "time": "06:30 AM"
+      },
+      {
+        "sNo": 9,
+        "name": "Bordhi",
+        "time": "06:35 AM"
+      },
+      {
+        "sNo": 10,
+        "name": "Bhadkul",
+        "time": "06:40 AM"
+      },
+      {
+        "sNo": 11,
+        "name": "Bardha",
+        "time": "06:45 AM"
+      },
+      {
+        "sNo": 12,
+        "name": "Amdo",
+        "time": "06:55 AM"
+      },
+      {
+        "sNo": 13,
+        "name": "Ratibad Campus",
+        "time": "08:15 AM"
+      }
+    ]
+  },
+  {
+    "busNo": "ECCO (Pvt)",
+    "vehicleNo": "MP04 ZP 3789",
+    "routeName": "MP04 ZP 3789                        Icchawar  Route",
+    "driverName": "Anil",
+    "driverPhone": "8319572560",
+    "incharge": "",
+    "stops": [
+      {
+        "sNo": 1,
+        "name": "Brajesh Nagar",
+        "time": "05:45 AM"
+      },
+      {
+        "sNo": 2,
+        "name": "Keri",
+        "time": "06:05 AM"
+      },
+      {
+        "sNo": 3,
+        "name": "Amlaha",
+        "time": "06:20 AM"
+      },
+      {
+        "sNo": 4,
+        "name": "Icchawar",
+        "time": "06:40 AM"
+      }
+    ]
+  }
+]

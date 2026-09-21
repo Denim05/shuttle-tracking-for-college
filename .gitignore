@@ -1,3 +1,10 @@
 node_modules/
 .env
 *.log
+*.json.json
+*credentials*.json
+*service-account*.json
+firebase-service-account*.json
+google_sheets_credentials*.json
+google_credentials*.json
+service_account*.json
