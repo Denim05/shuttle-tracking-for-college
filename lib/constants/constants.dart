@@ -1,7 +1,7 @@
 class AppConstants {
   // --- CONFIGURATION ---
-  // Set to true when deploying the app, false for local testing
-  static const bool isProduction = false; // ← Connected to Local Server (192.168.1.6:5000)
+  // Set to true to connect directly to the 24/7 Render Cloud Server
+  static const bool isProduction = true; // ← Connected to Render Cloud Server
 
   // Local Machine IP for testing with physical devices
   // Run `ipconfig` and use the WiFi IPv4 address

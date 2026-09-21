@@ -77,7 +77,9 @@ class AuthService with ChangeNotifier {
       _isAuthenticating = false;
       notifyListeners();
       if (e is TimeoutException) {
-        throw Exception('Connection timed out. Ensure your phone and laptop are on the same Wi-Fi and the IP in constants.dart is correct.');
+        throw Exception(AppConstants.isProduction
+            ? 'Connection timed out. Please check your internet connection or try again in a moment.'
+            : 'Connection timed out. Ensure your phone and laptop are on the same Wi-Fi and the IP in constants.dart is correct.');
       }
       rethrow;
     }
