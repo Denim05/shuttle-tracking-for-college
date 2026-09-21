@@ -395,25 +395,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     onTap: () => showDeveloperCreditsModal(context),
                     borderRadius: BorderRadius.circular(20),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        alignment: WrapAlignment.center,
+                        spacing: 6,
+                        runSpacing: 4,
                         children: [
-                          const Icon(Icons.rocket_launch_rounded, color: Color(0xFF60A5FA), size: 14),
-                          const SizedBox(width: 8),
-                          Text(
-                            'Engineered by ',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white38,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
+                          const Icon(Icons.rocket_launch_rounded, color: Color(0xFF60A5FA), size: 13),
                           Text(
                             'Team Rafftar',
                             style: GoogleFonts.plusJakartaSans(
@@ -422,9 +416,15 @@ class _LoginScreenState extends State<LoginScreen> {
                               fontWeight: FontWeight.w700,
                             ),
                           ),
-                          const SizedBox(width: 4),
                           Text(
-                            '• Lead: Denim Hajare',
+                            '•',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white30,
+                              fontSize: 11,
+                            ),
+                          ),
+                          Text(
+                            'Lead: Denim Hajare',
                             style: GoogleFonts.plusJakartaSans(
                               color: const Color(0xFFFBBF24),
                               fontSize: 11,
