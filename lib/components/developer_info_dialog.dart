@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import '../theme/app_theme.dart';
 
 /// Shows the Developer & Team Credits Modal Bottom Sheet with rich glassmorphic aesthetics.
 void showDeveloperCreditsModal(BuildContext context) {
@@ -30,29 +31,15 @@ class DeveloperCreditsContent extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const themeBg = Color(0xFF0C162C);
-    final cardBorder = Colors.white.withValues(alpha: 0.12);
-
     return Container(
       constraints: const BoxConstraints(maxWidth: 480),
       decoration: BoxDecoration(
-        color: themeBg,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: cardBorder, width: 1.2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.6),
-            blurRadius: 30,
-            offset: const Offset(0, 10),
-          ),
-          BoxShadow(
-            color: const Color(0xFF2563EB).withValues(alpha: 0.15),
-            blurRadius: 40,
-            spreadRadius: -10,
-          ),
-        ],
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08), width: 1.0),
+        boxShadow: AppShadows.card,
       ),
-      padding: const EdgeInsets.fromLTRB(24, 20, 24, 28),
+      padding: const EdgeInsets.fromLTRB(22, 18, 22, 24),
       child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -60,9 +47,9 @@ class DeveloperCreditsContent extends StatelessWidget {
           children: [
             if (!isDialog)
               Container(
-                width: 40,
+                width: 36,
                 height: 4,
-                margin: const EdgeInsets.only(bottom: 20),
+                margin: const EdgeInsets.only(bottom: 16),
                 decoration: BoxDecoration(
                   color: Colors.white24,
                   borderRadius: BorderRadius.circular(2),
@@ -71,30 +58,21 @@ class DeveloperCreditsContent extends StatelessWidget {
 
             // App Icon & Brand Badge
             Container(
-              padding: const EdgeInsets.all(16),
+              width: 52,
+              height: 52,
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF2563EB), Color(0xFF0EA5E9)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: const Color(0xFF2563EB).withValues(alpha: 0.4),
-                    blurRadius: 20,
-                    offset: const Offset(0, 6),
-                  ),
-                ],
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
               ),
               child: const Icon(
                 Icons.directions_bus_rounded,
-                color: Colors.white,
-                size: 32,
+                color: AppColors.primaryLight,
+                size: 26,
               ),
-            ).animate().scale(duration: 400.ms, curve: Curves.easeOutBack),
+            ).animate().scale(duration: 300.ms, curve: Curves.easeOutBack),
 
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
 
             // App Name
             Row(
@@ -102,46 +80,46 @@ class DeveloperCreditsContent extends StatelessWidget {
               children: [
                 Text(
                   'SISTec',
-                  style: GoogleFonts.outfit(
+                  style: GoogleFonts.plusJakartaSans(
                     color: Colors.white,
-                    fontSize: 24,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                     letterSpacing: -0.5,
                   ),
                 ),
                 Text(
-                  ' Chalo',
-                  style: GoogleFonts.outfit(
-                    color: const Color(0xFF38BDF8),
-                    fontSize: 24,
+                  'Chalo',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.primaryLight,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                     letterSpacing: -0.5,
                   ),
                 ),
               ],
-            ).animate().fadeIn(delay: 100.ms).slideY(begin: 0.2, end: 0),
+            ).animate().fadeIn(delay: 100.ms),
 
             const SizedBox(height: 4),
 
             Text(
               'Sagar Group of Institutions • Bhopal',
               style: GoogleFonts.plusJakartaSans(
-                color: Colors.white60,
-                fontSize: 12,
+                color: AppColors.textMuted,
+                fontSize: 11.5,
                 fontWeight: FontWeight.w600,
               ),
             ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 18),
 
             // ── Primary Developer & Team Highlights Card ─────────────────────
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(18),
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
               ),
               child: Column(
                 children: [
@@ -151,14 +129,13 @@ class DeveloperCreditsContent extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                          color: AppColors.primary.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
                         ),
                         child: const Icon(
                           Icons.rocket_launch_rounded,
-                          color: Color(0xFF60A5FA),
-                          size: 18,
+                          color: AppColors.primaryLight,
+                          size: 16,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -169,17 +146,17 @@ class DeveloperCreditsContent extends StatelessWidget {
                             Text(
                               'DEVELOPMENT TEAM',
                               style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white38,
-                                fontSize: 9,
+                                color: AppColors.textMuted,
+                                fontSize: 8.5,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.2,
                               ),
                             ),
                             Text(
                               'Team Rafftar',
-                              style: GoogleFonts.outfit(
+                              style: GoogleFonts.plusJakartaSans(
                                 color: Colors.white,
-                                fontSize: 17,
+                                fontSize: 15,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
@@ -187,17 +164,17 @@ class DeveloperCreditsContent extends StatelessWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                          color: AppColors.accentGreen.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.25)),
                         ),
                         child: Text(
                           'CORE',
                           style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFF34D399),
-                            fontSize: 10,
+                            color: AppColors.accentGreen,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
                           ),
@@ -206,9 +183,9 @@ class DeveloperCreditsContent extends StatelessWidget {
                     ],
                   ),
 
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Divider(color: Colors.white10, height: 1),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    child: Divider(color: Colors.white.withValues(alpha: 0.06), height: 1),
                   ),
 
                   // Lead Developer
@@ -217,14 +194,13 @@ class DeveloperCreditsContent extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                          color: AppColors.warning.withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.3)),
                         ),
                         child: const Icon(
                           Icons.verified_user_rounded,
-                          color: Color(0xFFFBBF24),
-                          size: 18,
+                          color: AppColors.warning,
+                          size: 16,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -233,19 +209,19 @@ class DeveloperCreditsContent extends StatelessWidget {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              'PROJECT LEAD',
+                              'PROJECT LEAD & ARCHITECT',
                               style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white38,
-                                fontSize: 9,
+                                color: AppColors.textMuted,
+                                fontSize: 8.5,
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.2,
                               ),
                             ),
                             Text(
                               'Denim Hajare',
-                              style: GoogleFonts.outfit(
-                                color: const Color(0xFFFDE68A),
-                                fontSize: 16,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 14.5,
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
@@ -253,17 +229,17 @@ class DeveloperCreditsContent extends StatelessWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.4)),
+                          color: AppColors.warning.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.warning.withValues(alpha: 0.25)),
                         ),
                         child: Text(
                           'LEAD',
                           style: GoogleFonts.plusJakartaSans(
-                            color: const Color(0xFFFBBF24),
-                            fontSize: 10,
+                            color: AppColors.warning,
+                            fontSize: 9.5,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
                           ),
@@ -273,76 +249,76 @@ class DeveloperCreditsContent extends StatelessWidget {
                   ),
                 ],
               ),
-            ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.2, end: 0),
+            ).animate().fadeIn(delay: 150.ms),
 
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
 
             // ── Features Grid / Platform Specs ──────────────────────────────
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.02),
-                borderRadius: BorderRadius.circular(18),
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(16),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
               ),
               child: Column(
                 children: [
                   _buildSpecRow(
                     icon: Icons.electric_bolt_rounded,
-                    iconColor: const Color(0xFF38BDF8),
+                    iconColor: AppColors.accent,
                     label: 'Live Telemetry',
                     value: 'Real-Time Bus Tracking',
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _buildSpecRow(
                     icon: Icons.notifications_active_rounded,
-                    iconColor: const Color(0xFFA78BFA),
+                    iconColor: AppColors.accentPurple,
                     label: 'Geofence Push',
                     value: 'Proximity Arrival Alerts',
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _buildSpecRow(
                     icon: Icons.hub_rounded,
-                    iconColor: const Color(0xFF34D399),
+                    iconColor: AppColors.accentGreen,
                     label: 'Multi-Role Engine',
                     value: 'Student • Driver • Admin',
                   ),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 8),
                   _buildSpecRow(
                     icon: Icons.terminal_rounded,
-                    iconColor: const Color(0xFFF472B6),
+                    iconColor: AppColors.primaryLight,
                     label: 'Release Build',
                     value: 'v2.4.0 (Production)',
                   ),
                 ],
               ),
-            ).animate().fadeIn(delay: 300.ms),
+            ).animate().fadeIn(delay: 200.ms),
 
-            const SizedBox(height: 22),
+            const SizedBox(height: 18),
 
             // Close Action
             SizedBox(
               width: double.infinity,
+              height: 48,
               child: ElevatedButton(
                 onPressed: () => Navigator.pop(context),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF2563EB),
+                  backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   elevation: 0,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
                 child: Text(
                   'CLOSE',
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
+                    letterSpacing: 1.0,
                   ),
                 ),
               ),
-            ).animate().fadeIn(delay: 350.ms),
+            ),
           ],
         ),
       ),
@@ -357,12 +333,12 @@ class DeveloperCreditsContent extends StatelessWidget {
   }) {
     return Row(
       children: [
-        Icon(icon, color: iconColor, size: 16),
+        Icon(icon, color: iconColor, size: 15),
         const SizedBox(width: 10),
         Text(
           label,
           style: GoogleFonts.plusJakartaSans(
-            color: Colors.white54,
+            color: AppColors.textMuted,
             fontSize: 11,
             fontWeight: FontWeight.w600,
           ),

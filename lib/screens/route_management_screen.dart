@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
 import 'route_edit_screen.dart';
 
 class RouteManagementScreen extends StatefulWidget {
@@ -44,40 +45,41 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
   }
 
   Color _parseColor(String? hexString) {
-    if (hexString == null) return const Color(0xFF06B6D4);
+    if (hexString == null) return AppColors.primary;
     try {
       final clean = hexString.replaceAll('#', '').trim();
       if (clean.length == 6) return Color(int.parse('0xFF$clean'));
       if (clean.length == 8) return Color(int.parse('0x$clean'));
     } catch (_) {}
-    return const Color(0xFF06B6D4);
+    return AppColors.primary;
   }
 
   Future<void> _deleteRoute(String id, String name) async {
     final bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF131D33),
+        backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: Colors.redAccent.withOpacity(0.3)),
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: AppColors.danger.withValues(alpha: 0.3)),
         ),
         title: Text(
           'Delete Route',
-          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
+          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17),
         ),
         content: Text(
           'Are you sure you want to delete "$name"? Buses assigned to this route will become unassigned.',
-          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13),
+          style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 13),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
+              backgroundColor: AppColors.danger,
+              elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () => Navigator.pop(ctx, true),
@@ -96,7 +98,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Route "$name" deleted', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-            backgroundColor: const Color(0xFF131D33),
+            backgroundColor: AppColors.surface,
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
           ),
@@ -107,7 +109,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Failed to delete route: $e', style: GoogleFonts.plusJakartaSans()),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: AppColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -117,30 +119,30 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
 
   void _showAddRouteDialog() {
     final nameController = TextEditingController();
-    final colorController = TextEditingController(text: '#06B6D4');
+    final colorController = TextEditingController(text: '#2563EB');
     
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
-        backgroundColor: const Color(0xFF131D33),
+        backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: const BorderSide(color: Color(0xFF00F0FF), width: 1.2),
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
         title: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
-                shape: BoxShape.circle,
+                color: AppColors.primary.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.add_road_rounded, color: Color(0xFF00F0FF), size: 20),
+              child: const Icon(Icons.add_road_rounded, color: AppColors.primaryLight, size: 18),
             ),
             const SizedBox(width: 12),
             Text(
               'Add New Route',
-              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17),
+              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
             ),
           ],
         ),
@@ -150,43 +152,43 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
             children: [
               TextField(
                 controller: nameController,
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5),
                 decoration: InputDecoration(
                   labelText: 'Route Name',
                   hintText: 'e.g. Ashoka Garden Route 18',
-                  hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12),
-                  labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12),
+                  hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
+                  labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
                   filled: true,
-                  fillColor: const Color(0xFF0F172A),
+                  fillColor: AppColors.surfaceLight,
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Colors.white10),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Color(0xFF00F0FF), width: 1.5),
+                    borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                   ),
                 ),
               ),
               const SizedBox(height: 14),
               TextField(
                 controller: colorController,
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                 decoration: InputDecoration(
                   labelText: 'Color Accent (Hex)',
-                  hintText: '#06B6D4',
-                  labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12),
+                  hintText: '#2563EB',
+                  labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
                   filled: true,
-                  fillColor: const Color(0xFF0F172A),
+                  fillColor: AppColors.surfaceLight,
                   enabledBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Colors.white10),
+                    borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.06)),
                   ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
-                    borderSide: const BorderSide(color: Color(0xFF00F0FF), width: 1.5),
+                    borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                   ),
-                  prefixIcon: const Icon(Icons.palette_rounded, color: Colors.white38, size: 20),
+                  prefixIcon: const Icon(Icons.palette_rounded, color: AppColors.textMuted, size: 18),
                 ),
               ),
             ],
@@ -195,13 +197,14 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogCtx).pop(),
-            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00F0FF),
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             onPressed: () async {
@@ -234,14 +237,15 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
     }
 
     return Scaffold(
-      backgroundColor: widget.nested ? Colors.transparent : const Color(0xFF090D16),
+      backgroundColor: widget.nested ? Colors.transparent : AppColors.bg,
       appBar: widget.nested
           ? null
           : AppBar(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: AppColors.bg,
               elevation: 0,
+              scrolledUnderElevation: 0,
               leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
                 onPressed: () => Navigator.pop(context),
               ),
               title: Column(
@@ -250,11 +254,11 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                 children: [
                   Text(
                     'Campus Bus Routes',
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white),
                   ),
                   Text(
                     '${_routes.length} Active Routes • $totalStopsAcrossRoutes Stops',
-                    style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF00F0FF), fontWeight: FontWeight.w600),
+                    style: GoogleFonts.plusJakartaSans(fontSize: 10.5, color: AppColors.primaryLight, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
@@ -264,11 +268,11 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                   icon: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF00F0FF).withOpacity(0.15),
+                      color: AppColors.primary.withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.3)),
+                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                     ),
-                    child: const Icon(Icons.add_rounded, color: Color(0xFF00F0FF), size: 18),
+                    child: const Icon(Icons.add_rounded, color: AppColors.primaryLight, size: 18),
                   ),
                   onPressed: _showAddRouteDialog,
                 ),
@@ -277,42 +281,44 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
             ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _showAddRouteDialog,
-        backgroundColor: const Color(0xFF00F0FF),
-        foregroundColor: Colors.black,
-        elevation: 6,
-        icon: const Icon(Icons.add_road_rounded, size: 20),
-        label: Text('New Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13)),
+        backgroundColor: AppColors.primary,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        icon: const Icon(Icons.add_road_rounded, size: 18),
+        label: Text('New Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12.5)),
       ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F0FF)))
+        ? const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2))
         : _routes.isEmpty
           ? Center(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.alt_route_rounded, color: Colors.white24, size: 50),
+                  const Icon(Icons.alt_route_rounded, color: AppColors.textMuted, size: 48),
                   const SizedBox(height: 14),
-                  Text('NO CAMPUS ROUTES FOUND', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                  Text('NO CAMPUS ROUTES FOUND', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
                   const SizedBox(height: 16),
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF00F0FF),
-                      foregroundColor: Colors.black,
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     icon: const Icon(Icons.add, size: 18),
-                    label: Text('Create First Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                    label: Text('Create First Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 13)),
                     onPressed: _showAddRouteDialog,
                   ),
                 ],
               ),
             )
           : RefreshIndicator(
-              color: const Color(0xFF00F0FF),
-              backgroundColor: const Color(0xFF131D33),
+              color: AppColors.primary,
+              backgroundColor: AppColors.surface,
               onRefresh: _fetchRoutes,
               child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                padding: const EdgeInsets.fromLTRB(18, 14, 18, 80),
                 itemCount: _routes.length,
                 itemBuilder: (context, index) {
                   final route = _routes[index];
@@ -323,22 +329,16 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                   return Container(
                     margin: const EdgeInsets.only(bottom: 12),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF131D33),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: color.withOpacity(0.25)),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.25),
-                          blurRadius: 12,
-                          offset: const Offset(0, 3),
-                        )
-                      ],
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                      boxShadow: AppShadows.card,
                     ),
                     child: Material(
                       color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(18),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: BorderRadius.circular(18),
                         onTap: () async {
                           final result = await Navigator.push(
                             context,
@@ -347,19 +347,19 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                           if (result == true) _fetchRoutes();
                         },
                         child: Padding(
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.all(14),
                           child: Row(
                             children: [
                               // Route Color Icon Badge
                               Container(
-                                width: 46,
-                                height: 46,
+                                width: 44,
+                                height: 44,
                                 decoration: BoxDecoration(
-                                  color: color.withOpacity(0.15),
-                                  borderRadius: BorderRadius.circular(14),
-                                  border: Border.all(color: color.withOpacity(0.4)),
+                                  color: color.withValues(alpha: 0.12),
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: color.withValues(alpha: 0.25)),
                                 ),
-                                child: Icon(Icons.directions_bus_filled_rounded, color: color, size: 24),
+                                child: Icon(Icons.directions_bus_filled_rounded, color: color, size: 22),
                               ),
                               const SizedBox(width: 14),
                               
@@ -374,8 +374,8 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                                       overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.plusJakartaSans(
                                         color: Colors.white,
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 14,
                                       ),
                                     ),
                                     const SizedBox(height: 4),
@@ -384,14 +384,14 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                                         Container(
                                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                           decoration: BoxDecoration(
-                                            color: color.withOpacity(0.15),
-                                            borderRadius: BorderRadius.circular(8),
+                                            color: color.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(6),
                                           ),
                                           child: Text(
-                                            '${stops.length} Waypoint Stops',
+                                            '${stops.length} Waypoints',
                                             style: GoogleFonts.plusJakartaSans(
                                               color: color,
-                                              fontSize: 10,
+                                              fontSize: 9.5,
                                               fontWeight: FontWeight.w700,
                                             ),
                                           ),
@@ -404,7 +404,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                               
                               // Edit Action
                               IconButton(
-                                icon: const Icon(Icons.edit_note_rounded, color: Color(0xFF00F0FF), size: 24),
+                                icon: const Icon(Icons.edit_note_rounded, color: AppColors.accent, size: 22),
                                 tooltip: 'Edit Waypoints',
                                 onPressed: () async {
                                   final result = await Navigator.push(
@@ -417,7 +417,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
 
                               // Delete Action
                               IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 19),
                                 tooltip: 'Delete Route',
                                 onPressed: () => _deleteRoute(route['_id'], name),
                               ),
@@ -426,10 +426,11 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                         ),
                       ),
                     ),
-                  ).animate().fadeIn(delay: (index * 40).ms).slideX(begin: 0.04);
+                  ).animate().fadeIn(delay: (index * 30).ms);
                 },
               ),
             ),
     );
   }
 }
+

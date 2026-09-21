@@ -18,7 +18,12 @@ class LinearTrackingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final routeColor = Color(int.parse(route.color.replaceAll('#', '0xFF')));
+    Color routeColor = AppColors.primary;
+    try {
+      if (route.color.isNotEmpty) {
+        routeColor = Color(int.parse(route.color.replaceAll('#', '0xFF')));
+      }
+    } catch (_) {}
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -141,7 +146,7 @@ class LinearTrackingView extends StatelessWidget {
                       width: stopWidth * (route.stops.length - 1) * progress,
                       height: 4,
                       decoration: BoxDecoration(
-                        color: AppColors.primary,
+                        color: routeColor,
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -162,9 +167,9 @@ class LinearTrackingView extends StatelessWidget {
                               margin: const EdgeInsets.only(top: 19),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: isVisited ? AppColors.primary : AppColors.surface,
+                                color: isVisited ? routeColor : AppColors.surface,
                                 border: Border.all(
-                                  color: isVisited ? AppColors.primary : const Color(0xFF334155), 
+                                  color: isVisited ? routeColor : const Color(0xFF334155), 
                                   width: 2.5,
                                 ),
                               ),

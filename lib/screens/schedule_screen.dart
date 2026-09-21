@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
 import '../models/route_model.dart';
+import '../theme/app_theme.dart';
 
 class ScheduleScreen extends StatefulWidget {
   final RouteModel route;
@@ -56,9 +57,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Color _timeColor(String t) {
     final h = int.tryParse(t.split(':').first) ?? 12;
-    if (h < 12) return const Color(0xFFFFB347);  // morning
-    if (h < 17) return Colors.blueAccent;  // afternoon
-    return const Color(0xFFB721FF);               // evening
+    if (h < 12) return AppColors.warning;
+    if (h < 17) return AppColors.primaryLight;
+    return AppColors.accentPurple;
   }
 
   String _period(String t) {
@@ -78,38 +79,50 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF05070E),
+      backgroundColor: AppColors.bg,
       body: CustomScrollView(
+        physics: const BouncingScrollPhysics(),
         slivers: [
           SliverAppBar(
-            expandedHeight: 130,
-            backgroundColor: const Color(0xFF05070E),
+            expandedHeight: 120,
+            backgroundColor: AppColors.bgSecondary,
             pinned: true,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white70),
-              onPressed: () => Navigator.pop(context),
+            leading: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: GestureDetector(
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.06),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
+                ),
+              ),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+              titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
               title: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'SCHEDULE',
+                    'SHUTTLE TIMETABLE',
                     style: GoogleFonts.plusJakartaSans(
-                      color: Colors.blueAccent,
+                      color: AppColors.primaryLight,
                       fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 2,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
                     ),
                   ),
+                  const SizedBox(height: 2),
                   Text(
                     widget.route.name,
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
                       fontSize: 14,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w800,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -119,7 +132,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ),
           if (_isLoading)
             const SliverFillRemaining(
-              child: Center(child: CircularProgressIndicator(color: Color(0xFF2D5BFF))),
+              child: Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2.5)),
             )
           else if (_error != null && _schedules.isEmpty)
             SliverFillRemaining(
@@ -127,19 +140,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.schedule_rounded, color: Colors.white24, size: 60),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                      ),
+                      child: const Icon(Icons.schedule_rounded, color: AppColors.textMuted, size: 40),
+                    ),
                     const SizedBox(height: 16),
                     Text(
-                      'USING DEFAULT SCHEDULE',
+                      'STANDARD SCHEDULE ACTIVE',
                       style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2,
+                        color: AppColors.textSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.2,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
-                      'No custom schedule uploaded yet.\nShowing standard SGI bus timings.',
+                      'Showing standard campus departure timings.',
                       textAlign: TextAlign.center,
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12),
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
                     ),
                   ],
                 ),
@@ -147,7 +171,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+              padding: const EdgeInsets.fromLTRB(18, 14, 18, 100),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, i) {
@@ -156,8 +180,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                     final times = _timesForStop(stopName);
                     return _buildStopCard(stopName, times, i)
                         .animate()
-                        .fadeIn(delay: (i * 50).ms)
-                        .slideX(begin: 0.05, duration: 350.ms);
+                        .fadeIn(delay: (i * 35).ms)
+                        .slideY(begin: 0.04, duration: 250.ms);
                   },
                   childCount: widget.route.stops.length,
                 ),
@@ -173,72 +197,64 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final isLast = index == widget.route.stops.length - 1;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: (isFirst
-              ? Colors.blueAccent
-              : isLast
-                  ? Colors.redAccent
-                  : Colors.white)
-              .withOpacity(0.07),
-        ),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Stop Header
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
             child: Row(
               children: [
                 Container(
-                  width: 10, height: 10,
+                  width: 12,
+                  height: 12,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     color: isFirst
-                        ? Colors.blueAccent
+                        ? AppColors.primary
                         : isLast
-                            ? Colors.redAccent
-                            : const Color(0xFF2D5BFF),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (isFirst
-                                ? Colors.blueAccent
-                                : isLast
-                                    ? Colors.redAccent
-                                    : const Color(0xFF2D5BFF))
-                            .withOpacity(0.5),
-                        blurRadius: 8,
-                      ),
-                    ],
+                            ? AppColors.accentGreen
+                            : AppColors.surfaceLight,
+                    border: Border.all(
+                      color: isFirst
+                          ? AppColors.primaryLight
+                          : isLast
+                              ? AppColors.accentGreen
+                              : const Color(0xFF475569),
+                      width: 2,
+                    ),
                   ),
                 ),
-                const SizedBox(width: 14),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Text(
                     stopName,
                     style: GoogleFonts.plusJakartaSans(
                       color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
                     ),
                   ),
                 ),
                 if (isFirst)
-                  _pill('ORIGIN', Colors.blueAccent)
+                  _pill('ORIGIN', AppColors.primaryLight)
                 else if (isLast)
-                  _pill('FINAL STOP', Colors.redAccent),
+                  _pill('CAMPUS DESTINATION', AppColors.accentGreen),
               ],
             ),
           ),
-          const SizedBox(height: 14),
-          const Divider(color: Colors.white10, height: 1),
+          const SizedBox(height: 12),
+          Divider(color: Colors.white.withValues(alpha: 0.06), height: 1),
           // Times Grid
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(14),
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -257,23 +273,23 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     return Tooltip(
       message: period,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.08),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.2)),
+          color: AppColors.surfaceLight,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: color.withValues(alpha: 0.25)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, size: 12, color: color),
-            const SizedBox(width: 6),
+            const SizedBox(width: 5),
             Text(
               time,
               style: GoogleFonts.plusJakartaSans(
-                color: color,
+                color: Colors.white,
                 fontWeight: FontWeight.w800,
-                fontSize: 12,
+                fontSize: 11.5,
               ),
             ),
           ],
@@ -284,16 +300,19 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   Widget _pill(String label, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.25)),
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Text(
         label,
         style: GoogleFonts.plusJakartaSans(
-          color: color, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1,
+          color: color,
+          fontSize: 8.5,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 0.5,
         ),
       ),
     );

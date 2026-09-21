@@ -197,7 +197,7 @@ class _SplashScreen extends StatelessWidget {
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF2D5BFF).withOpacity(0.25),
+                    const Color(0xFF2D5BFF).withValues(alpha: 0.25),
                     Colors.transparent,
                   ],
                 ),

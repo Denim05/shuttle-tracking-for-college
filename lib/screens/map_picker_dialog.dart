@@ -49,10 +49,10 @@ class _MapPickerDialogState extends State<MapPickerDialog> {
         decoration: BoxDecoration(
           color: const Color(0xFF131D33),
           borderRadius: BorderRadius.circular(28),
-          border: Border.all(color: widget.themeColor.withOpacity(0.3), width: 1.5),
+          border: Border.all(color: widget.themeColor.withValues(alpha: 0.3), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.6),
+              color: Colors.black.withValues(alpha: 0.6),
               blurRadius: 30,
               spreadRadius: 5,
             )
@@ -66,14 +66,14 @@ class _MapPickerDialogState extends State<MapPickerDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
               decoration: BoxDecoration(
                 color: const Color(0xFF0F172A),
-                border: Border(bottom: BorderSide(color: Colors.white.withOpacity(0.08))),
+                border: Border(bottom: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
               ),
               child: Row(
                 children: [
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: widget.themeColor.withOpacity(0.15),
+                      color: widget.themeColor.withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(Icons.pin_drop_rounded, color: widget.themeColor, size: 20),
@@ -159,7 +159,7 @@ class _MapPickerDialogState extends State<MapPickerDialog> {
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF0F172A).withOpacity(0.92),
+                        color: const Color(0xFF0F172A).withValues(alpha: 0.92),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(color: Colors.white10),
                       ),
@@ -190,7 +190,7 @@ class _MapPickerDialogState extends State<MapPickerDialog> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF0F172A),
-                border: Border(top: BorderSide(color: Colors.white.withOpacity(0.08))),
+                border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08))),
               ),
               child: Column(
                 children: [
@@ -281,9 +281,9 @@ class _MapPickerDialogState extends State<MapPickerDialog> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: const Color(0xFF0F172A).withOpacity(0.9),
+          color: const Color(0xFF0F172A).withValues(alpha: 0.9),
           borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: widget.themeColor.withOpacity(0.4)),
+          border: Border.all(color: widget.themeColor.withValues(alpha: 0.4)),
         ),
         child: Text(
           title,

@@ -858,67 +858,84 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
               return Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 decoration: BoxDecoration(
-                  color: isSelected ? AppColors.accentGreen.withValues(alpha: 0.15) : const Color(0xFF142930),
+                  color: isSelected ? AppColors.accentGreen.withValues(alpha: 0.15) : AppColors.surfaceLight,
                   borderRadius: BorderRadius.circular(14),
                   border: Border.all(
                     color: isSelected ? AppColors.accentGreen : Colors.white.withValues(alpha: 0.08),
                     width: isSelected ? 1.5 : 1,
                   ),
                 ),
-                child: ListTile(
-                  dense: true,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                  leading: Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.accentGreen : Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Icon(
-                      isSelected ? Icons.check_rounded : Icons.location_pin,
-                      color: isSelected ? Colors.white : AppColors.accentGreen,
-                      size: 18,
-                    ),
-                  ),
-                  title: Text(
-                    stopName,
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w800,
-                      fontSize: 13,
-                    ),
-                  ),
-                  subtitle: Text(
-                    '${route.name} • $distText',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: isSelected ? AppColors.accentGreen : AppColors.textSecondary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  trailing: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: isSelected ? AppColors.accentGreen : Colors.white.withValues(alpha: 0.08),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      isSelected ? 'Selected' : 'Use This',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(14),
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      setState(() {
+                        _selectedRoute = route;
+                        _selectedStop = stopName;
+                      });
+                    },
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.accentGreen : Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              isSelected ? Icons.check_rounded : Icons.location_pin,
+                              color: isSelected ? Colors.white : AppColors.accentGreen,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  stopName,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  '${route.name} • $distText away',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: AppColors.textMuted,
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: isSelected ? AppColors.accentGreen : Colors.white.withValues(alpha: 0.08),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              isSelected ? 'Selected' : 'Use This',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  onTap: () {
-                    setState(() {
-                      _selectedRoute = route;
-                      _selectedStop = stopName;
-                    });
-                    HapticFeedback.selectionClick();
-                  },
                 ),
               );
             }).toList(),

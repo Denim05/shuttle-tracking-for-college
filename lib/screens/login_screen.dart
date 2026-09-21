@@ -153,242 +153,287 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF05070E),
+      backgroundColor: AppColors.bg,
       body: Stack(
         children: [
-          // Background Depth
+          // Background Subtle Depth
           Positioned(
             top: -100,
-            left: -50,
+            left: -60,
             child: Container(
-              width: 300,
-              height: 300,
+              width: 280,
+              height: 280,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: const Color(0xFF2D5BFF).withOpacity(0.1),
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.primary.withValues(alpha: 0.12),
+                    Colors.transparent,
+                  ],
+                ),
               ),
-            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1,1), end: const Offset(1.2,1.2), duration: 5.seconds),
+            ),
+          ),
+          Positioned(
+            bottom: -80,
+            right: -60,
+            child: Container(
+              width: 260,
+              height: 260,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: RadialGradient(
+                  colors: [
+                    AppColors.accent.withValues(alpha: 0.08),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+            ),
           ),
           
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 32),
-              child: Column(
-                children: [
-                  const SizedBox(height: 60),
+            child: Center(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const SizedBox(height: 12),
 
-                  Text(
-                    'SISTecChalo',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 38,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.white,
-                      letterSpacing: -1,
-                    ),
-                  ).animate().fadeIn(delay: 200.ms),
-                  
-                  Text(
-                    'TRACK YOUR BUS IN REAL TIME',
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      color: AppColors.primaryLight,
-                      letterSpacing: 3,
-                    ),
-                  ).animate().fadeIn(delay: 400.ms),
-                  
-                  const SizedBox(height: 48),
-                  
-                  // Login Card
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface.withValues(alpha: 0.85),
-                      borderRadius: BorderRadius.circular(32),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                      boxShadow: AppShadows.card,
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(width: 4, height: 16, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2))),
-                            const SizedBox(width: 8),
-                            Text(
-                              'IDENTIFY AS',
-                              style: GoogleFonts.plusJakartaSans(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w900,
-                                color: AppColors.textSecondary,
-                                letterSpacing: 1.5,
+                    // App Logo / Bus Badge
+                    Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                      ),
+                      child: const Icon(
+                        Icons.directions_bus_rounded,
+                        color: AppColors.primary,
+                        size: 28,
+                      ),
+                    ).animate().fadeIn(duration: 300.ms).scale(),
+
+                    const SizedBox(height: 16),
+
+                    Text(
+                      'SISTecChalo',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 30,
+                        fontWeight: FontWeight.w900,
+                        color: Colors.white,
+                        letterSpacing: -0.8,
+                      ),
+                    ).animate().fadeIn(delay: 150.ms),
+                    
+                    const SizedBox(height: 4),
+
+                    Text(
+                      'COLLEGE SHUTTLE NETWORK',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.primaryLight,
+                        letterSpacing: 2.2,
+                      ),
+                    ).animate().fadeIn(delay: 250.ms),
+                    
+                    const SizedBox(height: 32),
+                    
+                    // Main Login Card
+                    Container(
+                      padding: const EdgeInsets.all(22),
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        boxShadow: AppShadows.card,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                width: 3,
+                                height: 14,
+                                decoration: BoxDecoration(
+                                  color: AppColors.primary,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
                               ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 18),
-                        
-                        Row(
-                          children: _roles.map((role) {
-                            final isSelected = _selectedRole == role['id'];
-                            return Expanded(
-                              child: GestureDetector(
-                                onTap: () {
-                                  HapticFeedback.lightImpact();
-                                  setState(() => _selectedRole = role['id']);
-                                },
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  margin: const EdgeInsets.symmetric(horizontal: 4),
-                                  height: 82,
-                                  decoration: BoxDecoration(
-                                    gradient: isSelected ? const LinearGradient(
-                                      colors: [AppColors.primary, Color(0xFF2563EB)],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ) : null,
-                                    color: isSelected ? null : Colors.white.withValues(alpha: 0.04),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: isSelected ? Colors.white.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.06),
-                                      width: 1.2,
-                                    ),
-                                    boxShadow: isSelected ? [
-                                      BoxShadow(
-                                        color: AppColors.primary.withValues(alpha: 0.45),
-                                        blurRadius: 18,
-                                        offset: const Offset(0, 6),
-                                      )
-                                    ] : [],
-                                  ),
-                                  child: Column(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Icon(
-                                        role['icon'], 
-                                        color: isSelected ? Colors.white : AppColors.textMuted, 
-                                        size: 24
-                                      ).animate(target: isSelected ? 1 : 0).scale(begin: const Offset(1,1), end: const Offset(1.1,1.1)),
-                                      const SizedBox(height: 6),
-                                      FittedBox(
-                                        fit: BoxFit.scaleDown,
-                                        child: Text(
-                                          role['label'],
-                                          style: GoogleFonts.plusJakartaSans(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w900,
-                                            color: isSelected ? Colors.white : AppColors.textMuted,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'IDENTIFY AS',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.textMuted,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          
+                          // Modern Segmented Role Selector
+                          Row(
+                            children: _roles.map((role) {
+                              final isSelected = _selectedRole == role['id'];
+                              return Expanded(
+                                child: GestureDetector(
+                                  onTap: () {
+                                    HapticFeedback.selectionClick();
+                                    setState(() => _selectedRole = role['id']);
+                                  },
+                                  child: AnimatedContainer(
+                                    duration: const Duration(milliseconds: 180),
+                                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                                    height: 74,
+                                    decoration: BoxDecoration(
+                                      color: isSelected
+                                          ? AppColors.primary.withValues(alpha: 0.15)
+                                          : Colors.white.withValues(alpha: 0.03),
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(
+                                        color: isSelected
+                                            ? AppColors.primary
+                                            : Colors.white.withValues(alpha: 0.05),
+                                        width: isSelected ? 1.5 : 1.0,
                                       ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                            
-                            const SizedBox(height: 28),
-                            const Divider(color: Colors.white10),
-                            const SizedBox(height: 28),
-                                                       _buildInputField(
-                              controller: _usernameController,
-                              hint: 'Username / Enrollment No.',
-                              icon: Icons.alternate_email_rounded,
-                            ),
-                            const SizedBox(height: 16),
-                            _buildInputField(
-                              controller: _passwordController,
-                              hint: 'Password',
-                              icon: Icons.lock_outline_rounded,
-                              isPassword: true,
-                            ),
-                            
-                            const SizedBox(height: 28),
-                            
-                            Container(
-                              width: double.infinity,
-                              height: 56,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(20),
-                                gradient: const LinearGradient(
-                                  colors: [AppColors.primary, AppColors.accent],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.primary.withValues(alpha: 0.4),
-                                    blurRadius: 18,
-                                    offset: const Offset(0, 6),
-                                  ),
-                                ],
-                              ),
-                              child: ElevatedButton(
-                                onPressed: (_isLoginLoading || _isGuestLoading) ? null : () {
-                                  HapticFeedback.mediumImpact();
-                                  _handleLogin();
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.transparent,
-                                  shadowColor: Colors.transparent,
-                                  foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                ),
-                                child: _isLoginLoading
-                                    ? const SizedBox(
-                                        width: 22, 
-                                        height: 22, 
-                                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)
-                                      )
-                                    : Row(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          const Icon(Icons.login_rounded, color: Colors.white, size: 18),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            'SIGN IN',
+                                    ),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          role['icon'], 
+                                          color: isSelected ? AppColors.primary : AppColors.textMuted, 
+                                          size: 22,
+                                        ),
+                                        const SizedBox(height: 5),
+                                        FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Text(
+                                            role['label'],
                                             style: GoogleFonts.plusJakartaSans(
-                                              fontWeight: FontWeight.w900,
-                                              letterSpacing: 1.5,
-                                              fontSize: 14,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w800,
+                                              color: isSelected ? Colors.white : AppColors.textMuted,
+                                              letterSpacing: 0.5,
                                             ),
                                           ),
-                                        ],
-                                      ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                              
+                          const SizedBox(height: 20),
+                          Divider(color: Colors.white.withValues(alpha: 0.06), height: 1),
+                          const SizedBox(height: 20),
+                          
+                          _buildInputField(
+                            controller: _usernameController,
+                            hint: 'Enrollment No. / Username',
+                            icon: Icons.badge_outlined,
+                          ),
+                          const SizedBox(height: 12),
+                          _buildInputField(
+                            controller: _passwordController,
+                            hint: 'Password',
+                            icon: Icons.lock_outline_rounded,
+                            isPassword: true,
+                          ),
+                          
+                          const SizedBox(height: 22),
+                          
+                          // Sign In Button
+                          SizedBox(
+                            width: double.infinity,
+                            height: 50,
+                            child: ElevatedButton(
+                              onPressed: (_isLoginLoading || _isGuestLoading) ? null : () {
+                                HapticFeedback.mediumImpact();
+                                _handleLogin();
+                              },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
-                            ),
-                          ],
-                        )
-                      ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.08),
-                  
-                  const SizedBox(height: 24),
-                  
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.04),
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                    ),
-                    child: TextButton.icon(
-                      onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
-                      icon: const Icon(Icons.explore_rounded, color: AppColors.accent, size: 18),
-                      label: _isGuestLoading 
-                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(
-                            'Continue as Guest',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.accent,
-                              fontWeight: FontWeight.w800,
-                              fontSize: 13,
+                              child: _isLoginLoading
+                                  ? const SizedBox(
+                                      width: 20, 
+                                      height: 20, 
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                                    )
+                                  : Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.login_rounded, color: Colors.white, size: 18),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'SIGN IN',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.0,
+                                            fontSize: 13.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                             ),
                           ),
+                        ],
+                      ),
+                    ).animate().fadeIn(delay: 350.ms).slideY(begin: 0.05),
+                    
+                    const SizedBox(height: 16),
+                    
+                    // Guest Access Button
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                      ),
+                      child: TextButton.icon(
+                        onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
+                        icon: const Icon(Icons.explore_rounded, color: AppColors.accent, size: 17),
+                        label: _isGuestLoading 
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
+                          : Text(
+                              'Continue as Guest',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: AppColors.accent,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                ],
+                    const SizedBox(height: 14),
+                    TextButton(
+                      onPressed: _handleRegister,
+                      child: Text(
+                        'New student? Register for bus service →',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                  ],
+                ),
               ),
             ),
           ),
@@ -405,30 +450,36 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        color: AppColors.surfaceLight,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: TextField(
         controller: controller,
         obscureText: isPassword ? _obscurePassword : false,
-        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
+        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white30, fontWeight: FontWeight.w500, fontSize: 13),
-          prefixIcon: Icon(icon, color: AppColors.primaryLight, size: 20),
+          hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontWeight: FontWeight.w500, fontSize: 13),
+          prefixIcon: Icon(icon, color: AppColors.primaryLight, size: 19),
           suffixIcon: isPassword
               ? IconButton(
                   icon: Icon(
                     _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                    color: Colors.white38,
-                    size: 20,
+                    color: AppColors.textMuted,
+                    size: 19,
                   ),
-                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  onPressed: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _obscurePassword = !_obscurePassword);
+                  },
                 )
               : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         ),
       ),
     );

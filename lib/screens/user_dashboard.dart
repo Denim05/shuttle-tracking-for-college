@@ -44,7 +44,6 @@ class _UserDashboardState extends State<UserDashboard> {
   bool _showDebugOverlay = false;
   int _tapCounter = 0;
   
-  final List<Map<String, dynamic>> _alertHistory = [];
   bool _isSosActive = false;
 
   bool _isDriveMode = false;
@@ -335,23 +334,24 @@ class _UserDashboardState extends State<UserDashboard> {
         height: 250,
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.95),
+          color: AppColors.surface,
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+          boxShadow: AppShadows.card,
         ),
         child: Column(
           children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Debug Data', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                IconButton(icon: const Icon(Icons.close, color: Colors.white24, size: 16), onPressed: () => setState(() => _showDebugOverlay = false)),
+                Text('DEBUG TELEMETRY', style: GoogleFonts.plusJakartaSans(color: AppColors.primaryLight, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+                IconButton(icon: const Icon(Icons.close, color: AppColors.textMuted, size: 16), onPressed: () => setState(() => _showDebugOverlay = false)),
               ],
             ),
-            const Divider(color: Colors.white10),
+            Divider(color: Colors.white.withValues(alpha: 0.06)),
             Expanded(
               child: buses.isEmpty 
-                ? Center(child: Text('NO DATA RECEIVED YET', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10)))
+                ? Center(child: Text('NO DATA RECEIVED YET', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 10, fontWeight: FontWeight.w700)))
                 : ListView.builder(
                     padding: EdgeInsets.zero,
                     itemCount: buses.length,
@@ -361,21 +361,21 @@ class _UserDashboardState extends State<UserDashboard> {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), borderRadius: BorderRadius.circular(12)),
+                        decoration: BoxDecoration(color: AppColors.bgSecondary, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white.withValues(alpha: 0.04))),
                         child: Row(
                           children: [
-                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isFresh ? Colors.green : Colors.red, shape: BoxShape.circle)),
+                            Container(width: 8, height: 8, decoration: BoxDecoration(color: isFresh ? AppColors.accentGreen : AppColors.danger, shape: BoxShape.circle)),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text('ID: ${bus.id.substring(math.max(0, bus.id.length - 6))}', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                  Text('Route: ${bus.routeName}', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 8)),
+                                  Text('Route: ${bus.routeName}', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 8)),
                                 ],
                               ),
                             ),
-                            Text('${bus.speed.toInt()} KM/H', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900)),
+                            Text('${bus.speed.toInt()} KM/H', style: GoogleFonts.plusJakartaSans(color: AppColors.primaryLight, fontSize: 10, fontWeight: FontWeight.w900)),
                           ],
                         ),
                       );
@@ -1180,45 +1180,82 @@ class _UserDashboardState extends State<UserDashboard> {
         final allAlerts = busStore.notifications;
 
         return CustomScrollView(
+          physics: const BouncingScrollPhysics(),
           slivers: [
             SliverAppBar(
-              expandedHeight: 120,
-              backgroundColor: const Color(0xFF121212),
+              expandedHeight: 110,
+              backgroundColor: AppColors.bgSecondary,
+              pinned: true,
               flexibleSpace: FlexibleSpaceBar(
+                titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                 title: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text('NOTIFICATIONS', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 16)),
+                    Text(
+                      'NOTIFICATIONS',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.5,
+                        fontSize: 15,
+                        color: Colors.white,
+                      ),
+                    ),
                     if (allAlerts.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2D5BFF).withOpacity(0.2),
+                          color: AppColors.primary.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: const Color(0xFF2D5BFF).withOpacity(0.3)),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
                         ),
-                        child: Text('${allAlerts.length}', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF2D5BFF), fontSize: 11, fontWeight: FontWeight.w900)),
+                        child: Text(
+                          '${allAlerts.length}',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.primaryLight,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
                       ),
                     ],
                   ],
                 ),
-                centerTitle: true,
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.all(24),
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
               sliver: allAlerts.isEmpty
                 ? SliverToBoxAdapter(
-                    child: Container(
-                      padding: const EdgeInsets.all(60),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 60),
                       child: Column(
                         children: [
-                          const Icon(Icons.notifications_none_rounded, color: Colors.white24, size: 60),
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.surface,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                            ),
+                            child: const Icon(Icons.notifications_none_rounded, color: AppColors.textMuted, size: 40),
+                          ),
                           const SizedBox(height: 16),
-                          Text('NO ALERTS YET', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                          const SizedBox(height: 8),
-                          Text('Manager broadcasts will appear here in real-time', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 11)),
+                          Text(
+                            'NO ALERTS YET',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Campus broadcasts and route updates will appear here in real-time.',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 11),
+                          ),
                         ],
                       ),
                     ),
@@ -1248,47 +1285,81 @@ class _UserDashboardState extends State<UserDashboard> {
     final date = DateTime.parse(timestamp).toLocal();
     final diff = DateTime.now().difference(date);
     if (diff.inMinutes < 1) return 'JUST NOW';
-    if (diff.inMinutes < 60) return '${diff.inMinutes} MINS AGO';
-    return '${diff.inHours} HOURS AGO';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}M AGO';
+    return '${diff.inHours}H AGO';
   }
 
   Widget _buildNotificationCard(Map<String, dynamic> alert, int index) {
     final isCritical = alert['priority'] == 'critical';
-    final accentColor = isCritical ? Colors.redAccent : const Color(0xFF2D5BFF);
+    final accentColor = isCritical ? AppColors.danger : AppColors.primary;
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(20),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Color(0xFF1E1E1E),
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: accentColor.withOpacity(0.1)),
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+        boxShadow: AppShadows.card,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: accentColor.withOpacity(0.1), shape: BoxShape.circle),
-            child: Icon(isCritical ? Icons.warning_rounded : Icons.bolt_rounded, color: accentColor, size: 18),
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.12),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Icon(
+              isCritical ? Icons.warning_rounded : Icons.info_outline_rounded,
+              color: isCritical ? AppColors.danger : AppColors.primaryLight,
+              size: 18,
+            ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(isCritical ? 'CRITICAL ALERT' : 'SYSTEM DIRECTIVE', 
-                  style: GoogleFonts.plusJakartaSans(color: accentColor, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                const SizedBox(height: 4),
-                Text(alert['message'] ?? '', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
-                const SizedBox(height: 8),
-                Text(_formatAlertTime(alert['timestamp']), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9, fontWeight: FontWeight.bold)),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      isCritical ? 'CRITICAL ALERT' : 'TRANSIT DIRECTIVE', 
+                      style: GoogleFonts.plusJakartaSans(
+                        color: isCritical ? AppColors.danger : AppColors.primaryLight,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 1.2,
+                      ),
+                    ),
+                    Text(
+                      _formatAlertTime(alert['timestamp']),
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textMuted,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  alert['message'] ?? '',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13.5,
+                    height: 1.35,
+                  ),
+                ),
               ],
             ),
           ),
         ],
       ),
-    ).animate().fadeIn(delay: (index * 100).ms).slideX(begin: 0.1);
+    ).animate().fadeIn(delay: (index * 40).ms).slideY(begin: 0.05);
   }
 
   Widget _buildProfileTab(AuthService auth) {
@@ -1651,39 +1722,58 @@ class _UserDashboardState extends State<UserDashboard> {
             padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
             child: Container(
               decoration: const BoxDecoration(
-                color: Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.vertical(top: Radius.circular(32)),
+                color: AppColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
-              padding: const EdgeInsets.fromLTRB(24, 20, 24, 40),
+              padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.white12, borderRadius: BorderRadius.circular(2)))),
-                  const SizedBox(height: 20),
-                  Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w900)),
+                  Center(
+                    child: Container(
+                      width: 36, height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Text(
+                    'Change Password',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text('Enter your current password, then set a new one.', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 13)),
-                  const SizedBox(height: 24),
+                  Text(
+                    'Enter your current password, then set a new one.',
+                    style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
+                  ),
+                  const SizedBox(height: 20),
                   _pwField(ctx, 'Current Password', currentCtrl, showCurrent, () => setSheetState(() => showCurrent = !showCurrent)),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   _pwField(ctx, 'New Password (min 6 chars)', newCtrl, showNew, () => setSheetState(() => showNew = !showNew)),
-                  const SizedBox(height: 14),
+                  const SizedBox(height: 12),
                   _pwField(ctx, 'Confirm New Password', confirmCtrl, showNew, null),
-                  const SizedBox(height: 28),
+                  const SizedBox(height: 24),
                   SizedBox(
                     width: double.infinity,
+                    height: 50,
                     child: ElevatedButton(
                       onPressed: saving ? null : submit,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2D5BFF),
-                        padding: const EdgeInsets.all(18),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         elevation: 0,
                       ),
                       child: saving
                           ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 1)),
+                          : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
                     ),
                   ),
                 ],
@@ -1698,22 +1788,22 @@ class _UserDashboardState extends State<UserDashboard> {
   Widget _pwField(BuildContext ctx, String hint, TextEditingController ctrl, bool visible, VoidCallback? onToggle) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: AppColors.bgSecondary,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: TextField(
         controller: ctrl,
         obscureText: !visible,
-        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 15),
+        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13.5),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 13),
+          hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 13),
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           suffixIcon: onToggle != null
               ? IconButton(
-                  icon: Icon(visible ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: Colors.white24, size: 20),
+                  icon: Icon(visible ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: AppColors.textMuted, size: 18),
                   onPressed: onToggle,
                 )
               : null,
@@ -2016,51 +2106,57 @@ class _UserDashboardState extends State<UserDashboard> {
                           color: isSel ? AppColors.primary.withValues(alpha: 0.40) : Colors.white.withValues(alpha: 0.06),
                         ),
                       ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                        onTap: () async {
-                          final busStore = Provider.of<BusStore>(context, listen: false);
-                          setState(() {
-                            _selectedRoute = route;
-                            _updateActiveBus(busStore);
-                          });
-                          try {
-                            const storage = FlutterSecureStorage();
-                            await storage.write(key: 'last_selected_route_id', value: route.id);
-                          } catch (_) {}
-                          if (context.mounted) Navigator.pop(context);
-                        },
-                        leading: Container(
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: (isSel ? AppColors.primary : AppColors.surfaceLight).withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(12),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(18),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          onTap: () async {
+                            final busStore = Provider.of<BusStore>(context, listen: false);
+                            setState(() {
+                              _selectedRoute = route;
+                              _updateActiveBus(busStore);
+                            });
+                            try {
+                              const storage = FlutterSecureStorage();
+                              await storage.write(key: 'last_selected_route_id', value: route.id);
+                            } catch (_) {}
+                            if (context.mounted) Navigator.pop(context);
+                          },
+                          leading: Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: (isSel ? AppColors.primary : AppColors.surfaceLight).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              Icons.directions_bus_rounded,
+                              color: isSel ? AppColors.primaryLight : AppColors.textMuted,
+                              size: 20,
+                            ),
                           ),
-                          child: Icon(
-                            Icons.alt_route_rounded,
-                            color: isSel ? AppColors.primary : AppColors.textSecondary,
-                            size: 20,
+                          title: Text(
+                            route.name,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                              fontSize: 14,
+                            ),
                           ),
+                          subtitle: Text(
+                            '${route.stops.length} STOPS • BHOPAL TRANSIT',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: isSel ? AppColors.primaryLight : AppColors.textMuted,
+                              fontWeight: FontWeight.w600,
+                              fontSize: 10,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          trailing: isSel 
+                            ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryLight, size: 20)
+                            : const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
                         ),
-                        title: Text(
-                          route.name,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                        subtitle: Text(
-                          '${route.stops.length} designated stops',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textMuted,
-                            fontSize: 11,
-                          ),
-                        ),
-                        trailing: isSel 
-                          ? const Icon(Icons.check_circle_rounded, color: AppColors.primary, size: 22)
-                          : const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
                       ),
                     ).animate().fadeIn(delay: (i * 25).ms).slideX(begin: 0.04);
                   },
@@ -2219,9 +2315,21 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildShimmerLoader() {
     return Shimmer.fromColors(
-      baseColor: Colors.white.withOpacity(0.05),
-      highlightColor: Colors.white.withOpacity(0.1),
-      child: Column(children: List.generate(4, (i) => Container(height: 100, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))))),
+      baseColor: Colors.white.withValues(alpha: 0.05),
+      highlightColor: Colors.white.withValues(alpha: 0.1),
+      child: Column(
+        children: List.generate(
+          4,
+          (i) => Container(
+            height: 100,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

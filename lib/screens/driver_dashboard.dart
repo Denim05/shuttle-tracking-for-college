@@ -73,8 +73,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
               decoration: BoxDecoration(
                 color: const Color(0xFF161421),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
-                boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 16)],
+                border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
+                boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 16)],
               ),
               child: Row(
                 children: [
@@ -453,7 +453,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   left: 0, right: 0,
                   child: Container(
                     padding: const EdgeInsets.symmetric(vertical: 4),
-                    color: Colors.redAccent.withOpacity(0.8),
+                    color: Colors.redAccent.withValues(alpha: 0.8),
                     child: Center(
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
@@ -485,7 +485,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       gradient: LinearGradient(
                         begin: Alignment.topCenter,
                         end: Alignment.bottomCenter,
-                        colors: [Colors.black.withOpacity(0.8), Colors.transparent],
+                        colors: [Colors.black.withValues(alpha: 0.8), Colors.transparent],
                       ),
                     ),
                     child: Row(
@@ -527,7 +527,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                               icon: const Icon(Icons.local_gas_station_rounded, color: Colors.amberAccent, size: 20),
                               onPressed: () => _showFuelRefillDialog(context),
                               style: IconButton.styleFrom(
-                                backgroundColor: Colors.amberAccent.withOpacity(0.12),
+                                backgroundColor: Colors.amberAccent.withValues(alpha: 0.12),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
                             ),
@@ -538,7 +538,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
                               },
                               style: IconButton.styleFrom(
-                                backgroundColor: Colors.white.withOpacity(0.05),
+                                backgroundColor: Colors.white.withValues(alpha: 0.05),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
                             ),
@@ -547,7 +547,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                               icon: const Icon(Icons.logout_rounded, color: Colors.white70, size: 20),
                               onPressed: () => Provider.of<AuthService>(context, listen: false).logout(),
                               style: IconButton.styleFrom(
-                                backgroundColor: Colors.white.withOpacity(0.05),
+                                backgroundColor: Colors.white.withValues(alpha: 0.05),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                               ),
                             ),
@@ -626,7 +626,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             gradient: const LinearGradient(colors: [Colors.deepPurpleAccent, Colors.blueAccent]),
-            boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 20, spreadRadius: 2)],
+            boxShadow: [BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)],
           ),
           child: const Center(child: Icon(Icons.person_rounded, color: Colors.white, size: 32)),
         ),
@@ -672,8 +672,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
       decoration: BoxDecoration(
         color: const Color(0xFF161421),
         borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: _isOnline ? sColor.withOpacity(0.15) : Colors.white.withOpacity(0.05)),
-        boxShadow: _isOnline ? [BoxShadow(color: sColor.withOpacity(0.08), blurRadius: 20, spreadRadius: 2)] : null,
+        border: Border.all(color: _isOnline ? sColor.withValues(alpha: 0.15) : Colors.white.withValues(alpha: 0.05)),
+        boxShadow: _isOnline ? [BoxShadow(color: sColor.withValues(alpha: 0.08), blurRadius: 20, spreadRadius: 2)] : null,
       ),
       child: Column(
         children: [
@@ -713,9 +713,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                   duration: const Duration(milliseconds: 400),
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: sColor.withOpacity(0.1),
+                                    color: sColor.withValues(alpha: 0.1),
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: sColor.withOpacity(0.3)),
+                                    border: Border.all(color: sColor.withValues(alpha: 0.3)),
                                   ),
                                   child: Text(
                                     _speedCategory(_speedKmH),
@@ -792,7 +792,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           begin: Alignment.bottomCenter,
                           end: Alignment.topCenter,
                           colors: _isOnline
-                            ? [barColor.withOpacity(0.4), barColor]
+                            ? [barColor.withValues(alpha: 0.4), barColor]
                             : [Colors.white10, Colors.white10],
                         ),
                         borderRadius: BorderRadius.circular(5),
@@ -816,9 +816,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
           decoration: BoxDecoration(
-            color: (_isOnline ? Colors.blueAccent : Colors.white10).withOpacity(0.1),
+            color: (_isOnline ? Colors.blueAccent : Colors.white10).withValues(alpha: 0.1),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: (_isOnline ? Colors.blueAccent : Colors.white24).withOpacity(0.2)),
+            border: Border.all(color: (_isOnline ? Colors.blueAccent : Colors.white24).withValues(alpha: 0.2)),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -859,7 +859,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       decoration: BoxDecoration(
         color: const Color(0xFF161421),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: DropdownButtonHideUnderline(
         child: DropdownButton<String>(
@@ -889,7 +889,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       decoration: BoxDecoration(
         color: const Color(0xFF161421),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Row(
         children: [
@@ -911,7 +911,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   color: isPickup ? null : Colors.transparent,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: isPickup
-                      ? [BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 12)]
+                      ? [BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 12)]
                       : null,
                 ),
                 child: Row(
@@ -954,7 +954,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                   color: !isPickup ? null : Colors.transparent,
                   borderRadius: BorderRadius.circular(16),
                   boxShadow: !isPickup
-                      ? [BoxShadow(color: Colors.orangeAccent.withOpacity(0.3), blurRadius: 12)]
+                      ? [BoxShadow(color: Colors.orangeAccent.withValues(alpha: 0.3), blurRadius: 12)]
                       : null,
                 ),
                 child: Row(
@@ -999,7 +999,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: (_isOnline ? Colors.redAccent : Colors.blueAccent).withOpacity(0.3), 
+              color: (_isOnline ? Colors.redAccent : Colors.blueAccent).withValues(alpha: 0.3), 
               blurRadius: 20, 
               offset: const Offset(0, 8)
             )
@@ -1021,7 +1021,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       ),
     ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(
       duration: 3.seconds,
-      color: Colors.white.withOpacity(0.1),
+      color: Colors.white.withValues(alpha: 0.1),
     );
   }
 
@@ -1081,9 +1081,9 @@ class _DriverDashboardState extends State<DriverDashboard> {
         height: 70,
         width: double.infinity,
         decoration: BoxDecoration(
-          color: Colors.redAccent.withOpacity(0.1),
+          color: Colors.redAccent.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.redAccent.withOpacity(0.2), width: 2),
+          border: Border.all(color: Colors.redAccent.withValues(alpha: 0.2), width: 2),
         ),
         child: _isSosActive 
             ? const Center(child: CircularProgressIndicator(color: Colors.redAccent))
@@ -1099,7 +1099,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 ],
               ),
       ),
-    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(color: Colors.redAccent.withOpacity(0.2), duration: 2.seconds);
+    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(color: Colors.redAccent.withValues(alpha: 0.2), duration: 2.seconds);
   }
 
   Widget _buildTripStats() {
@@ -1126,7 +1126,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         decoration: BoxDecoration(
           color: const Color(0xFF161421),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: accent.withOpacity(0.1)),
+          border: Border.all(color: accent.withValues(alpha: 0.1)),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

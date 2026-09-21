@@ -488,7 +488,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           polylineId: PolylineId('trail_${entry.key}'),
           points:     entry.value,
           width:      4,
-          color:      Colors.blueAccent.withOpacity(0.35),
+          color:      Colors.blueAccent.withValues(alpha: 0.35),
           patterns:   [PatternItem.dash(20), PatternItem.gap(10)],
           endCap:     Cap.roundCap,
           startCap:   Cap.roundCap,
@@ -508,8 +508,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         circleId:    CircleId('pulse_${_focusedBus!.id}'),
         center:      pos,
         radius:      20,
-        fillColor:   const Color(0xFF1A4CFF).withOpacity(0.08),
-        strokeColor: const Color(0xFF1A4CFF).withOpacity(0.25),
+        fillColor:   const Color(0xFF1A4CFF).withValues(alpha: 0.08),
+        strokeColor: const Color(0xFF1A4CFF).withValues(alpha: 0.25),
         strokeWidth: 2,
       ));
     }
@@ -608,7 +608,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     // 1. Drop shadow (elevated slightly, soft blur)
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.35)
+      ..color = Colors.black.withValues(alpha: 0.35)
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4.0 * scale);
     
     canvas.drawRRect(
@@ -622,12 +622,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     // 2. Focused Glowing Ring
     if (isFocused) {
       final glowPaint = Paint()
-        ..color = routeColor.withOpacity(0.18)
+        ..color = routeColor.withValues(alpha: 0.18)
         ..style = PaintingStyle.fill;
       canvas.drawCircle(Offset(cx, cy + 4), 46, glowPaint);
 
       final glowOutline = Paint()
-        ..color = routeColor.withOpacity(0.6)
+        ..color = routeColor.withValues(alpha: 0.6)
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
       canvas.drawCircle(Offset(cx, cy + 4), 46, glowOutline);
@@ -641,7 +641,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(cx + 17, cy + 11, 4, 13), const Radius.circular(2)), wheelPaint);
 
     // 4. 3D Body Extrusion (Stack extrusion loops to render solid side walls)
-    final Color darkerRouteColor = Color.alphaBlend(Colors.black.withOpacity(0.42), routeColor);
+    final Color darkerRouteColor = Color.alphaBlend(Colors.black.withValues(alpha: 0.42), routeColor);
     final extrusionPaint = Paint()..color = darkerRouteColor;
     for (double i = 3.5; i >= 0.0; i -= 0.5) {
       canvas.drawRRect(
@@ -695,7 +695,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         const Radius.circular(8),
       ),
       Paint()
-        ..color = Colors.black.withOpacity(0.16)
+        ..color = Colors.black.withValues(alpha: 0.16)
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, 2.0 * scale),
     );
     final cabinExtrusionPaint = Paint()..color = const Color(0xFFB5B5B5);
@@ -748,7 +748,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     // specular highlight
     final highlightPaint = Paint()
-      ..color = Colors.white.withOpacity(0.65)
+      ..color = Colors.white.withValues(alpha: 0.65)
       ..strokeWidth = 1.6
       ..style = PaintingStyle.stroke;
     canvas.drawLine(Offset(cx - 6, cy - 20), Offset(cx - 1.5, cy - 10), highlightPaint);
@@ -946,9 +946,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       builder: (ctx) => Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          color: const Color(0xFF0D0B14).withOpacity(0.96),
+          color: const Color(0xFF0D0B14).withValues(alpha: 0.96),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1007,7 +1007,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.05),
+          color: Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: Colors.white10),
         ),
@@ -1034,12 +1034,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withOpacity(0.88),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.88),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFF38EF7D).withOpacity(0.3), width: 1.5),
+            border: Border.all(color: const Color(0xFF38EF7D).withValues(alpha: 0.3), width: 1.5),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.4),
+                color: Colors.black.withValues(alpha: 0.4),
                 blurRadius: 20,
                 offset: const Offset(0, 8),
               )
@@ -1056,7 +1056,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   ),
                   shape: BoxShape.circle,
                   boxShadow: [
-                    BoxShadow(color: const Color(0xFF38EF7D).withOpacity(0.4), blurRadius: 10),
+                    BoxShadow(color: const Color(0xFF38EF7D).withValues(alpha: 0.4), blurRadius: 10),
                   ],
                 ),
                 child: Icon(_instructionIcon, color: Colors.black, size: 24),
@@ -1123,9 +1123,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           width: 44,
           height: 44,
           decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withOpacity(0.8),
+            color: const Color(0xFF0F172A).withValues(alpha: 0.8),
             borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withOpacity(0.12)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
           ),
           child: Transform.rotate(
             angle: -((_animatedHeading[_focusedBus?.id] ?? 0.0) * (3.14159 / 180.0)),
@@ -1176,9 +1176,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withOpacity(0.8),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
             child: const Icon(Icons.search_rounded, color: Colors.white, size: 20),
           ),
@@ -1203,9 +1203,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withOpacity(0.8),
+              color: const Color(0xFF0F172A).withValues(alpha: 0.8),
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.12)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
             ),
             child: Icon(
               _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
@@ -1232,12 +1232,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.8),
+          color: Colors.black.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(color: _isFollowing ? const Color(0xFF38EF7D) : Colors.white10, width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 8,
             )
           ],
@@ -1274,12 +1274,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.8),
+          color: Colors.black.withValues(alpha: 0.8),
           borderRadius: BorderRadius.circular(30),
           border: Border.all(color: Colors.white10),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               blurRadius: 8,
             )
           ],
@@ -1341,9 +1341,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           decoration: BoxDecoration(
-            color: const Color(0xFF0D0B14).withOpacity(0.82),
+            color: const Color(0xFF0D0B14).withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withOpacity(0.1)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
           ),
           child: Row(
             children: [
@@ -1352,7 +1352,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.08),
+                    color: Colors.white.withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.close_rounded, color: Colors.white, size: 20),
@@ -1378,7 +1378,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
-                            color: (_focusedBus?.isDropoff ?? false) ? Colors.orangeAccent.withOpacity(0.2) : Colors.blueAccent.withOpacity(0.2),
+                            color: (_focusedBus?.isDropoff ?? false) ? Colors.orangeAccent.withValues(alpha: 0.2) : Colors.blueAccent.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: (_focusedBus?.isDropoff ?? false) ? Colors.orangeAccent : Colors.blueAccent,
@@ -1425,7 +1425,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 child: Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.15),
+                    color: Colors.blueAccent.withValues(alpha: 0.15),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.alt_route_rounded, color: Colors.blueAccent, size: 22),
@@ -1689,12 +1689,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 child: Container(
                   padding: const EdgeInsets.all(24),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0D0B14).withOpacity(0.82),
+                    color: const Color(0xFF0D0B14).withValues(alpha: 0.82),
                     borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     boxShadow: [
                       BoxShadow(
-                          color: Colors.black.withOpacity(0.4),
+                          color: Colors.black.withValues(alpha: 0.4),
                           blurRadius: 30,
                           offset: const Offset(0, 10))
                     ],
@@ -1710,7 +1710,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                               gradient: LinearGradient(
                                 colors: [
                                   const Color(0xFF1A4CFF),
-                                  const Color(0xFF1A4CFF).withOpacity(0.6)
+                                  const Color(0xFF1A4CFF).withValues(alpha: 0.6)
                                 ],
                                 begin: Alignment.topLeft,
                                 end:   Alignment.bottomRight,
@@ -1718,7 +1718,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                               borderRadius: BorderRadius.circular(18),
                               boxShadow: [
                                 BoxShadow(
-                                    color: const Color(0xFF1A4CFF).withOpacity(0.3),
+                                    color: const Color(0xFF1A4CFF).withValues(alpha: 0.3),
                                     blurRadius: 12,
                                     spreadRadius: 2)
                               ],
@@ -1863,9 +1863,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       builder: (ctx) => Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
         decoration: BoxDecoration(
-          color: const Color(0xFF0D0B14).withOpacity(0.96),
+          color: const Color(0xFF0D0B14).withValues(alpha: 0.96),
           borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
-          border: Border.all(color: Colors.white.withOpacity(0.08)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1947,12 +1947,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(20),
                 border: Border.all(
                   color: isSelected
-                      ? Colors.white.withOpacity(0.4)
-                      : Colors.white.withOpacity(0.08),
+                      ? Colors.white.withValues(alpha: 0.4)
+                      : Colors.white.withValues(alpha: 0.08),
                   width: 1.5,
                 ),
                 boxShadow: isSelected
-                    ? [BoxShadow(color: const Color(0xFF1A4CFF).withOpacity(0.3), blurRadius: 10)]
+                    ? [BoxShadow(color: const Color(0xFF1A4CFF).withValues(alpha: 0.3), blurRadius: 10)]
                     : [],
               ),
               child: Icon(icon, color: Colors.white, size: 28),
@@ -2029,7 +2029,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         Container(
           padding: const EdgeInsets.all(8),
           decoration: BoxDecoration(
-            color: const Color(0xFF1A4CFF).withOpacity(0.1),
+            color: const Color(0xFF1A4CFF).withValues(alpha: 0.1),
             shape: BoxShape.circle,
           ),
           child: Icon(icon, color: const Color(0xFF1A4CFF), size: 18),

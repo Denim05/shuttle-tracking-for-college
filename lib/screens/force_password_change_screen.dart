@@ -189,25 +189,15 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
 
                     // Top Security Icon Badge
                     Container(
-                      width: 80,
-                      height: 80,
+                      width: 64,
+                      height: 64,
                       decoration: BoxDecoration(
-                        gradient: const LinearGradient(
-                          colors: [AppColors.primary, AppColors.accent],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(26),
-                        boxShadow: [
-                          BoxShadow(
-                            color: AppColors.primary.withValues(alpha: 0.4),
-                            blurRadius: 24,
-                            offset: const Offset(0, 8),
-                          ),
-                        ],
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                       ),
-                      child: const Icon(Icons.lock_reset_rounded, color: Colors.white, size: 40),
-                    ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.8, 0.8), end: const Offset(1, 1), curve: Curves.easeOutBack),
+                      child: const Icon(Icons.lock_reset_rounded, color: AppColors.primaryLight, size: 32),
+                    ).animate().fadeIn(duration: 300.ms).scale(begin: const Offset(0.9, 0.9), end: const Offset(1, 1), curve: Curves.easeOutBack),
 
                     const SizedBox(height: 24),
 
@@ -346,34 +336,22 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                           const SizedBox(height: 28),
 
                           // Submit Button
-                          Container(
+                          SizedBox(
                             width: double.infinity,
-                            height: 56,
-                            decoration: BoxDecoration(
-                              gradient: const LinearGradient(
-                                colors: [AppColors.primary, AppColors.accent],
-                              ),
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.primary.withValues(alpha: 0.4),
-                                  blurRadius: 18,
-                                  offset: const Offset(0, 6),
-                                ),
-                              ],
-                            ),
+                            height: 50,
                             child: ElevatedButton(
                               onPressed: _isSubmitting ? null : _handlePasswordChange,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.transparent,
-                                shadowColor: Colors.transparent,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                               ),
                               child: _isSubmitting
                                   ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                                     )
                                   : Row(
                                       mainAxisAlignment: MainAxisAlignment.center,
@@ -386,7 +364,7 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                                             'UPDATE & ACTIVATE ACCOUNT',
                                             style: GoogleFonts.plusJakartaSans(
                                               fontSize: 12.5,
-                                              fontWeight: FontWeight.w900,
+                                              fontWeight: FontWeight.w800,
                                               letterSpacing: 0.8,
                                               color: Colors.white,
                                             ),

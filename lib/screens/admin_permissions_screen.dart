@@ -123,7 +123,7 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                 ),
                 child: TextField(
                   style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
@@ -156,13 +156,13 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       decoration: BoxDecoration(
                         color: isSelected 
-                            ? roleColor.withOpacity(0.15) 
+                            ? roleColor.withValues(alpha: 0.15) 
                             : const Color(0xFF1E1E1E),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: isSelected 
-                              ? roleColor.withOpacity(0.4) 
-                              : Colors.white.withOpacity(0.05),
+                              ? roleColor.withValues(alpha: 0.4) 
+                              : Colors.white.withValues(alpha: 0.05),
                         ),
                       ),
                       child: Center(
@@ -215,9 +215,9 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
                             return Container(
                               margin: const EdgeInsets.only(bottom: 14),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E1E1E).withOpacity(0.4),
+                                color: const Color(0xFF1E1E1E).withValues(alpha: 0.4),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                               ),
                               child: ClipRRect(
                                 borderRadius: BorderRadius.circular(20),
@@ -234,7 +234,7 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
                                     child: Row(
                                       children: [
                                         CircleAvatar(
-                                          backgroundColor: roleColor.withOpacity(0.1),
+                                          backgroundColor: roleColor.withValues(alpha: 0.1),
                                           child: Icon(roleIcon, color: roleColor, size: 20),
                                         ),
                                         const SizedBox(width: 16),
@@ -255,9 +255,9 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
                                                   Container(
                                                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                                     decoration: BoxDecoration(
-                                                      color: roleColor.withOpacity(0.1),
+                                                      color: roleColor.withValues(alpha: 0.1),
                                                       borderRadius: BorderRadius.circular(6),
-                                                      border: Border.all(color: roleColor.withOpacity(0.2)),
+                                                      border: Border.all(color: roleColor.withValues(alpha: 0.2)),
                                                     ),
                                                     child: Text(
                                                       role.toUpperCase(),
@@ -643,9 +643,9 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: TextField(
         controller: ctrl,
@@ -677,7 +677,7 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.15)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.15)),
           ),
           child: ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -694,7 +694,7 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
                     children: [
                       CircleAvatar(
                         radius: 26,
-                        backgroundColor: roleColor.withOpacity(0.1),
+                        backgroundColor: roleColor.withValues(alpha: 0.1),
                         child: Icon(_getRoleIcon(selectedRole), color: roleColor, size: 26),
                       ),
                       const SizedBox(width: 16),
@@ -719,9 +719,9 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.15),
+                          color: statusColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: statusColor.withOpacity(0.3)),
+                          border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                         ),
                         child: Text(
                           status.toUpperCase(),
@@ -747,9 +747,9 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: Colors.white.withOpacity(0.1)),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                           ),
                           child: DropdownButtonHideUnderline(
                             child: DropdownButton<String>(
@@ -910,7 +910,7 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
                                 }
                               },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: isActive ? Colors.orangeAccent.withOpacity(0.1) : const Color(0xFF38EF7D).withOpacity(0.1),
+                                backgroundColor: isActive ? Colors.orangeAccent.withValues(alpha: 0.1) : const Color(0xFF38EF7D).withValues(alpha: 0.1),
                                 foregroundColor: isActive ? Colors.orangeAccent : const Color(0xFF38EF7D),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                 padding: const EdgeInsets.symmetric(vertical: 14),
@@ -980,7 +980,7 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
                               }
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isEditing ? const Color(0xFF38EF7D) : Colors.white.withOpacity(0.05),
+                              backgroundColor: isEditing ? const Color(0xFF38EF7D) : Colors.white.withValues(alpha: 0.05),
                               foregroundColor: isEditing ? Colors.black : Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -997,7 +997,7 @@ class _AdminUserDetailsBottomSheetState extends State<_AdminUserDetailsBottomShe
                         if (user['username'] != 'admin' && user['_id'] != user['id'])
                           Container(
                             decoration: BoxDecoration(
-                              color: Colors.redAccent.withOpacity(0.1),
+                              color: Colors.redAccent.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: IconButton(

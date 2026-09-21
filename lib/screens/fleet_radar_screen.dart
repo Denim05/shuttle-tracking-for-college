@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 
@@ -178,21 +179,34 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                 child: Container(
                   width: 40, height: 40,
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    color: AppColors.bgSecondary.withValues(alpha: 0.85),
+                    borderRadius: BorderRadius.circular(13),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
                   ),
-                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 18),
+                  child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  'Fleet Tracker',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white, fontWeight: FontWeight.w900,
-                    fontSize: 16, letterSpacing: 3,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'FLEET RADAR',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white, fontWeight: FontWeight.w900,
+                        fontSize: 15, letterSpacing: 1.2,
+                      ),
+                    ),
+                    Text(
+                      'LIVE BHOPAL CAMPUS NETWORK',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.primaryLight, fontWeight: FontWeight.w700,
+                        fontSize: 9, letterSpacing: 1.0,
+                      ),
+                    ),
+                  ],
                 ),
               ),
               // Latency indicator
@@ -201,17 +215,17 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                 builder: (_, ping, __) {
                   if (ping == null) return const SizedBox.shrink();
                   final color = ping < 100
-                      ? AppColors.accent
+                      ? AppColors.accentGreen
                       : ping < 300
                           ? AppColors.warning
                           : AppColors.danger;
                   return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: color.withOpacity(0.3)),
+                      color: color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: color.withValues(alpha: 0.3)),
                     ),
                     child: Text(
                       '${ping}ms',
@@ -220,19 +234,26 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                   );
                 },
               ),
-              // Connection dot
+              // Connection status badge
               ValueListenableBuilder<bool>(
                 valueListenable: context.read<SocketService>().connectionStatus,
                 builder: (_, connected, __) {
-                  final color = connected ? AppColors.accent : AppColors.danger;
+                  final color = connected ? AppColors.accentGreen : AppColors.danger;
                   return Container(
-                    width: 10, height: 10,
+                    padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: color,
-                      shape: BoxShape.circle,
-                      boxShadow: [BoxShadow(color: color.withOpacity(0.6), blurRadius: 8)],
+                      color: color.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: color.withValues(alpha: 0.3)),
                     ),
-                  ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.5.seconds);
+                    child: Container(
+                      width: 8, height: 8,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  );
                 },
               ),
             ],
@@ -253,21 +274,22 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           top: MediaQuery.of(context).padding.top + 60,
           left: 16, right: 16,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
             decoration: BoxDecoration(
-              color: AppColors.danger.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(12),
+              color: AppColors.danger.withValues(alpha: 0.95),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 14),
+                const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
                 const SizedBox(width: 8),
                 Text(
-                  'Connecting to server...',
+                  'RECONNECTING TO LIVE TELEMETRY...',
                   style: GoogleFonts.plusJakartaSans(
                     color: Colors.white, fontSize: 10,
-                    fontWeight: FontWeight.w900, letterSpacing: 1.5,
+                    fontWeight: FontWeight.w900, letterSpacing: 1.2,
                   ),
                 ),
               ],
@@ -282,7 +304,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
 
   Widget _buildSOSOverlay(Map<String, dynamic> sos) {
     return Positioned(
-      top: MediaQuery.of(context).padding.top + 70,
+      top: MediaQuery.of(context).padding.top + 65,
       left: 16, right: 16,
       child: GestureDetector(
         onTap: () => setState(() => _pendingSOSAlert = null),
@@ -291,36 +313,43 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           decoration: BoxDecoration(
             color: AppColors.danger,
             borderRadius: BorderRadius.circular(20),
-            boxShadow: [BoxShadow(color: AppColors.danger.withOpacity(0.5), blurRadius: 30, spreadRadius: 4)],
+            border: Border.all(color: Colors.white.withValues(alpha: 0.25)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.danger.withValues(alpha: 0.4),
+                blurRadius: 20,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
           child: Row(
             children: [
               Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.emergency_rounded, color: Colors.white, size: 24),
-              ).animate(onPlay: (c) => c.repeat()).scale(begin: const Offset(1,1), end: const Offset(1.15,1.15), duration: 600.ms),
+                child: const Icon(Icons.emergency_rounded, color: Colors.white, size: 22),
+              ),
               const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Emergency Alert', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2)),
+                    Text('EMERGENCY ALERT', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2)),
                     const SizedBox(height: 2),
                     Text(
-                      sos['name']?.toString() ?? sos['routeName']?.toString() ?? 'Alert received',
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11),
+                      sos['name']?.toString() ?? sos['routeName']?.toString() ?? 'Alert broadcast received',
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12),
                     ),
                   ],
                 ),
               ),
-              const Icon(Icons.close_rounded, color: Colors.white54, size: 18),
+              const Icon(Icons.close_rounded, color: Colors.white70, size: 18),
             ],
           ),
-        ).animate().slideY(begin: -0.5, end: 0, curve: Curves.easeOutCubic).fadeIn(),
+        ).animate().slideY(begin: -0.3, end: 0, curve: Curves.easeOutCubic).fadeIn(),
       ),
     );
   }
@@ -334,10 +363,16 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
   ) {
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.bg.withOpacity(0.95),
+        color: AppColors.bgSecondary,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border.all(color: Colors.white.withOpacity(0.07)),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.5), blurRadius: 40, spreadRadius: 10)],
+        border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 1)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.5),
+            blurRadius: 30,
+            offset: const Offset(0, -6),
+          ),
+        ],
       ),
       child: CustomScrollView(
         controller: scrollController,
@@ -346,10 +381,10 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           SliverToBoxAdapter(
             child: Center(
               child: Container(
-                width: 40, height: 4,
+                width: 36, height: 4,
                 margin: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.15),
+                  color: Colors.white.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
                 ),
               ),
@@ -362,17 +397,17 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  _buildStatChip('ACTIVE',   activeCount,  AppColors.accent),
-                  const SizedBox(width: 10),
+                  _buildStatChip('ACTIVE',   activeCount,  AppColors.accentGreen),
+                  const SizedBox(width: 8),
                   _buildStatChip('DELAYED',  delayedCount, AppColors.warning),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 8),
                   _buildStatChip('OFFLINE',  offlineCount, AppColors.danger),
                   const Spacer(),
                   Text(
-                    '${context.read<BusStore>().allBuses.length} BUSES',
+                    '${context.read<BusStore>().allBuses.length} TOTAL',
                     style: GoogleFonts.plusJakartaSans(
                       color: AppColors.textMuted, fontSize: 10,
-                      fontWeight: FontWeight.w800, letterSpacing: 1.5,
+                      fontWeight: FontWeight.w800, letterSpacing: 1.2,
                     ),
                   ),
                 ],
@@ -411,8 +446,8 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
               child: Text(
                 '${filtered.length} BUS${filtered.length == 1 ? '' : 'ES'} IN VIEW',
                 style: GoogleFonts.plusJakartaSans(
-                  color: AppColors.textMuted, fontSize: 9,
-                  fontWeight: FontWeight.w900, letterSpacing: 2,
+                  color: AppColors.textMuted, fontSize: 9.5,
+                  fontWeight: FontWeight.w900, letterSpacing: 1.5,
                 ),
               ),
             ),
@@ -440,11 +475,11 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
 
   Widget _buildStatChip(String label, int count, Color color) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.08),
+        color: color.withValues(alpha: 0.10),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.25)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -458,7 +493,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
             '$count $label',
             style: GoogleFonts.plusJakartaSans(
               color: color, fontSize: 9,
-              fontWeight: FontWeight.w900, letterSpacing: 1,
+              fontWeight: FontWeight.w900, letterSpacing: 0.8,
             ),
           ),
         ],
@@ -471,22 +506,25 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
   Widget _buildFilterChip(String label, _RadarFilter value) {
     final selected = _filter == value;
     return GestureDetector(
-      onTap: () => setState(() => _filter = value),
+      onTap: () {
+        HapticFeedback.selectionClick();
+        setState(() => _filter = value);
+      },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
           color: selected ? AppColors.primary : AppColors.surface,
-          borderRadius: BorderRadius.circular(10),
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? AppColors.primary : Colors.white.withOpacity(0.08),
+            color: selected ? AppColors.primary : Colors.white.withValues(alpha: 0.06),
           ),
         ),
         child: Text(
           label,
           style: GoogleFonts.plusJakartaSans(
             color: selected ? Colors.white : AppColors.textSecondary,
-            fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.5,
+            fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 1.2,
           ),
         ),
       ),
@@ -501,7 +539,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
     IconData statusIcon;
     switch (bus.status) {
       case 'On-time':
-        statusColor = AppColors.accent;
+        statusColor = AppColors.accentGreen;
         statusIcon  = Icons.check_circle_rounded;
         break;
       case 'Delayed':
@@ -526,27 +564,26 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
 
     return GestureDetector(
       onTap: () {
+        HapticFeedback.selectionClick();
         setState(() {
           _selectedBusId = isSelected ? null : bus.id;
         });
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
+        duration: const Duration(milliseconds: 180),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected
-              ? routeColor.withOpacity(0.08)
-              : AppColors.surface.withOpacity(0.6),
+              ? routeColor.withValues(alpha: 0.10)
+              : AppColors.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
-                ? routeColor.withOpacity(0.4)
-                : Colors.white.withOpacity(0.05),
+                ? routeColor.withValues(alpha: 0.5)
+                : Colors.white.withValues(alpha: 0.05),
             width: isSelected ? 1.5 : 1.0,
           ),
-          boxShadow: isSelected
-              ? [BoxShadow(color: routeColor.withOpacity(0.15), blurRadius: 20)]
-              : null,
+          boxShadow: isSelected ? AppShadows.card : null,
         ),
         child: IntrinsicHeight(
           child: Row(
@@ -563,13 +600,13 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
 
               // Bus icon
               Container(
-                width: 42, height: 42,
+                width: 40, height: 40,
                 decoration: BoxDecoration(
-                  color: routeColor.withOpacity(0.12),
+                  color: routeColor.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(13),
-                  border: Border.all(color: routeColor.withOpacity(0.25)),
+                  border: Border.all(color: routeColor.withValues(alpha: 0.25)),
                 ),
-                child: Icon(Icons.directions_bus_rounded, color: routeColor, size: 22),
+                child: Icon(Icons.directions_bus_rounded, color: routeColor, size: 20),
               ),
               const SizedBox(width: 12),
 
@@ -598,13 +635,13 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withOpacity(0.1),
+                                color: AppColors.primary.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(6),
                               ),
                               child: Text(
                                 '${bus.speed.toInt()} km/h',
                                 style: GoogleFonts.plusJakartaSans(
-                                  color: AppColors.primary, fontSize: 9,
+                                  color: AppColors.primaryLight, fontSize: 9,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -620,7 +657,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                             bus.status.toUpperCase(),
                             style: GoogleFonts.plusJakartaSans(
                               color: statusColor, fontSize: 9,
-                              fontWeight: FontWeight.w900, letterSpacing: 1,
+                              fontWeight: FontWeight.w900, letterSpacing: 0.8,
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -636,11 +673,11 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                         ],
                       ),
                       if (bus.etas.isNotEmpty) ...[
-                        const SizedBox(height: 6),
+                        const SizedBox(height: 5),
                         Text(
-                          'Next: ${bus.etas.first.stopName} in ${bus.etas.first.minutes}m',
+                          'Next: ${bus.etas.first.stopName} (${bus.etas.first.minutes}m)',
                           style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textSecondary, fontSize: 9,
+                            color: AppColors.textSecondary, fontSize: 10,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -651,7 +688,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
               ),
               const SizedBox(width: 8),
 
-              // Focus arrow
+              // Focus indicator
               Icon(
                 isSelected ? Icons.gps_fixed_rounded : Icons.chevron_right_rounded,
                 color: isSelected ? routeColor : AppColors.textMuted,
@@ -662,8 +699,8 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           ),
         ),
       ).animate(delay: Duration(milliseconds: index * 40))
-       .fadeIn(duration: 300.ms)
-       .slideY(begin: 0.1, end: 0, curve: Curves.easeOut),
+       .fadeIn(duration: 250.ms)
+       .slideY(begin: 0.08, end: 0, curve: Curves.easeOut),
     );
   }
 
@@ -674,13 +711,21 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
       padding: const EdgeInsets.symmetric(vertical: 40),
       child: Column(
         children: [
-          const Icon(Icons.radar_rounded, color: AppColors.textMuted, size: 48),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              shape: BoxShape.circle,
+              border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            ),
+            child: const Icon(Icons.radar_rounded, color: AppColors.textMuted, size: 36),
+          ),
           const SizedBox(height: 12),
           Text(
             'NO BUSES IN THIS FILTER',
             style: GoogleFonts.plusJakartaSans(
               color: AppColors.textMuted, fontSize: 11,
-              fontWeight: FontWeight.w800, letterSpacing: 2,
+              fontWeight: FontWeight.w800, letterSpacing: 1.5,
             ),
           ),
         ],
@@ -698,23 +743,24 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const SizedBox(
-              width: 48, height: 48,
+              width: 36, height: 36,
               child: CircularProgressIndicator(
-                color: AppColors.accent, strokeWidth: 2,
+                color: AppColors.primary, strokeWidth: 2.5,
               ),
             ),
             const SizedBox(height: 16),
             Text(
-              'Loading...',
+              'RADAR SCANNING...',
               style: GoogleFonts.plusJakartaSans(
                 color: AppColors.textMuted, fontSize: 11,
-                fontWeight: FontWeight.w900, letterSpacing: 3,
+                fontWeight: FontWeight.w900, letterSpacing: 2,
               ),
             ),
           ],
-        ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
+        ),
       ),
     );
   }
 }
+
 

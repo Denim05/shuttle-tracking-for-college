@@ -272,7 +272,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: isError ? Colors.redAccent.withOpacity(0.4) : const Color(0xFF00F0FF).withOpacity(0.3)),
+          side: BorderSide(color: isError ? Colors.redAccent.withValues(alpha: 0.4) : const Color(0xFF00F0FF).withValues(alpha: 0.3)),
         ),
         margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
@@ -332,9 +332,9 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
           Container(
             margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
             decoration: BoxDecoration(
-              color: const Color(0xFF00F0FF).withOpacity(0.12),
+              color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.3)),
+              border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
             ),
             child: IconButton(
               tooltip: 'Auto-Geocode All Stops',
@@ -354,7 +354,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
               gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
               borderRadius: BorderRadius.circular(12),
               boxShadow: [
-                BoxShadow(color: const Color(0xFF10B981).withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 2)),
+                BoxShadow(color: const Color(0xFF10B981).withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 2)),
               ],
             ),
             child: IconButton(
@@ -379,10 +379,10 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
               decoration: BoxDecoration(
                 color: const Color(0xFF131D33),
                 borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: parsedColor.withOpacity(0.25)),
+                border: Border.all(color: parsedColor.withValues(alpha: 0.25)),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
+                    color: Colors.black.withValues(alpha: 0.3),
                     blurRadius: 16,
                     offset: const Offset(0, 4),
                   )
@@ -396,7 +396,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: parsedColor.withOpacity(0.15),
+                          color: parsedColor.withValues(alpha: 0.15),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(Icons.alt_route_rounded, color: parsedColor, size: 20),
@@ -446,7 +446,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(16),
-                        borderSide: BorderSide(color: parsedColor.withOpacity(0.6), width: 1.5),
+                        borderSide: BorderSide(color: parsedColor.withValues(alpha: 0.6), width: 1.5),
                       ),
                       prefixIcon: const Icon(Icons.edit_note_rounded, color: Colors.white38, size: 20),
                     ),
@@ -473,7 +473,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide(color: parsedColor.withOpacity(0.6), width: 1.5),
+                              borderSide: BorderSide(color: parsedColor.withValues(alpha: 0.6), width: 1.5),
                             ),
                             prefixIcon: const Icon(Icons.palette_rounded, color: Colors.white38, size: 20),
                           ),
@@ -488,7 +488,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white24, width: 2),
                           boxShadow: [
-                            BoxShadow(color: parsedColor.withOpacity(0.4), blurRadius: 10, spreadRadius: 1)
+                            BoxShadow(color: parsedColor.withValues(alpha: 0.4), blurRadius: 10, spreadRadius: 1)
                           ],
                         ),
                       ),
@@ -533,13 +533,13 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                   // Add Waypoint Button
                   ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: parsedColor.withOpacity(0.15),
+                      backgroundColor: parsedColor.withValues(alpha: 0.15),
                       foregroundColor: parsedColor,
                       elevation: 0,
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(color: parsedColor.withOpacity(0.3)),
+                        side: BorderSide(color: parsedColor.withValues(alpha: 0.3)),
                       ),
                     ),
                     icon: const Icon(Icons.add_location_alt_rounded, size: 16),
@@ -566,7 +566,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF131D33),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withOpacity(0.06)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                 ),
                 child: Center(
                   child: Column(
@@ -619,12 +619,12 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                         color: const Color(0xFF131D33),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: hasCoords ? Colors.white.withOpacity(0.08) : Colors.amber.withOpacity(0.4),
+                          color: hasCoords ? Colors.white.withValues(alpha: 0.08) : Colors.amber.withValues(alpha: 0.4),
                           width: hasCoords ? 1 : 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 10,
                             offset: const Offset(0, 2),
                           )
@@ -653,9 +653,9 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                                     width: 28,
                                     height: 28,
                                     decoration: BoxDecoration(
-                                      color: parsedColor.withOpacity(0.15),
+                                      color: parsedColor.withValues(alpha: 0.15),
                                       shape: BoxShape.circle,
-                                      border: Border.all(color: parsedColor.withOpacity(0.35)),
+                                      border: Border.all(color: parsedColor.withValues(alpha: 0.35)),
                                     ),
                                     child: Center(
                                       child: Text(
@@ -700,7 +700,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                                     isDense: true,
                                     contentPadding: const EdgeInsets.symmetric(vertical: 8),
                                     enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white12)),
-                                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: parsedColor.withOpacity(0.7))),
+                                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: parsedColor.withValues(alpha: 0.7))),
                                   ),
                                 ),
                               ),
@@ -724,7 +724,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF0F172A),
                               borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: Colors.white.withOpacity(0.05)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                             ),
                             child: Row(
                               children: [
@@ -763,9 +763,9 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF00F0FF).withOpacity(0.12),
+                                    color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.3)),
+                                    border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -796,9 +796,9 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF10B981).withOpacity(0.12),
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+                                    border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,

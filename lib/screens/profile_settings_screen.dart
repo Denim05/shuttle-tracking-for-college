@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
@@ -37,6 +38,18 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     _fetchProfile();
   }
 
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _emailCtrl.dispose();
+    _phoneCtrl.dispose();
+    _contactNumCtrl.dispose();
+    _currPasswordCtrl.dispose();
+    _newPasswordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchProfile() async {
     setState(() => _isLoading = true);
     try {
@@ -58,7 +71,12 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       setState(() => _isLoading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to load profile: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text('Failed to load profile: $e'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
         );
       }
     }
@@ -66,10 +84,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
   Color _getRoleColor() {
     switch (_role.toLowerCase()) {
-      case 'admin': return Colors.purpleAccent;
-      case 'manager': return Colors.blueAccent;
-      case 'driver': return Colors.tealAccent;
-      default: return Colors.blue;
+      case 'admin': return AppColors.accentPurple;
+      case 'manager': return AppColors.primary;
+      case 'driver': return AppColors.accent;
+      default: return AppColors.primaryLight;
     }
   }
 
@@ -83,6 +101,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   Future<void> _saveProfileChanges() async {
+    HapticFeedback.mediumImpact();
     setState(() => _isSaving = true);
     try {
       final body = <String, dynamic>{};
@@ -105,17 +124,36 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile updated successfully!'), backgroundColor: Colors.green),
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: AppColors.accentGreen, size: 18),
+                const SizedBox(width: 8),
+                Text('Profile updated successfully!', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+              ],
+            ),
+            backgroundColor: const Color(0xFF13222A),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+            ),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Update failed: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(
+            content: Text('Update failed: $e'),
+            backgroundColor: AppColors.danger,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          ),
         );
       }
     } finally {
-      setState(() => _isSaving = false);
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 
@@ -124,124 +162,191 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     _newPasswordCtrl.clear();
     _confirmPasswordCtrl.clear();
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
       builder: (dialogCtx) {
         bool resetting = false;
+        bool showCurr = false;
+        bool showNew = false;
         return StatefulBuilder(
           builder: (context, setDialogState) {
-            return AlertDialog(
-              backgroundColor: const Color(0xFF0F1528),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: Row(
-                children: [
-                  const Icon(Icons.vpn_key_rounded, color: Colors.purpleAccent),
-                  const SizedBox(width: 12),
-                  Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-                ],
-              ),
-              content: SingleChildScrollView(
+            return Padding(
+              padding: EdgeInsets.only(bottom: MediaQuery.of(dialogCtx).viewInsets.bottom),
+              child: Container(
+                decoration: const BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+                ),
+                padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    TextField(
+                    Center(
+                      child: Container(
+                        width: 36, height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Icon(Icons.vpn_key_rounded, color: AppColors.primaryLight, size: 20),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'CHANGE PASSWORD',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 15,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Ensure your new password contains at least 6 characters.',
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // Current Password
+                    _buildModalTextField(
                       controller: _currPasswordCtrl,
-                      obscureText: true,
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
-                      decoration: InputDecoration(
-                        labelText: 'CURRENT PASSWORD',
-                        labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold),
-                        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent)),
-                      ),
+                      hint: 'Current Password',
+                      obscure: !showCurr,
+                      onToggle: () => setDialogState(() => showCurr = !showCurr),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+
+                    // New Password
+                    _buildModalTextField(
                       controller: _newPasswordCtrl,
-                      obscureText: true,
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
-                      decoration: InputDecoration(
-                        labelText: 'NEW PASSWORD',
-                        labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold),
-                        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent)),
-                      ),
+                      hint: 'New Password (min 6 chars)',
+                      obscure: !showNew,
+                      onToggle: () => setDialogState(() => showNew = !showNew),
                     ),
                     const SizedBox(height: 12),
-                    TextField(
+
+                    // Confirm Password
+                    _buildModalTextField(
                       controller: _confirmPasswordCtrl,
-                      obscureText: true,
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
-                      decoration: InputDecoration(
-                        labelText: 'CONFIRM NEW PASSWORD',
-                        labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold),
-                        enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-                        focusedBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.purpleAccent)),
+                      hint: 'Confirm New Password',
+                      obscure: !showNew,
+                    ),
+                    const SizedBox(height: 24),
+
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: resetting ? null : () async {
+                          final curr = _currPasswordCtrl.text.trim();
+                          final next = _newPasswordCtrl.text.trim();
+                          final conf = _confirmPasswordCtrl.text.trim();
+
+                          if (curr.isEmpty || next.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('All fields are required.'),
+                                backgroundColor: AppColors.danger,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                            );
+                            return;
+                          }
+                          if (next.length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('New password must be at least 6 characters.'),
+                                backgroundColor: AppColors.danger,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                            );
+                            return;
+                          }
+                          if (next != conf) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: const Text('Passwords do not match.'),
+                                backgroundColor: AppColors.danger,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                            );
+                            return;
+                          }
+
+                          final messenger = ScaffoldMessenger.of(context);
+                          final nav = Navigator.of(dialogCtx);
+                          setDialogState(() => resetting = true);
+                          try {
+                            await _apiService.put('users/change-password', {
+                              'currentPassword': curr,
+                              'newPassword': next,
+                            });
+                            
+                            if (mounted) {
+                              nav.pop();
+                              messenger.showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const Icon(Icons.check_circle_rounded, color: AppColors.accentGreen, size: 18),
+                                      const SizedBox(width: 8),
+                                      Text('Password updated successfully!', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                                    ],
+                                  ),
+                                  backgroundColor: const Color(0xFF13222A),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    side: BorderSide(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                                  ),
+                                ),
+                              );
+                            }
+                          } catch (e) {
+                            setDialogState(() => resetting = false);
+                            messenger.showSnackBar(
+                              SnackBar(
+                                content: Text('Failed: $e'),
+                                backgroundColor: AppColors.danger,
+                                behavior: SnackBarBehavior.floating,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                              ),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
+                        ),
+                        child: resetting
+                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
                       ),
                     ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: resetting ? null : () => Navigator.pop(dialogCtx),
-                  child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
-                ),
-                ElevatedButton(
-                  onPressed: resetting ? null : () async {
-                    final curr = _currPasswordCtrl.text;
-                    final next = _newPasswordCtrl.text;
-                    final conf = _confirmPasswordCtrl.text;
-
-                    if (curr.isEmpty || next.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('All fields are required.'), backgroundColor: Colors.redAccent),
-                      );
-                      return;
-                    }
-                    if (next.length < 6) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('New password must be at least 6 characters.'), backgroundColor: Colors.redAccent),
-                      );
-                      return;
-                    }
-                    if (next != conf) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Passwords do not match.'), backgroundColor: Colors.redAccent),
-                      );
-                      return;
-                    }
-
-                    setDialogState(() => resetting = true);
-                    try {
-                      await _apiService.put('users/change-password', {
-                        'currentPassword': curr,
-                        'newPassword': next,
-                      });
-                      
-                      if (mounted) {
-                        Navigator.pop(dialogCtx);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Password updated successfully!'), backgroundColor: Colors.green),
-                        );
-                      }
-                    } catch (e) {
-                      setDialogState(() => resetting = false);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Failed to change password: $e'), backgroundColor: Colors.redAccent),
-                      );
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.purpleAccent,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: resetting
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                      : Text('CHANGE', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-                ),
-              ],
             );
           },
         );
@@ -249,14 +354,43 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
   }
 
+  Widget _buildModalTextField({
+    required TextEditingController controller,
+    required String hint,
+    required bool obscure,
+    VoidCallback? onToggle,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: obscure,
+        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13.5),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 13),
+          border: InputBorder.none,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          suffixIcon: onToggle != null
+              ? IconButton(
+                  icon: Icon(obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded, color: AppColors.textMuted, size: 18),
+                  onPressed: onToggle,
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
   void _showPrivacyPolicy() {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0F172A),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
         return DraggableScrollableSheet(
           initialChildSize: 0.8,
@@ -265,83 +399,93 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           expand: false,
           builder: (context, scrollController) {
             return Container(
+              decoration: const BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
               padding: const EdgeInsets.symmetric(horizontal: 24),
               child: ListView(
                 controller: scrollController,
                 children: [
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
                   Center(
                     child: Container(
-                      width: 48,
-                      height: 5,
+                      width: 36,
+                      height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white24,
+                        color: Colors.white.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(10),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 20),
                   Row(
                     children: [
-                      const Icon(Icons.security_rounded, color: Colors.tealAccent, size: 28),
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.security_rounded, color: AppColors.accent, size: 22),
+                      ),
                       const SizedBox(width: 12),
                       Text(
-                        'Privacy Policy',
+                        'Privacy & Location Policy',
                         style: GoogleFonts.plusJakartaSans(
                           color: Colors.white,
-                          fontSize: 20,
+                          fontSize: 18,
                           fontWeight: FontWeight.w900,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
                   Text(
-                    'Last Updated: July 2026',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11),
+                    'Campus Transit Data Standards • July 2026',
+                    style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 11),
                   ),
-                  const Divider(color: Colors.white10, height: 24),
+                  Divider(color: Colors.white.withValues(alpha: 0.06), height: 28),
                   
                   _buildPolicySection(
-                    '1. Location Data Collection',
-                    'Our app collects precise real-time location data of vehicles to provide tracking services. For drivers, location data is collected in the foreground and/or background when sharing route coordinates so students can see active buses. For users, location is optionally used to show your distance relative to stops.',
+                    '1. Location Telemetry Collection',
+                    'Our system collects real-time vehicle GPS coordinates to compute accurate transit ETAs. For drivers, location is transmitted during active trips. For students, proximity location is computed locally to calculate walking distance to stops.',
                   ),
                   _buildPolicySection(
-                    '2. How We Use Data',
-                    'Location and transit data are used solely to calculate accurate Estimated Time of Arrival (ETA), display live bus markers, and send notifications. We do not sell or share individual transit or location history with third-party advertising services.',
+                    '2. How Transit Data Is Used',
+                    'Transit metrics are utilized solely for campus route scheduling, live map markers, and push notifications. Personal location history is never shared with third-party networks or advertisers.',
                   ),
                   _buildPolicySection(
-                    '3. Data Protection & Security',
-                    'All coordinates, speed updates, and profile details are encrypted in transit using Secure WebSockets (WSS) and HTTPS. Connection status is constantly audited for system security.',
+                    '3. End-to-End Encryption',
+                    'All WebSocket socket frames, route coordinates, and student identifiers are encrypted in transit over HTTPS and WSS with strict token authorization.',
                   ),
                   _buildPolicySection(
-                    '4. Your Controls & Permissions',
-                    'You can grant or revoke location permissions at any time through your device settings. Disabling location tracking will disable live broadcasting for drivers and personal proximity tracking for users.',
-                  ),
-                  _buildPolicySection(
-                    '5. Contact & Support',
-                    'For questions regarding safety policies or data compliance, please reach out to the campus transit administration help desk.',
+                    '4. User Controls & Privacy',
+                    'You can toggle proximity alerts or update your commute pickup point at any time in settings.',
                   ),
                   const SizedBox(height: 24),
-                  ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.tealAccent.withOpacity(0.12),
-                      foregroundColor: Colors.tealAccent,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      side: BorderSide(color: Colors.tealAccent.withOpacity(0.3)),
-                    ),
-                    child: Text(
-                      'I UNDERSTAND',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 12,
-                        letterSpacing: 1.5,
+                  SizedBox(
+                    width: double.infinity,
+                    height: 48,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: Text(
+                        'I UNDERSTAND',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 12,
+                          letterSpacing: 1.2,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 36),
                 ],
               ),
             );
@@ -353,23 +497,23 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
   Widget _buildPolicySection(String title, String body) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             title,
             style: GoogleFonts.plusJakartaSans(
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white,
               fontSize: 13,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
             ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
             body,
             style: GoogleFonts.plusJakartaSans(
-              color: Colors.white60,
+              color: AppColors.textSecondary,
               fontSize: 12,
               height: 1.5,
             ),
@@ -379,8 +523,6 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final roleColor = _getRoleColor();
@@ -389,246 +531,341 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     final name = _profile['name'] ?? username;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: AppColors.bg,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: AppColors.bgSecondary,
         elevation: 0,
-        title: Text(
-          'PROFILE & SETTINGS',
-          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 15, letterSpacing: 2),
-        ),
-      ),
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: RadialGradient(
-            center: Alignment.topLeft,
-            radius: 1.5,
-            colors: [Color(0xFF0F172A), Color(0xFF121212)],
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: GestureDetector(
+            onTap: () => Navigator.pop(context),
+            child: Container(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+              ),
+              child: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 16),
+            ),
           ),
         ),
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator(color: Colors.purpleAccent))
-            : Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                child: ListView(
-                  children: [
-                    const SizedBox(height: 16),
-                    // Profile Header card
-                    Container(
-                      padding: const EdgeInsets.all(24),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E).withOpacity(0.5),
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: roleColor.withOpacity(0.2)),
+        title: Text(
+          'PROFILE & SETTINGS',
+          style: GoogleFonts.plusJakartaSans(
+            color: Colors.white,
+            fontWeight: FontWeight.w900,
+            fontSize: 14,
+            letterSpacing: 1.5,
+          ),
+        ),
+      ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2.5))
+          : ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              children: [
+                // Profile Header Card
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                    boxShadow: AppShadows.card,
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 72,
+                        decoration: BoxDecoration(
+                          color: roleColor.withValues(alpha: 0.12),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: roleColor.withValues(alpha: 0.3), width: 1.5),
+                        ),
+                        child: Icon(roleIcon, color: roleColor, size: 34),
                       ),
-                      child: Column(
+                      const SizedBox(height: 14),
+                      Text(
+                        name,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w900,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 8,
                         children: [
-                          CircleAvatar(
-                            radius: 36,
-                            backgroundColor: roleColor.withOpacity(0.1),
-                            child: Icon(roleIcon, color: roleColor, size: 36),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            name,
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900),
-                            textAlign: TextAlign.center,
-                          ),
-                          const SizedBox(height: 4),
+                          if (username.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.badge_outlined, color: AppColors.textMuted, size: 12),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    username,
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: AppColors.textSecondary,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                             decoration: BoxDecoration(
-                              color: roleColor.withOpacity(0.1),
+                              color: roleColor.withValues(alpha: 0.12),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: roleColor.withOpacity(0.25)),
+                              border: Border.all(color: roleColor.withValues(alpha: 0.3)),
                             ),
                             child: Text(
                               _role.toUpperCase(),
-                              style: GoogleFonts.plusJakartaSans(color: roleColor, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+                              style: GoogleFonts.plusJakartaSans(
+                                color: roleColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 1,
+                              ),
                             ),
                           ),
                         ],
                       ),
-                    ).animate().fadeIn().slideY(begin: 0.1),
-                    
-                    const SizedBox(height: 24),
-                    Text('PROFILE DETAILS', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                    const SizedBox(height: 12),
-
-                    // Editable Fields
-                    _buildEditableInput(_nameCtrl, 'Full Name', Icons.person_outline_rounded),
-                    
-                    if (_role == 'admin' || _role == 'manager' || _role == 'user' || _role == 'driver')
-                      _buildEditableInput(_emailCtrl, 'Email Address', Icons.alternate_email_rounded, keyboardType: TextInputType.emailAddress),
-                      
-                    if (_role == 'user')
-                      _buildEditableInput(_phoneCtrl, 'Contact Phone', Icons.phone_android_rounded, keyboardType: TextInputType.phone),
-
-                    if (_role == 'driver')
-                      _buildEditableInput(_contactNumCtrl, 'Contact Phone', Icons.phone_android_rounded, keyboardType: TextInputType.phone),
-
-                    const SizedBox(height: 16),
-
-                    // Read-only specific metadata based on role
-                    if (_role == 'manager') ...[
-                      _buildReadOnlyItem('Employee ID', _profile['employeeId'] ?? 'N/A', Icons.pin_rounded),
-                      _buildReadOnlyItem('Department', _profile['department'] ?? 'N/A', Icons.business_rounded),
-                      _buildReadOnlyItem('Management Scope', (_profile['canManage'] as List?)?.join(', ').toUpperCase() ?? 'N/A', Icons.shield_outlined),
                     ],
+                  ),
+                ).animate().fadeIn().slideY(begin: 0.06),
+                
+                const SizedBox(height: 24),
+                _buildSectionHeader('EDITABLE INFORMATION'),
+                const SizedBox(height: 10),
 
-                    if (_role == 'driver') ...[
-                      _buildReadOnlyItem('Assigned Bus', _profile['assignedBus'] ?? 'NOT ASSIGNED', Icons.directions_bus_rounded),
-                      _buildReadOnlyItem('Account Status', _profile['status'] ?? 'ACTIVE', Icons.info_outline_rounded),
+                // Editable Fields Container
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                  ),
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      _buildModernInput(_nameCtrl, 'Full Name', Icons.person_outline_rounded),
+                      const SizedBox(height: 12),
+                      _buildModernInput(_emailCtrl, 'Email Address', Icons.alternate_email_rounded, keyboardType: TextInputType.emailAddress),
+                      if (_role == 'user') ...[
+                        const SizedBox(height: 12),
+                        _buildModernInput(_phoneCtrl, 'Contact Phone', Icons.phone_android_rounded, keyboardType: TextInputType.phone),
+                      ],
+                      if (_role == 'driver') ...[
+                        const SizedBox(height: 12),
+                        _buildModernInput(_contactNumCtrl, 'Contact Phone', Icons.phone_android_rounded, keyboardType: TextInputType.phone),
+                      ],
                     ],
-
-                    if (_role == 'user') ...[
-                      _buildReadOnlyItem('Student ID / Enrollment', username, Icons.assignment_ind_rounded),
-                      _buildReadOnlyItem('Course & Branch', _profile['courseName'] ?? 'N/A', Icons.school_rounded),
-                      _buildReadOnlyItem('Father\'s Name', _profile['fatherName'] ?? 'N/A', Icons.family_restroom_rounded),
-                      _buildReadOnlyItem('Father\'s Contact', _profile['fatherPhone'] ?? 'N/A', Icons.phone_enabled_rounded),
-                      _buildReadOnlyItem('Pickup Point Stop', _profile['pickupPoint'] ?? 'N/A', Icons.location_on_rounded),
-                    ],
-
-                    const SizedBox(height: 24),
-                    Text('SECURITY & ACTIONS', style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                    const SizedBox(height: 12),
-
-                     // Change password action
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E).withOpacity(0.4),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white.withOpacity(0.05)),
-                      ),
-                      child: ListTile(
-                        onTap: _showPasswordResetDialog,
-                        leading: const Icon(Icons.vpn_key_rounded, color: Colors.orangeAccent, size: 20),
-                        title: Text('CHANGE ACCOUNT PASSWORD', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
-                      ),
-                    ),
-
-                    if (_role == 'user')
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        decoration: BoxDecoration(
-                          color: AppColors.surface,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                        ),
-                        child: ListTile(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const CommuteSetupScreen(isInitialSetup: false)),
-                            ).then((_) => _fetchProfile());
-                          },
-                          leading: const Icon(Icons.pin_drop_rounded, color: AppColors.accent, size: 22),
-                          title: Text('DAILY COMMUTE & PICKUP STOP', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                          subtitle: Text(
-                            _profile['pickupPoint'] != null 
-                              ? 'Stop: ${_profile['pickupPoint']}'
-                              : 'Tap to configure your daily Bhopal stop',
-                            style: GoogleFonts.plusJakartaSans(color: AppColors.accent, fontSize: 11),
-                          ),
-                          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
-                        ),
-                      ),
-
-                    // Privacy Policy & Data Usage action
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E).withOpacity(0.4),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white.withOpacity(0.05)),
-                      ),
-                      child: ListTile(
-                        onTap: _showPrivacyPolicy,
-                        leading: const Icon(Icons.security_rounded, color: Colors.tealAccent, size: 20),
-                        title: Text('PRIVACY POLICY & DATA USAGE', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
-                      ),
-                    ),
-
-                    // Developer Credits & Team Info
-                    Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF2563EB).withValues(alpha: 0.12),
-                            const Color(0xFF0EA5E9).withValues(alpha: 0.05),
-                          ],
-                          begin: Alignment.centerLeft,
-                          end: Alignment.centerRight,
-                        ),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.25)),
-                      ),
-                      child: ListTile(
-                        onTap: () => showDeveloperCreditsModal(context),
-                        leading: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(Icons.rocket_launch_rounded, color: Color(0xFF60A5FA), size: 18),
-                        ),
-                        title: Text(
-                          'DEVELOPER CREDITS (TEAM RAFFTAR)',
-                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
-                        ),
-                        subtitle: Text(
-                          'Lead: Denim Hajare • SISTec Bhopal',
-                          style: GoogleFonts.plusJakartaSans(color: const Color(0xFF93C5FD), fontSize: 11, fontWeight: FontWeight.w500),
-                        ),
-                        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF60A5FA), size: 14),
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                    
-                    // Save Changes Button
-                    ElevatedButton(
-                      onPressed: _isSaving ? null : _saveProfileChanges,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: roleColor,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                      child: _isSaving
-                          ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
-                          : Text('SAVE CHANGES', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
-                    ),
-                    const SizedBox(height: 48),
-                  ],
+                  ),
                 ),
-              ),
+
+                const SizedBox(height: 24),
+
+                // Read-only metadata
+                if (_role == 'user' || _role == 'manager' || _role == 'driver') ...[
+                  _buildSectionHeader('SYSTEM VERIFICATION DATA'),
+                  const SizedBox(height: 10),
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    child: Column(
+                      children: [
+                        if (_role == 'manager') ...[
+                          _buildReadOnlyItem('Employee ID', _profile['employeeId'] ?? 'N/A', Icons.badge_outlined),
+                          _buildReadOnlyItem('Department', _profile['department'] ?? 'N/A', Icons.business_rounded),
+                          _buildReadOnlyItem('Management Scope', (_profile['canManage'] as List?)?.join(', ').toUpperCase() ?? 'N/A', Icons.shield_outlined),
+                        ],
+                        if (_role == 'driver') ...[
+                          _buildReadOnlyItem('Assigned Bus', _profile['assignedBus'] ?? 'NOT ASSIGNED', Icons.directions_bus_rounded),
+                          _buildReadOnlyItem('Account Status', _profile['status'] ?? 'ACTIVE', Icons.verified_user_rounded),
+                        ],
+                        if (_role == 'user') ...[
+                          _buildReadOnlyItem('Student Enrollment', username, Icons.badge_outlined),
+                          _buildReadOnlyItem('Course & Branch', _profile['courseName'] ?? 'N/A', Icons.school_rounded),
+                          _buildReadOnlyItem('Father\'s Name', _profile['fatherName'] ?? 'N/A', Icons.family_restroom_rounded),
+                          _buildReadOnlyItem('Father\'s Contact', _profile['fatherPhone'] ?? 'N/A', Icons.phone_enabled_rounded),
+                          _buildReadOnlyItem('Pickup Stop', _profile['pickupPoint'] ?? 'N/A', Icons.location_on_rounded),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                ],
+
+                _buildSectionHeader('PREFERENCES & SECURITY'),
+                const SizedBox(height: 10),
+
+                // Action Tiles Group
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                  ),
+                  child: Material(
+                    color: Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                    child: Column(
+                      children: [
+                        ListTile(
+                          onTap: _showPasswordResetDialog,
+                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.lock_reset_rounded, color: AppColors.primaryLight, size: 18),
+                          ),
+                          title: Text('CHANGE ACCOUNT PASSWORD', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
+                        ),
+                        if (_role == 'user') ...[
+                          Divider(color: Colors.white.withValues(alpha: 0.04), height: 1),
+                          ListTile(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(builder: (_) => const CommuteSetupScreen(isInitialSetup: false)),
+                              ).then((_) => _fetchProfile());
+                            },
+                            leading: Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: AppColors.accent.withValues(alpha: 0.12),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: const Icon(Icons.alt_route_rounded, color: AppColors.accent, size: 18),
+                            ),
+                            title: Text('DAILY COMMUTE & PICKUP STOP', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                            subtitle: Text(
+                              _profile['pickupPoint'] != null 
+                                ? 'Stop: ${_profile['pickupPoint']}'
+                                : 'Tap to configure your daily Bhopal stop',
+                              style: GoogleFonts.plusJakartaSans(color: AppColors.accent, fontSize: 11),
+                            ),
+                            trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
+                          ),
+                        ],
+                        Divider(color: Colors.white.withValues(alpha: 0.04), height: 1),
+                        ListTile(
+                          onTap: _showPrivacyPolicy,
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.accentGreen.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.shield_rounded, color: AppColors.accentGreen, size: 18),
+                          ),
+                          title: Text('PRIVACY POLICY & DATA USAGE', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
+                          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
+                        ),
+                        Divider(color: Colors.white.withValues(alpha: 0.04), height: 1),
+                        ListTile(
+                          onTap: () => showDeveloperCreditsModal(context),
+                          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(bottom: Radius.circular(20))),
+                          leading: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Icon(Icons.code_rounded, color: AppColors.primaryLight, size: 18),
+                          ),
+                          title: Text(
+                            'DEVELOPER CREDITS (TEAM RAFFTAR)',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: Text(
+                            'Lead: Denim Hajare • SISTec Bhopal',
+                            style: GoogleFonts.plusJakartaSans(color: AppColors.primaryLight, fontSize: 11),
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.primaryLight, size: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 24),
+                
+                // Save Changes Button
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _isSaving ? null : _saveProfileChanges,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      elevation: 0,
+                    ),
+                    child: _isSaving
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Text('SAVE CHANGES', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1.2)),
+                  ),
+                ),
+                const SizedBox(height: 48),
+              ],
+            ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 4),
+      child: Text(
+        title,
+        style: GoogleFonts.plusJakartaSans(
+          color: AppColors.textMuted,
+          fontSize: 10,
+          fontWeight: FontWeight.w800,
+          letterSpacing: 1.5,
+        ),
       ),
     );
   }
 
-  Widget _buildEditableInput(TextEditingController ctrl, String label, IconData icon, {TextInputType keyboardType = TextInputType.text}) {
+  Widget _buildModernInput(TextEditingController ctrl, String label, IconData icon, {TextInputType keyboardType = TextInputType.text}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E).withOpacity(0.4),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
       child: TextField(
         controller: ctrl,
         keyboardType: keyboardType,
-        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13.5, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
-          icon: Icon(icon, color: Colors.white38, size: 18),
+          icon: Icon(icon, color: AppColors.textMuted, size: 18),
           labelText: label.toUpperCase(),
-          labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white30, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1),
+          labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.w800, letterSpacing: 1),
           border: InputBorder.none,
         ),
       ),
@@ -636,25 +873,34 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   }
 
   Widget _buildReadOnlyItem(String label, String value, IconData icon) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E).withOpacity(0.2),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.02)),
-      ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
         children: [
-          Icon(icon, color: Colors.white24, size: 18),
-          const SizedBox(width: 16),
+          Icon(icon, color: AppColors.textMuted, size: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                const SizedBox(height: 2),
-                Text(value.isEmpty ? 'N/A' : value, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, fontWeight: FontWeight.bold)),
+                Text(
+                  label.toUpperCase(),
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textMuted,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  value.isEmpty ? 'N/A' : value,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
               ],
             ),
           ),

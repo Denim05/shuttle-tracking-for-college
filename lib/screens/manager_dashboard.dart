@@ -103,7 +103,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             backgroundColor: const Color(0xFF161B26),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(24),
-              side: BorderSide(color: Colors.white.withOpacity(0.08)),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
             ),
             titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
             contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
@@ -118,7 +118,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF4F46E5).withOpacity(0.35),
+                        color: const Color(0xFF4F46E5).withValues(alpha: 0.35),
                         blurRadius: 10,
                         offset: const Offset(0, 4),
                       ),
@@ -173,9 +173,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
+                      color: Colors.white.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                     ),
                     child: Row(
                       children: [
@@ -220,9 +220,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF4F46E5).withOpacity(0.2),
+                              color: const Color(0xFF4F46E5).withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.4)),
+                              border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.4)),
                             ),
                             child: Text(
                               'Change',
@@ -338,19 +338,19 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            const Color(0xFF059669).withOpacity(0.18),
-                            const Color(0xFF10B981).withOpacity(0.08),
+                            const Color(0xFF059669).withValues(alpha: 0.18),
+                            const Color(0xFF10B981).withValues(alpha: 0.08),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.35)),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withOpacity(0.15),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: isSyncing 
@@ -401,16 +401,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     child: Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.03),
+                        color: Colors.white.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF4F46E5).withOpacity(0.15),
+                              color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(Icons.print_rounded, color: Color(0xFF818CF8), size: 20),
@@ -456,16 +456,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     child: Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.03),
+                        color: Colors.white.withValues(alpha: 0.03),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.amber.withOpacity(0.15),
+                              color: Colors.amber.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: const Icon(Icons.file_download_rounded, color: Colors.amberAccent, size: 20),
@@ -527,10 +527,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           padding: const EdgeInsets.symmetric(vertical: 8),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF4F46E5) : Colors.white.withOpacity(0.04),
+            color: isSelected ? const Color(0xFF4F46E5) : Colors.white.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(10),
             border: Border.all(
-              color: isSelected ? const Color(0xFF818CF8) : Colors.white.withOpacity(0.08),
+              color: isSelected ? const Color(0xFF818CF8) : Colors.white.withValues(alpha: 0.08),
             ),
           ),
           child: Text(
@@ -708,7 +708,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     left: 0, right: 0,
                     child: Container(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      color: Colors.redAccent.withOpacity(0.8),
+                      color: Colors.redAccent.withValues(alpha: 0.8),
                       child: Center(
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
@@ -786,7 +786,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E1E1E),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.1)),
+                        border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.1)),
                       ),
                       child: TabBar(
                         isScrollable: true,
@@ -794,12 +794,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         indicator: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              Colors.deepPurpleAccent.withOpacity(0.2),
-                              Colors.blueAccent.withOpacity(0.1),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.2),
+                              Colors.blueAccent.withValues(alpha: 0.1),
                             ],
                           ),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                          border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
                         ),
                         dividerColor: Colors.transparent,
                         indicatorSize: TabBarIndicatorSize.tab,
@@ -872,9 +872,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       margin: const EdgeInsets.only(left: 6),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: IconButton(
         padding: const EdgeInsets.all(8),
@@ -890,8 +890,8 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       padding: const EdgeInsets.all(20),
       itemCount: 5,
       itemBuilder: (context, index) => Shimmer.fromColors(
-        baseColor: Colors.white.withOpacity(0.05),
-        highlightColor: Colors.white.withOpacity(0.1),
+        baseColor: Colors.white.withValues(alpha: 0.05),
+        highlightColor: Colors.white.withValues(alpha: 0.1),
         child: Container(
           height: 100,
           margin: const EdgeInsets.only(bottom: 16),
@@ -981,9 +981,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                         decoration: BoxDecoration(
-                                          color: Colors.blueAccent.withOpacity(0.1),
+                                          color: Colors.blueAccent.withValues(alpha: 0.1),
                                           borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+                                          border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
                                         ),
                                         child: Text(
                                           '${bus.speed.toStringAsFixed(1)} KM/H',
@@ -1010,9 +1010,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                         decoration: BoxDecoration(
-                                          color: Colors.blueAccent.withOpacity(0.15),
+                                          color: Colors.blueAccent.withValues(alpha: 0.15),
                                           borderRadius: BorderRadius.circular(10),
-                                          border: Border.all(color: Colors.blueAccent.withOpacity(0.4)),
+                                          border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.4)),
                                         ),
                                         child: Row(
                                           mainAxisSize: MainAxisSize.min,
@@ -1059,10 +1059,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       decoration: BoxDecoration(
         color: const Color(0xFF1E1E1E),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: color.withOpacity(0.15)),
+        border: Border.all(color: color.withValues(alpha: 0.15)),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.05),
+            color: color.withValues(alpha: 0.05),
             blurRadius: 10,
             spreadRadius: 2
           )
@@ -1074,7 +1074,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: color.withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(icon, color: color, size: 18),
@@ -1128,9 +1128,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 icon: const Icon(Icons.person_add_alt_1_rounded, size: 16),
                 label: Text('Add Driver', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 11)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blueAccent.withOpacity(0.15),
+                  backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
                   foregroundColor: Colors.blueAccent,
-                  side: BorderSide(color: Colors.blueAccent.withOpacity(0.3)),
+                  side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.3)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 ),
@@ -1191,12 +1191,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   decoration: BoxDecoration(
                                     gradient: LinearGradient(
                                       colors: [
-                                        (isActive ? Colors.blueAccent : Colors.redAccent).withOpacity(0.2),
-                                        (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withOpacity(0.08),
+                                        (isActive ? Colors.blueAccent : Colors.redAccent).withValues(alpha: 0.2),
+                                        (isActive ? Colors.deepPurpleAccent : Colors.redAccent).withValues(alpha: 0.08),
                                       ],
                                     ),
                                     borderRadius: BorderRadius.circular(14),
-                                    border: Border.all(color: (isActive ? Colors.blueAccent : Colors.redAccent).withOpacity(0.3)),
+                                    border: Border.all(color: (isActive ? Colors.blueAccent : Colors.redAccent).withValues(alpha: 0.3)),
                                   ),
                                   child: Icon(Icons.shield_rounded, color: isActive ? Colors.blueAccent : Colors.redAccent, size: 22),
                                 ),
@@ -1286,9 +1286,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 80),
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
-                                    color: Colors.blueAccent.withOpacity(0.12),
+                                    color: Colors.blueAccent.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: Colors.blueAccent.withOpacity(0.25)),
+                                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.25)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -1314,9 +1314,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width - 80),
                                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                   decoration: BoxDecoration(
-                                    color: Colors.deepPurpleAccent.withOpacity(0.12),
+                                    color: Colors.deepPurpleAccent.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.25)),
+                                    border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.25)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -1353,12 +1353,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                 decoration: BoxDecoration(
                                   gradient: LinearGradient(
                                     colors: [
-                                      Colors.deepPurpleAccent.withOpacity(0.18),
-                                      Colors.blueAccent.withOpacity(0.08),
+                                      Colors.deepPurpleAccent.withValues(alpha: 0.18),
+                                      Colors.blueAccent.withValues(alpha: 0.08),
                                     ],
                                   ),
                                   borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                                  border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
                                 ),
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -1416,7 +1416,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.blueAccent.withOpacity(0.15),
+                  color: Colors.blueAccent.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(Icons.person_add_alt_1_rounded, color: Colors.blueAccent, size: 20),
@@ -1522,10 +1522,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         labelStyle: const TextStyle(color: Colors.white38, fontSize: 11),
         prefixIcon: Icon(icon, color: Colors.blueAccent, size: 18),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.04),
+        fillColor: Colors.white.withValues(alpha: 0.04),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.08)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -1583,12 +1583,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
-                              Colors.blueAccent.withOpacity(0.25),
-                              Colors.deepPurpleAccent.withOpacity(0.1),
+                              Colors.blueAccent.withValues(alpha: 0.25),
+                              Colors.deepPurpleAccent.withValues(alpha: 0.1),
                             ],
                           ),
                           shape: BoxShape.circle,
-                          border: Border.all(color: Colors.blueAccent.withOpacity(0.4)),
+                          border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.4)),
                         ),
                         child: const Icon(Icons.shield_rounded, color: Colors.blueAccent, size: 28),
                       ),
@@ -1655,9 +1655,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           ),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blueAccent.withOpacity(0.15),
+                              backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
                               foregroundColor: Colors.blueAccent,
-                              side: BorderSide(color: Colors.blueAccent.withOpacity(0.3)),
+                              side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.3)),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                             ),
@@ -1673,9 +1673,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         Container(
                           padding: const EdgeInsets.all(24),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.02),
+                            color: Colors.white.withValues(alpha: 0.02),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white.withOpacity(0.05)),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                           ),
                           child: Column(
                             children: [
@@ -1696,16 +1696,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(14),
                             decoration: BoxDecoration(
-                              color: Colors.white.withOpacity(0.03),
+                              color: Colors.white.withValues(alpha: 0.03),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.08)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                             ),
                             child: Row(
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(10),
                                   decoration: BoxDecoration(
-                                    color: Colors.deepPurpleAccent.withOpacity(0.12),
+                                    color: Colors.deepPurpleAccent.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Icon(
@@ -1757,9 +1757,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.03),
+        color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Row(
         children: [
@@ -1980,9 +1980,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   icon: const Icon(Icons.app_registration_rounded, size: 18),
                   label: Text('Approvals', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent.withOpacity(0.12),
+                    backgroundColor: Colors.blueAccent.withValues(alpha: 0.12),
                     foregroundColor: Colors.blueAccent,
-                    side: BorderSide(color: Colors.blueAccent.withOpacity(0.25)),
+                    side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.25)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -2000,9 +2000,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   icon: const Icon(Icons.cloud_upload_rounded, size: 18),
                   label: Text('Bulk Import', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 12), maxLines: 1, overflow: TextOverflow.ellipsis),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurpleAccent.withOpacity(0.12),
+                    backgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.12),
                     foregroundColor: Colors.deepPurpleAccent,
-                    side: BorderSide(color: Colors.deepPurpleAccent.withOpacity(0.25)),
+                    side: BorderSide(color: Colors.deepPurpleAccent.withValues(alpha: 0.25)),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                   ),
@@ -2036,13 +2036,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                     decoration: BoxDecoration(
                       color: _selectedUserSemesterFilter == 'All' 
-                          ? Colors.blueAccent.withOpacity(0.15) 
+                          ? Colors.blueAccent.withValues(alpha: 0.15) 
                           : const Color(0xFF1E1E1E),
                       borderRadius: BorderRadius.circular(20),
                       border: Border.all(
                         color: _selectedUserSemesterFilter == 'All' 
-                            ? Colors.blueAccent.withOpacity(0.4) 
-                            : Colors.white.withOpacity(0.05),
+                            ? Colors.blueAccent.withValues(alpha: 0.4) 
+                            : Colors.white.withValues(alpha: 0.05),
                       ),
                     ),
                     child: Center(
@@ -2067,13 +2067,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       decoration: BoxDecoration(
                         color: isSelected 
-                            ? Colors.blueAccent.withOpacity(0.15) 
+                            ? Colors.blueAccent.withValues(alpha: 0.15) 
                             : const Color(0xFF1E1E1E),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: isSelected 
-                              ? Colors.blueAccent.withOpacity(0.4) 
-                              : Colors.white.withOpacity(0.05),
+                              ? Colors.blueAccent.withValues(alpha: 0.4) 
+                              : Colors.white.withValues(alpha: 0.05),
                         ),
                       ),
                       child: Center(
@@ -2150,13 +2150,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                 padding: const EdgeInsets.all(12),
                                 decoration: BoxDecoration(
                                   color: status.toLowerCase() == 'active' 
-                                      ? Colors.blueAccent.withOpacity(0.1) 
-                                      : Colors.orangeAccent.withOpacity(0.1),
+                                      ? Colors.blueAccent.withValues(alpha: 0.1) 
+                                      : Colors.orangeAccent.withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                     color: status.toLowerCase() == 'active' 
-                                        ? Colors.blueAccent.withOpacity(0.2) 
-                                        : Colors.orangeAccent.withOpacity(0.2)
+                                        ? Colors.blueAccent.withValues(alpha: 0.2) 
+                                        : Colors.orangeAccent.withValues(alpha: 0.2)
                                   ),
                                 ),
                                 child: Icon(
@@ -2184,9 +2184,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                             margin: const EdgeInsets.only(left: 8),
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                             decoration: BoxDecoration(
-                                              color: Colors.blueAccent.withOpacity(0.1),
+                                              color: Colors.blueAccent.withValues(alpha: 0.1),
                                               borderRadius: BorderRadius.circular(8),
-                                              border: Border.all(color: Colors.blueAccent.withOpacity(0.25)),
+                                              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.25)),
                                             ),
                                             child: Text(
                                               userSemester.toUpperCase(),
@@ -2205,9 +2205,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                             decoration: BoxDecoration(
-                                              color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.12),
+                                              color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.12),
                                               borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.3)),
+                                              border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.3)),
                                             ),
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
@@ -2229,9 +2229,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                                             decoration: BoxDecoration(
-                                              color: Colors.white.withOpacity(0.05),
+                                              color: Colors.white.withValues(alpha: 0.05),
                                               borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: Colors.white.withOpacity(0.1)),
+                                              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                                             ),
                                             child: Row(
                                               mainAxisSize: MainAxisSize.min,
@@ -2657,7 +2657,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF1E1E1E),
                               borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.white.withOpacity(0.05)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                             ),
                             child: TextField(
                               controller: _bulkSemesterController,
@@ -2686,12 +2686,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             decoration: BoxDecoration(
                               gradient: LinearGradient(
                                 colors: [
-                                  Colors.blueAccent.withOpacity(0.15),
-                                  Colors.deepPurpleAccent.withOpacity(0.05),
+                                  Colors.blueAccent.withValues(alpha: 0.15),
+                                  Colors.deepPurpleAccent.withValues(alpha: 0.05),
                                 ],
                               ),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.blueAccent.withOpacity(0.25)),
+                              border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.25)),
                             ),
                             child: Material(
                               color: Colors.transparent,
@@ -2757,7 +2757,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             decoration: BoxDecoration(
                               color: const Color(0xFF1E1E1E),
                               borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: Colors.white.withOpacity(0.05)),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                             ),
                             child: TextField(
                               maxLines: 6,
@@ -2793,7 +2793,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                 decoration: BoxDecoration(
-                                  color: Colors.blueAccent.withOpacity(0.12),
+                                  color: Colors.blueAccent.withValues(alpha: 0.12),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -2839,7 +2839,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF1E1E1E),
                                     borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.white.withOpacity(0.03)),
+                                    border: Border.all(color: Colors.white.withValues(alpha: 0.03)),
                                   ),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2931,7 +2931,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                               decoration: BoxDecoration(
                                                 color: Colors.black26,
                                                 borderRadius: BorderRadius.circular(10),
-                                                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                                               ),
                                               child: DropdownButtonHideUnderline(
                                                 child: DropdownButton<String>(
@@ -2967,7 +2967,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                               decoration: BoxDecoration(
                                                 color: Colors.black26,
                                                 borderRadius: BorderRadius.circular(10),
-                                                border: Border.all(color: Colors.white.withOpacity(0.05)),
+                                                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                                               ),
                                               child: DropdownButtonHideUnderline(
                                                 child: DropdownButton<String>(
@@ -3014,9 +3014,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                 width: double.infinity,
                                 padding: const EdgeInsets.all(16),
                                 decoration: BoxDecoration(
-                                  color: const Color(0xFF2D5BFF).withOpacity(0.06),
+                                  color: const Color(0xFF2D5BFF).withValues(alpha: 0.06),
                                   borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(color: const Color(0xFF2D5BFF).withOpacity(0.15)),
+                                  border: Border.all(color: const Color(0xFF2D5BFF).withValues(alpha: 0.15)),
                                 ),
                                 child: Row(
                                   children: [
@@ -3113,10 +3113,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         ),
       ),
       selected: isSelected,
-      selectedColor: accentColor.withOpacity(0.2),
+      selectedColor: accentColor.withValues(alpha: 0.2),
       backgroundColor: const Color(0xFF1E2638),
       side: BorderSide(
-        color: isSelected ? accentColor : Colors.white.withOpacity(0.08),
+        color: isSelected ? accentColor : Colors.white.withValues(alpha: 0.08),
         width: isSelected ? 1.5 : 1.0,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -3165,9 +3165,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               decoration: BoxDecoration(
                 color: const Color(0xFF1E1E1E),
                 borderRadius: BorderRadius.circular(32),
-                border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+                border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
                 boxShadow: [
-                  BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.05), blurRadius: 20),
+                  BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.05), blurRadius: 20),
                 ]
               ),
               child: Column(
@@ -3246,12 +3246,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: _isSending
-                            ? [Colors.deepPurpleAccent.withOpacity(0.4), Colors.blueAccent.withOpacity(0.4)]
+                            ? [Colors.deepPurpleAccent.withValues(alpha: 0.4), Colors.blueAccent.withValues(alpha: 0.4)]
                             : [Colors.deepPurpleAccent, Colors.blueAccent],
                         ),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
-                          BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8)),
+                          BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8)),
                         ],
                       ),
                       child: Center(
@@ -3274,9 +3274,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.1),
+                    color: Colors.blueAccent.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blueAccent.withOpacity(0.2)),
+                    border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.2)),
                   ),
                   child: Row(
                     children: [
@@ -3298,7 +3298,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 decoration: BoxDecoration(
                   color: const Color(0xFF1E1E1E),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
                 ),
                 child: Center(
                   child: Column(
@@ -3325,7 +3325,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   decoration: BoxDecoration(
                     color: const Color(0xFF1E1E1E),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: accent.withOpacity(0.15)),
+                    border: Border.all(color: accent.withValues(alpha: 0.15)),
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -3333,7 +3333,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: accent.withOpacity(0.1),
+                          color: accent.withValues(alpha: 0.1),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(isInfo ? Icons.bolt_rounded : Icons.warning_rounded, color: accent, size: 16),
@@ -3350,9 +3350,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                 Container(
                                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: audienceColor.withOpacity(0.12),
+                                    color: audienceColor.withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: audienceColor.withOpacity(0.3)),
+                                    border: Border.all(color: audienceColor.withValues(alpha: 0.3)),
                                   ),
                                   child: Text(
                                     'TO: ${targetAudienceText.toUpperCase()}',
@@ -3453,11 +3453,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         content: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: const Color(0xFF1E1E1E).withOpacity(0.95),
+            color: const Color(0xFF1E1E1E).withValues(alpha: 0.95),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.5)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
             boxShadow: [
-              BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.3), blurRadius: 20, spreadRadius: 2)
+              BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.3), blurRadius: 20, spreadRadius: 2)
             ],
           ),
           child: Row(
@@ -3465,7 +3465,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent.withOpacity(0.2),
+                  color: Colors.deepPurpleAccent.withValues(alpha: 0.2),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.bolt_rounded, color: Colors.blueAccent, size: 20),
@@ -3508,7 +3508,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 borderRadius: BorderRadius.circular(30),
                 border: Border.all(color: Colors.redAccent, width: 3),
                 boxShadow: [
-                  BoxShadow(color: Colors.redAccent.withOpacity(0.4), blurRadius: 40, spreadRadius: 5),
+                  BoxShadow(color: Colors.redAccent.withValues(alpha: 0.4), blurRadius: 40, spreadRadius: 5),
                 ],
               ),
               child: Column(
@@ -3517,7 +3517,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
-                      color: Colors.redAccent.withOpacity(0.1),
+                      color: Colors.redAccent.withValues(alpha: 0.1),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 72),
@@ -3594,9 +3594,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E).withOpacity(0.4),
+        color: const Color(0xFF1E1E1E).withValues(alpha: 0.4),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.white.withOpacity(0.05)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
@@ -3616,7 +3616,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
         borderRadius: BorderRadius.circular(10),
         boxShadow: [
           BoxShadow(
-            color: (isGood ? Colors.blueAccent : Colors.redAccent).withOpacity(0.4),
+            color: (isGood ? Colors.blueAccent : Colors.redAccent).withValues(alpha: 0.4),
             blurRadius: 10,
           )
         ],
@@ -3628,9 +3628,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Text(
         text.toUpperCase(),
@@ -3644,9 +3644,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
+        color: color.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: color.withOpacity(0.2)),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
       child: Text(label, style: GoogleFonts.plusJakartaSans(color: color, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
     );
@@ -3667,10 +3667,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           Container(
             padding: const EdgeInsets.all(32),
             decoration: BoxDecoration(
-              color: Colors.deepPurpleAccent.withOpacity(0.05),
+              color: Colors.deepPurpleAccent.withValues(alpha: 0.05),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, size: 80, color: Colors.deepPurpleAccent.withOpacity(0.5)),
+            child: Icon(icon, size: 80, color: Colors.deepPurpleAccent.withValues(alpha: 0.5)),
           ).animate().scale(duration: 600.ms, curve: Curves.easeOutBack),
           const SizedBox(height: 24),
           Text(
@@ -3718,7 +3718,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: Column(
             children: [
@@ -3772,7 +3772,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -3855,9 +3855,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         decoration: BoxDecoration(
-          color: const Color(0xFF1E1E1E).withOpacity(0.4),
+          color: const Color(0xFF1E1E1E).withValues(alpha: 0.4),
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(color: Colors.white.withOpacity(0.05)),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(24),
@@ -3888,7 +3888,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -3948,9 +3948,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       leading: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: (isCurrent ? Colors.green : routeColor).withOpacity(0.1), 
+                          color: (isCurrent ? Colors.green : routeColor).withValues(alpha: 0.1), 
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: (isCurrent ? Colors.green : routeColor).withOpacity(0.2))
+                          border: Border.all(color: (isCurrent ? Colors.green : routeColor).withValues(alpha: 0.2))
                         ),
                         child: Icon(Icons.directions_bus_filled_rounded, color: isCurrent ? Colors.green : routeColor, size: 20),
                       ),
@@ -3999,7 +3999,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -4054,9 +4054,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       leading: Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: (isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent)).withOpacity(0.1), 
+                          color: (isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent)).withValues(alpha: 0.1), 
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: (isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent)).withOpacity(0.2))
+                          border: Border.all(color: (isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent)).withValues(alpha: 0.2))
                         ),
                         child: Icon(Icons.shield_rounded, color: isCurrent ? Colors.green : (isActive ? Colors.blueAccent : Colors.redAccent), size: 20),
                       ),
@@ -4102,9 +4102,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       leading: Container(
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1), 
+          color: color.withValues(alpha: 0.1), 
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: color.withOpacity(0.2))
+          border: Border.all(color: color.withValues(alpha: 0.2))
         ),
         child: Icon(icon, color: color, size: 20),
       ),
@@ -4157,7 +4157,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   decoration: BoxDecoration(
                     color: routeColor,
                     borderRadius: BorderRadius.circular(10),
-                    boxShadow: [BoxShadow(color: routeColor.withOpacity(0.5), blurRadius: 8)],
+                    boxShadow: [BoxShadow(color: routeColor.withValues(alpha: 0.5), blurRadius: 8)],
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -4229,9 +4229,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
-                          color: Colors.deepPurpleAccent.withOpacity(0.1),
+                          color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                          border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
                         ),
                         child: Text('${stops.length} STOPS',
                             style: GoogleFonts.plusJakartaSans(color: Colors.deepPurpleAccent, fontSize: 10, fontWeight: FontWeight.w900)),
@@ -4252,7 +4252,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         decoration: BoxDecoration(
                           color: const Color(0xFF1E1E1E),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.white.withOpacity(0.07)),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.07)),
                         ),
                         child: TextField(
                           controller: nameCtrl,
@@ -4279,9 +4279,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                               decoration: BoxDecoration(
-                                color: Colors.blueAccent.withOpacity(0.1),
+                                color: Colors.blueAccent.withValues(alpha: 0.1),
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                                border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
                               ),
                               child: Row(mainAxisSize: MainAxisSize.min, children: [
                                 const Icon(Icons.add_rounded, color: Colors.blueAccent, size: 14),
@@ -4304,16 +4304,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           decoration: BoxDecoration(
                             color: const Color(0xFF1E1E1E),
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: Colors.white.withOpacity(0.06)),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                           ),
                           child: Row(
                             children: [
                               Container(
                                 width: 28, height: 28,
                                 decoration: BoxDecoration(
-                                  color: Colors.deepPurpleAccent.withOpacity(0.1),
+                                  color: Colors.deepPurpleAccent.withValues(alpha: 0.1),
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.3)),
+                                  border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.3)),
                                 ),
                                 child: Center(
                                   child: Text('${i + 1}', style: GoogleFonts.plusJakartaSans(
@@ -4395,12 +4395,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: isSaving
-                              ? [Colors.deepPurpleAccent.withOpacity(0.4), Colors.blueAccent.withOpacity(0.4)]
+                              ? [Colors.deepPurpleAccent.withValues(alpha: 0.4), Colors.blueAccent.withValues(alpha: 0.4)]
                               : [Colors.deepPurpleAccent, Colors.blueAccent],
                         ),
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
-                          BoxShadow(color: Colors.deepPurpleAccent.withOpacity(0.4), blurRadius: 20, offset: const Offset(0, 8)),
+                          BoxShadow(color: Colors.deepPurpleAccent.withValues(alpha: 0.4), blurRadius: 20, offset: const Offset(0, 8)),
                         ],
                       ),
                       child: Center(
@@ -4509,9 +4509,9 @@ class _BusReportSheetState extends State<_BusReportSheet> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withOpacity(0.1),
+                      color: Colors.blueAccent.withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: Colors.blueAccent.withOpacity(0.3)),
+                      border: Border.all(color: Colors.blueAccent.withValues(alpha: 0.3)),
                     ),
                     child: Row(mainAxisSize: MainAxisSize.min, children: [
                       const Icon(Icons.download_rounded, color: Colors.blueAccent, size: 16),
@@ -4562,7 +4562,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
           decoration: BoxDecoration(
             color: const Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: Column(children: [
             _infoRow(Icons.directions_bus_rounded, 'Bus Number',
@@ -4632,7 +4632,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
           decoration: BoxDecoration(
             color: const Color(0xFF161421),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
@@ -4660,14 +4660,14 @@ class _BusReportSheetState extends State<_BusReportSheet> {
             decoration: BoxDecoration(
               color: const Color(0xFF1A1A2E),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+              border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
             ),
             child: Column(children: [
               // Date Header Header
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.03),
+                  color: Colors.white.withValues(alpha: 0.03),
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
                 ),
                 child: Row(
@@ -4677,7 +4677,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.deepPurpleAccent.withOpacity(0.15),
+                          color: Colors.deepPurpleAccent.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
@@ -4701,7 +4701,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
                       }),
                       child: Container(
                         padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.05), shape: BoxShape.circle),
                         child: Icon(
                           expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
                           color: Colors.white70,
@@ -4802,9 +4802,9 @@ class _BusReportSheetState extends State<_BusReportSheet> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: (isOnTime ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.1),
+                  color: (isOnTime ? Colors.greenAccent : Colors.orangeAccent).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: (isOnTime ? Colors.greenAccent : Colors.orangeAccent).withOpacity(0.3)),
+                  border: Border.all(color: (isOnTime ? Colors.greenAccent : Colors.orangeAccent).withValues(alpha: 0.3)),
                 ),
                 child: Text(
                   isOnTime ? 'ON-TIME' : 'DELAYED',
@@ -4899,7 +4899,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
       Container(
         padding: const EdgeInsets.all(7),
         decoration: BoxDecoration(
-            color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+            color: color.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(10)),
         child: Icon(icon, color: color, size: 15),
       ),
       const SizedBox(width: 12),
@@ -4928,7 +4928,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
           decoration: BoxDecoration(
             color: const Color(0xFF1E1E1E),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: color.withOpacity(0.15)),
+            border: Border.all(color: color.withValues(alpha: 0.15)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -4936,7 +4936,7 @@ class _BusReportSheetState extends State<_BusReportSheet> {
               Container(
                 padding: const EdgeInsets.all(5),
                 decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
+                  color: color.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(icon, color: color, size: iconSize),
@@ -5069,9 +5069,9 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
       margin: const EdgeInsets.only(top: 4),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.05),
+        color: Colors.white.withValues(alpha: 0.05),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white.withOpacity(0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
       ),
       child: TextField(
         controller: ctrl,
@@ -5109,7 +5109,7 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
           decoration: BoxDecoration(
             color: const Color(0xFF0D0B14),
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
-            border: Border.all(color: Colors.deepPurpleAccent.withOpacity(0.2)),
+            border: Border.all(color: Colors.deepPurpleAccent.withValues(alpha: 0.2)),
           ),
           child: ClipRRect(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
@@ -5127,7 +5127,7 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
                     children: [
                       CircleAvatar(
                         radius: 26,
-                        backgroundColor: statusColor.withOpacity(0.1),
+                        backgroundColor: statusColor.withValues(alpha: 0.1),
                         child: Icon(Icons.person_rounded, color: statusColor, size: 28),
                       ),
                       const SizedBox(width: 16),
@@ -5152,9 +5152,9 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
-                          color: statusColor.withOpacity(0.15),
+                          color: statusColor.withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: statusColor.withOpacity(0.3)),
+                          border: Border.all(color: statusColor.withValues(alpha: 0.3)),
                         ),
                         child: Text(
                           status.toUpperCase(),
@@ -5217,9 +5217,9 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.12),
+                                        color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.12),
                                         borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withOpacity(0.3)),
+                                        border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.3)),
                                       ),
                                       child: Text(
                                         matchedRoute.name.toUpperCase(),
@@ -5237,7 +5237,7 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
                                 widget.onRouteSelect(user); // Open route dialog
                               },
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blueAccent.withOpacity(0.1),
+                                backgroundColor: Colors.blueAccent.withValues(alpha: 0.1),
                                 foregroundColor: Colors.blueAccent,
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -5282,7 +5282,7 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
                               }
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isActive ? Colors.orangeAccent.withOpacity(0.1) : const Color(0xFF38EF7D).withOpacity(0.1),
+                              backgroundColor: isActive ? Colors.orangeAccent.withValues(alpha: 0.1) : const Color(0xFF38EF7D).withValues(alpha: 0.1),
                               foregroundColor: isActive ? Colors.orangeAccent : const Color(0xFF38EF7D),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -5345,7 +5345,7 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
                               }
                             },
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: isEditing ? const Color(0xFF38EF7D) : Colors.white.withOpacity(0.05),
+                              backgroundColor: isEditing ? const Color(0xFF38EF7D) : Colors.white.withValues(alpha: 0.05),
                               foregroundColor: isEditing ? Colors.black : Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -5363,7 +5363,7 @@ class _UserDetailsBottomSheetState extends State<_UserDetailsBottomSheet> {
                         // Delete Account Button
                         Container(
                           decoration: BoxDecoration(
-                            color: Colors.redAccent.withOpacity(0.1),
+                            color: Colors.redAccent.withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: IconButton(
