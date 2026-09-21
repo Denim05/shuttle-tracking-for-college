@@ -10,7 +10,6 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
-import '../components/developer_info_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -388,54 +387,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                     ),
                   ),
-                  const SizedBox(height: 28),
-
-                  // Developer Credits Footer Badge
-                  InkWell(
-                    onTap: () => showDeveloperCreditsModal(context),
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.03),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                      ),
-                      child: Wrap(
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        alignment: WrapAlignment.center,
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          const Icon(Icons.rocket_launch_rounded, color: Color(0xFF60A5FA), size: 13),
-                          Text(
-                            'Team Rafftar',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFF93C5FD),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          Text(
-                            '•',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white30,
-                              fontSize: 11,
-                            ),
-                          ),
-                          Text(
-                            'Lead: Denim Hajare',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFFFBBF24),
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 40),
                 ],
               ),
             ),
