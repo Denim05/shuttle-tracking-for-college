@@ -72,5 +72,41 @@ class User {
       'mustChangePassword': mustChangePassword,
     };
   }
+
+  User copyWith({
+    String? id,
+    String? name,
+    String? username,
+    String? email,
+    String? role,
+    String? status,
+    String? userId,
+    String? routeId,
+    String? pickupPoint,
+    String? localAddress,
+    bool? isCommuteConfigured,
+    bool? proximityAlertsEnabled,
+    double? proximityRadiusKm,
+    List<String>? accessRights,
+    bool? mustChangePassword,
+  }) {
+    return User(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      username: username ?? this.username,
+      email: email ?? this.email,
+      role: role ?? this.role,
+      status: status ?? this.status,
+      userId: userId ?? this.userId,
+      routeId: routeId ?? this.routeId,
+      pickupPoint: pickupPoint ?? this.pickupPoint,
+      localAddress: localAddress ?? this.localAddress,
+      isCommuteConfigured: isCommuteConfigured ?? this.isCommuteConfigured,
+      proximityAlertsEnabled: proximityAlertsEnabled ?? this.proximityAlertsEnabled,
+      proximityRadiusKm: proximityRadiusKm ?? this.proximityRadiusKm,
+      accessRights: accessRights ?? this.accessRights,
+      mustChangePassword: mustChangePassword ?? this.mustChangePassword,
+    );
+  }
 }
 

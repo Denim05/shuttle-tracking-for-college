@@ -1487,19 +1487,31 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildToggleTile(String title, String sub, bool val, Function(bool) onChanged) {
     return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onChanged(!val);
+      },
       title: Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-      subtitle: Text(sub, style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 10)),
-      trailing: Switch(
+      subtitle: Text(sub, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
+      trailing: Switch.adaptive(
         value: val,
-        onChanged: onChanged,
-        activeThumbColor: const Color(0xFF2D5BFF),
+        onChanged: (newVal) {
+          HapticFeedback.lightImpact();
+          onChanged(newVal);
+        },
+        activeColor: const Color(0xFF2D5BFF),
+        activeTrackColor: const Color(0xFF2D5BFF).withValues(alpha: 0.5),
+        inactiveThumbColor: Colors.white60,
+        inactiveTrackColor: Colors.white12,
       ),
     );
   }
 
   Widget _buildRadiusSliderTile(double currentVal, Function(double) onChanged) {
+    final safeVal = currentVal.clamp(0.5, 3.0);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1507,28 +1519,44 @@ class _UserDashboardState extends State<UserDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text('ALERT RADIUS', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-              Text('${currentVal.toStringAsFixed(1)} KM', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontWeight: FontWeight.bold, fontSize: 13)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
+                ),
+                child: Text(
+                  '${safeVal.toStringAsFixed(1)} KM',
+                  style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontWeight: FontWeight.w900, fontSize: 12),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: const Color(0xFF2D5BFF),
-              inactiveTrackColor: Colors.white10,
+              trackHeight: 5,
+              activeTrackColor: const Color(0xFF00F0FF),
+              inactiveTrackColor: Colors.white12,
               thumbColor: const Color(0xFF00F0FF),
-              overlayColor: const Color(0xFF00F0FF).withOpacity(0.2),
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9, elevation: 3),
+              overlayColor: const Color(0xFF00F0FF).withValues(alpha: 0.25),
+              overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
               valueIndicatorColor: const Color(0xFF2D5BFF),
-              valueIndicatorTextStyle: GoogleFonts.plusJakartaSans(color: Colors.white),
+              valueIndicatorTextStyle: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+              tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 2),
+              activeTickMarkColor: Colors.transparent,
+              inactiveTickMarkColor: Colors.white24,
             ),
             child: Slider(
-              value: currentVal,
+              value: safeVal,
               min: 0.5,
               max: 3.0,
               divisions: 5,
-              label: '${currentVal.toStringAsFixed(1)} KM',
+              label: '${safeVal.toStringAsFixed(1)} KM',
               onChanged: (val) {
-                // Round to nearest division
-                final rounded = (val * 2).round() / 2;
+                final rounded = ((val * 2).round() / 2).clamp(0.5, 3.0);
                 onChanged(rounded);
               },
             ),

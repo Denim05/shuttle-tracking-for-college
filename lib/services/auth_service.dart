@@ -139,6 +139,11 @@ class AuthService with ChangeNotifier {
   Future<void> updateProximityAlerts(bool enabled) async {
     if (_currentUser == null || _token == null) return;
 
+    // Optimistic memory & local storage update
+    _currentUser = _currentUser!.copyWith(proximityAlertsEnabled: enabled);
+    notifyListeners();
+    await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+
     try {
       final response = await http.put(
         Uri.parse('${AppConstants.apiUrl}/users/profile'),
@@ -147,7 +152,7 @@ class AuthService with ChangeNotifier {
           'Authorization': 'Bearer $_token',
         },
         body: jsonEncode({'proximityAlertsEnabled': enabled}),
-      );
+      ).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -163,6 +168,12 @@ class AuthService with ChangeNotifier {
   Future<void> updateProximityRadius(double radius) async {
     if (_currentUser == null || _token == null) return;
 
+    final clamped = radius.clamp(0.5, 3.0);
+    // Optimistic memory & local storage update
+    _currentUser = _currentUser!.copyWith(proximityRadiusKm: clamped);
+    notifyListeners();
+    await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+
     try {
       final response = await http.put(
         Uri.parse('${AppConstants.apiUrl}/users/profile'),
@@ -170,8 +181,8 @@ class AuthService with ChangeNotifier {
           'Content-Type': 'application/json',
           'Authorization': 'Bearer $_token',
         },
-        body: jsonEncode({'proximityRadiusKm': radius}),
-      );
+        body: jsonEncode({'proximityRadiusKm': clamped}),
+      ).timeout(const Duration(seconds: 8));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
