@@ -13,6 +13,7 @@ import 'fleet_maintenance_screen.dart';
 import 'fleet_radar_screen.dart';
 import 'admin_permissions_screen.dart';
 import 'profile_settings_screen.dart';
+import '../theme/app_theme.dart';
 
 class AdminDashboard extends StatefulWidget {
   const AdminDashboard({super.key});
@@ -151,9 +152,20 @@ class _AdminDashboardState extends State<AdminDashboard> {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     color: Colors.redAccent.withOpacity(0.8),
                     child: Center(
-                      child: Text(
-                        '📡 Connecting...',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 8,
+                            height: 8,
+                            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'CONNECTING TO FLEET NETWORK...',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                          ),
+                        ],
                       ),
                     ),
                   ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -162,13 +174,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
           );
         },
         child: Container(
-          decoration: const BoxDecoration(
-            gradient: RadialGradient(
-              center: Alignment(0.5, -0.6),
-              radius: 1.5,
-              colors: [Color(0xFF0F172A), Color(0xFF121212)],
-            ),
-          ),
+          decoration: AppDecorations.screenBackground,
           child: SafeArea(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,22 +187,22 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       _buildStatGrid(),
                       const SizedBox(height: 32),
                       _buildSectionHeader('MANAGEMENT'),
-                      _buildAdminActionTile('Fleet Radar', Icons.radar_rounded, Colors.blueAccent, () {
+                      _buildAdminActionTile('Fleet Radar', Icons.radar_rounded, AppColors.primary, () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetRadarScreen()));
                       }),
-                      _buildAdminActionTile('Send Test Notification', Icons.notification_important_rounded, Colors.redAccent, () {
+                      _buildAdminActionTile('Send Test Notification', Icons.notification_important_rounded, AppColors.danger, () {
                         NotificationService().showNotification(
                           title: 'SYSTEM TEST',
                           body: 'Test notification sent successfully.',
                         );
                       }),
-                      _buildAdminActionTile('Fleet Maintenance', Icons.directions_bus_filled_rounded, Colors.blueAccent, () {
+                      _buildAdminActionTile('Fleet Maintenance', Icons.directions_bus_filled_rounded, AppColors.primary, () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetMaintenanceScreen()));
                       }),
-                      _buildAdminActionTile('User Permissions', Icons.admin_panel_settings_rounded, Colors.purpleAccent, () {
+                      _buildAdminActionTile('User Permissions', Icons.admin_panel_settings_rounded, AppColors.accentPurple, () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminPermissionsScreen()));
                       }),
-                      _buildAdminActionTile('System Logs', Icons.terminal_rounded, Colors.orangeAccent, () {
+                      _buildAdminActionTile('System Logs', Icons.terminal_rounded, AppColors.warning, () {
                         Navigator.push(context, MaterialPageRoute(builder: (context) => const AdminLogsScreen()));
                       }),
                       const SizedBox(height: 32),

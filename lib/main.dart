@@ -16,6 +16,8 @@ import 'screens/user_dashboard.dart';
 import 'screens/admin_dashboard.dart';
 import 'screens/manager_dashboard.dart';
 import 'screens/driver_dashboard.dart';
+import 'screens/force_password_change_screen.dart';
+import 'screens/commute_setup_screen.dart';
 
 
 // ─── Global Navigator Key (for SnackBars from outside Widget tree) ───────────
@@ -144,6 +146,17 @@ class AuthWrapper extends StatelessWidget {
         return Consumer<AuthService>(
           builder: (context, auth, _) {
             if (!auth.isAuthenticated) return const LoginScreen();
+
+            // Mandatory First-Time Password Reset Enforcement (Students with temporary passwords)
+            if (auth.currentUser?.role == 'user' && auth.currentUser?.mustChangePassword == true && !auth.isGuest) {
+              return const ForcePasswordChangeScreen();
+            }
+
+            // Mandatory Local Commute & Nearest Stop Setup (for student commuters)
+            if (auth.currentUser?.role == 'user' && !auth.isGuest && auth.currentUser?.isCommuteConfigured != true) {
+              return const CommuteSetupScreen(isInitialSetup: true);
+            }
+
             switch (auth.currentUser?.role) {
               case 'admin':
                 return const AdminDashboard();
@@ -196,34 +209,6 @@ class _SplashScreen extends StatelessWidget {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Glowing Icon Badge
-                Container(
-                  width: 96,
-                  height: 96,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF2D5BFF), Color(0xFF00F0FF)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(30),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF2D5BFF).withOpacity(0.5),
-                        blurRadius: 30,
-                        offset: const Offset(0, 10),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.directions_bus_filled_rounded,
-                    color: Colors.white,
-                    size: 48,
-                  ),
-                ).animate().fadeIn(duration: 400.ms).scale(begin: const Offset(0.7, 0.7), end: const Offset(1, 1), curve: Curves.easeOutBack),
-                
-                const SizedBox(height: 28),
-                
                 Text(
                   'SISTecChalo',
                   style: GoogleFonts.plusJakartaSans(

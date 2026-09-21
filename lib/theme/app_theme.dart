@@ -1,47 +1,48 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-
 // ─── Color Tokens ────────────────────────────────────────────────────────────
 
 class AppColors {
   AppColors._();
 
-  // Brand
-  static const Color primary        = Color(0xFF2D5BFF);
-  static const Color primaryLight   = Color(0xFF4D78FF);
-  static const Color primaryDark    = Color(0xFF1A3ACC);
-  static const Color accent         = Colors.blueAccent;
-  static const Color accentGreen    = Color(0xFF38EF7D);
+  // Brand Accents
+  static const Color primary        = Color(0xFF3B82F6); // Electric Sapphire Blue
+  static const Color primaryLight   = Color(0xFF60A5FA);
+  static const Color primaryDark    = Color(0xFF1D4ED8);
+  static const Color accent         = Color(0xFF06B6D4); // Vivid Cyan
+  static const Color accentPurple   = Color(0xFF6366F1); // Modern Indigo
+  static const Color accentGreen    = Color(0xFF10B981); // Crisp Emerald
 
   // Background / Surface
-  static const Color bg             = Color(0xFF121212);
-  static const Color bgSecondary    = Color(0xFF1E1E1E);
-  static const Color surface        = Color(0xFF1E1E1E);
-  static const Color surfaceLight   = Color(0xFF2C2C2C);
-  static const Color card           = Color(0xFF1E1E1E);
+  static const Color bg             = Color(0xFF090D16); // Deep Obsidian
+  static const Color bgSecondary    = Color(0xFF0F172A); // Midnight Slate
+  static const Color surface        = Color(0xFF151D30); // Card Surface
+  static const Color surfaceLight   = Color(0xFF1E293B); // Raised Surface
+  static const Color card           = Color(0xFF131B2E); // Deep Card Glass
 
-  // Text
-  static const Color text           = Color(0xFFF0F4FF);
-  static const Color textSecondary  = Color(0xFF8B9AB8);
-  static const Color textMuted      = Color(0xFF4A5570);
-  static const Color textDisabled   = Color(0xFF2A3350);
+  // Text Hierarchy
+  static const Color text           = Color(0xFFF8FAFC); // High Contrast Crisp White
+  static const Color textSecondary  = Color(0xFF94A3B8); // Soft Slate Gray
+  static const Color textMuted      = Color(0xFF64748B); // Muted Label Slate
+  static const Color textDisabled   = Color(0xFF334155);
 
   // Semantic
-  static const Color success        = Colors.green;
-  static const Color warning        = Colors.orange;
-  static const Color danger         = Colors.red;
-  static const Color info           = Colors.blue;
+  static const Color success        = Color(0xFF10B981);
+  static const Color warning        = Color(0xFFF59E0B);
+  static const Color danger         = Color(0xFFEF4444);
+  static const Color info           = Color(0xFF3B82F6);
 
-  // Status
-  static const Color statusOnline   = Colors.green;
-  static const Color statusOffline  = Colors.red;
+  // Operational Status
+  static const Color statusOnline   = Color(0xFF10B981);
+  static const Color statusDelayed  = Color(0xFFF59E0B);
+  static const Color statusOffline  = Color(0xFF64748B);
   static const Color statusPending  = Color(0xFFF59E0B);
 
   // Borders / Dividers
-  static Color get border      => Colors.white.withOpacity(0.08);
-  static Color get borderFocus => primary.withOpacity(0.6);
-  static Color get divider     => Colors.white.withOpacity(0.05);
+  static Color get border      => Colors.white.withValues(alpha: 0.08);
+  static Color get borderFocus => primary.withValues(alpha: 0.6);
+  static Color get divider     => Colors.white.withValues(alpha: 0.06);
 }
 
 // ─── Spacing Tokens ──────────────────────────────────────────────────────────
@@ -77,32 +78,32 @@ class AppShadows {
 
   static List<BoxShadow> get card => [
     BoxShadow(
-      color     : Colors.black.withOpacity(0.3),
-      blurRadius: 24,
+      color     : Colors.black.withValues(alpha: 0.4),
+      blurRadius: 20,
       offset    : const Offset(0, 8),
     ),
   ];
 
   static List<BoxShadow> get primary => [
     BoxShadow(
-      color     : AppColors.primary.withOpacity(0.3),
-      blurRadius: 20,
-      offset    : const Offset(0, 8),
+      color     : AppColors.primary.withValues(alpha: 0.35),
+      blurRadius: 18,
+      offset    : const Offset(0, 6),
     ),
   ];
 
   static List<BoxShadow> get accent => [
     BoxShadow(
-      color     : AppColors.accent.withOpacity(0.2),
-      blurRadius: 20,
-      offset    : const Offset(0, 8),
+      color     : AppColors.accent.withValues(alpha: 0.25),
+      blurRadius: 18,
+      offset    : const Offset(0, 6),
     ),
   ];
 
   static List<BoxShadow> get danger => [
     BoxShadow(
-      color     : AppColors.danger.withOpacity(0.3),
-      blurRadius: 20,
+      color     : AppColors.danger.withValues(alpha: 0.3),
+      blurRadius: 18,
       offset    : const Offset(0, 4),
     ),
   ];
@@ -114,21 +115,21 @@ class AppDecorations {
   AppDecorations._();
 
   static BoxDecoration get glassCard => BoxDecoration(
-    color        : AppColors.surface.withOpacity(0.7),
+    color        : AppColors.surface.withValues(alpha: 0.85),
     borderRadius : BorderRadius.circular(AppRadius.lg),
     border       : Border.all(color: AppColors.border),
     boxShadow    : AppShadows.card,
   );
 
   static BoxDecoration glassCardWithAccent(Color accent) => BoxDecoration(
-    color        : AppColors.surface.withOpacity(0.7),
+    color        : AppColors.surface.withValues(alpha: 0.85),
     borderRadius : BorderRadius.circular(AppRadius.lg),
-    border       : Border.all(color: accent.withOpacity(0.15)),
+    border       : Border.all(color: accent.withValues(alpha: 0.25)),
     boxShadow    : [
       BoxShadow(
-        color      : accent.withOpacity(0.08),
+        color      : accent.withValues(alpha: 0.1),
         blurRadius : 20,
-        spreadRadius: 2,
+        spreadRadius: 1,
       ),
     ],
   );
@@ -137,19 +138,19 @@ class AppDecorations {
     gradient: LinearGradient(
       begin  : Alignment.topLeft,
       end    : Alignment.bottomRight,
-      colors : [AppColors.bg, AppColors.bgSecondary, Color(0xFF0B132B)],
+      colors : [AppColors.bg, AppColors.bgSecondary, Color(0xFF080C14)],
     ),
   );
 
   static BoxDecoration inputField({bool focused = false, String? error}) {
     final borderColor = error != null
-        ? AppColors.danger.withOpacity(0.6)
+        ? AppColors.danger.withValues(alpha: 0.6)
         : focused
-            ? AppColors.primary.withOpacity(0.7)
-            : Colors.white.withOpacity(0.08);
+            ? AppColors.primary.withValues(alpha: 0.7)
+            : Colors.white.withValues(alpha: 0.08);
     final bgColor = focused
-        ? Colors.white.withOpacity(0.06)
-        : Colors.white.withOpacity(0.03);
+        ? Colors.white.withValues(alpha: 0.06)
+        : Colors.white.withValues(alpha: 0.03);
     return BoxDecoration(
       color       : bgColor,
       borderRadius: BorderRadius.circular(AppRadius.md),
@@ -158,9 +159,9 @@ class AppDecorations {
   }
 
   static BoxDecoration statusChip(Color color) => BoxDecoration(
-    color       : color.withOpacity(0.1),
+    color       : color.withValues(alpha: 0.12),
     borderRadius: BorderRadius.circular(AppRadius.full),
-    border      : Border.all(color: color.withOpacity(0.25)),
+    border      : Border.all(color: color.withValues(alpha: 0.3)),
   );
 }
 
@@ -170,62 +171,62 @@ class AppTextStyles {
   AppTextStyles._();
 
   static TextStyle get displayLarge => GoogleFonts.plusJakartaSans(
-    fontSize  : 40,
+    fontSize  : 36,
     fontWeight: FontWeight.w900,
     color     : AppColors.text,
-    letterSpacing: -1.5,
+    letterSpacing: -1.2,
     height    : 1.1,
   );
 
   static TextStyle get displayMedium => GoogleFonts.plusJakartaSans(
-    fontSize  : 30,
+    fontSize  : 28,
     fontWeight: FontWeight.w800,
     color     : AppColors.text,
     letterSpacing: -0.5,
   );
 
   static TextStyle get headlineLarge => GoogleFonts.plusJakartaSans(
-    fontSize  : 22,
+    fontSize  : 20,
     fontWeight: FontWeight.w700,
     color     : AppColors.text,
   );
 
   static TextStyle get headlineMedium => GoogleFonts.plusJakartaSans(
-    fontSize  : 18,
+    fontSize  : 16,
     fontWeight: FontWeight.w700,
     color     : AppColors.text,
   );
 
   static TextStyle get headlineSmall => GoogleFonts.plusJakartaSans(
-    fontSize  : 15,
+    fontSize  : 14,
     fontWeight: FontWeight.w600,
     color     : AppColors.text,
   );
 
   static TextStyle get bodyLarge => GoogleFonts.plusJakartaSans(
-    fontSize  : 15,
-    fontWeight: FontWeight.w400,
-    color     : AppColors.textSecondary,
-    height    : 1.6,
-  );
-
-  static TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
-    fontSize  : 13,
+    fontSize  : 14,
     fontWeight: FontWeight.w400,
     color     : AppColors.textSecondary,
     height    : 1.5,
   );
 
+  static TextStyle get bodyMedium => GoogleFonts.plusJakartaSans(
+    fontSize  : 12,
+    fontWeight: FontWeight.w400,
+    color     : AppColors.textSecondary,
+    height    : 1.4,
+  );
+
   static TextStyle get label => GoogleFonts.plusJakartaSans(
-    fontSize  : 11,
-    fontWeight: FontWeight.w700,
+    fontSize  : 10,
+    fontWeight: FontWeight.w800,
     color     : AppColors.textMuted,
-    letterSpacing: 2.0,
+    letterSpacing: 1.5,
   );
 
   static TextStyle get caption => GoogleFonts.plusJakartaSans(
-    fontSize  : 10,
-    fontWeight: FontWeight.w500,
+    fontSize  : 9,
+    fontWeight: FontWeight.w600,
     color     : AppColors.textMuted,
     letterSpacing: 0.5,
   );
@@ -271,7 +272,7 @@ class AppTheme {
         borderSide  : const BorderSide(color: AppColors.danger),
       ),
       filled   : true,
-      fillColor: Colors.white.withOpacity(0.03),
+      fillColor: Colors.white.withValues(alpha: 0.04),
       hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted),
       labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary),
       errorStyle: GoogleFonts.plusJakartaSans(color: AppColors.danger, fontSize: 11),
@@ -281,13 +282,13 @@ class AppTheme {
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         elevation: 0,
-        padding: const EdgeInsets.symmetric(vertical: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         textStyle: GoogleFonts.plusJakartaSans(
-          fontSize  : 15,
-          fontWeight: FontWeight.w700,
+          fontSize  : 14,
+          fontWeight: FontWeight.w800,
           letterSpacing: 0.5,
         ),
       ),
@@ -295,14 +296,14 @@ class AppTheme {
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: AppColors.primary,
-        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+        textStyle: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
       ),
     ),
     snackBarTheme: SnackBarThemeData(
       backgroundColor: AppColors.surface,
-      contentTextStyle: GoogleFonts.plusJakartaSans(color: AppColors.text),
+      contentTextStyle: GoogleFonts.plusJakartaSans(color: AppColors.text, fontWeight: FontWeight.w600),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppRadius.sm),
+        borderRadius: BorderRadius.circular(AppRadius.md),
         side: BorderSide(color: AppColors.border),
       ),
       behavior: SnackBarBehavior.floating,
@@ -324,7 +325,7 @@ class AppTheme {
         color       : AppColors.text,
         fontSize    : 16,
         fontWeight  : FontWeight.w800,
-        letterSpacing: 2,
+        letterSpacing: 1.5,
       ),
       iconTheme: const IconThemeData(color: AppColors.text),
     ),
@@ -338,4 +339,3 @@ class AppTheme {
     ),
   );
 }
-

@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
+import 'map_picker_dialog.dart';
 
 class RouteEditScreen extends StatefulWidget {
   final Map<String, dynamic> route;
@@ -17,15 +19,20 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
   late TextEditingController _nameController;
   late TextEditingController _colorController;
   late List<Map<String, dynamic>> _stops;
+  final List<TextEditingController> _stopNameControllers = [];
+  final List<TextEditingController> _latControllers = [];
+  final List<TextEditingController> _lngControllers = [];
+  
   bool _isSaving = false;
+  bool _isBatchGeocoding = false;
+  int? _geocodingIndex;
 
   @override
   void initState() {
     super.initState();
     _nameController = TextEditingController(text: widget.route['name'] ?? '');
-    _colorController = TextEditingController(text: widget.route['color'] ?? '#2D5BFF');
+    _colorController = TextEditingController(text: widget.route['color'] ?? '#06B6D4');
     
-    // Copy the stops safely to avoid modifying the original until saved
     final rawStops = widget.route['stops'] as List? ?? [];
     _stops = rawStops.map<Map<String, dynamic>>((s) {
       return {
@@ -34,49 +41,184 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
         'lng': (s['lng'] ?? 0.0).toDouble(),
       };
     }).toList();
+
+    _initControllers();
+  }
+
+  void _initControllers() {
+    _stopNameControllers.clear();
+    _latControllers.clear();
+    _lngControllers.clear();
+
+    for (final stop in _stops) {
+      _stopNameControllers.add(TextEditingController(text: stop['name'] ?? ''));
+      final double lat = (stop['lat'] ?? 0.0).toDouble();
+      final double lng = (stop['lng'] ?? 0.0).toDouble();
+      _latControllers.add(TextEditingController(text: lat != 0.0 ? lat.toStringAsFixed(5) : ''));
+      _lngControllers.add(TextEditingController(text: lng != 0.0 ? lng.toStringAsFixed(5) : ''));
+    }
   }
 
   @override
   void dispose() {
     _nameController.dispose();
     _colorController.dispose();
+    for (final c in _stopNameControllers) { c.dispose(); }
+    for (final c in _latControllers) { c.dispose(); }
+    for (final c in _lngControllers) { c.dispose(); }
     super.dispose();
   }
 
   void _addStop() {
     setState(() {
       _stops.add({
-        'name': 'New Stop ${_stops.length + 1}',
-        'lat': 23.2599, // default Bhopal coords
-        'lng': 77.4126,
+        'name': 'Stop ${_stops.length + 1}',
+        'lat': 0.0,
+        'lng': 0.0,
       });
+      _stopNameControllers.add(TextEditingController(text: 'Stop ${_stops.length}'));
+      _latControllers.add(TextEditingController(text: ''));
+      _lngControllers.add(TextEditingController(text: ''));
     });
   }
 
   void _removeStop(int index) {
     setState(() {
       _stops.removeAt(index);
+      _stopNameControllers[index].dispose();
+      _stopNameControllers.removeAt(index);
+      _latControllers[index].dispose();
+      _latControllers.removeAt(index);
+      _lngControllers[index].dispose();
+      _lngControllers.removeAt(index);
     });
   }
 
   void _swapStops(int i, int j) {
     if (i < 0 || i >= _stops.length || j < 0 || j >= _stops.length) return;
     setState(() {
-      final temp = _stops[i];
+      final tempStop = _stops[i];
       _stops[i] = _stops[j];
-      _stops[j] = temp;
+      _stops[j] = tempStop;
+
+      final tempName = _stopNameControllers[i].text;
+      _stopNameControllers[i].text = _stopNameControllers[j].text;
+      _stopNameControllers[j].text = tempName;
+
+      final tempLat = _latControllers[i].text;
+      _latControllers[i].text = _latControllers[j].text;
+      _latControllers[j].text = tempLat;
+
+      final tempLng = _lngControllers[i].text;
+      _lngControllers[i].text = _lngControllers[j].text;
+      _lngControllers[j].text = tempLng;
     });
   }
 
+  // ─── Automated Geocoding for a Single Stop ─────────────────────────────────
+  Future<void> _autoGeocodeStop(int index) async {
+    final String stopName = _stopNameControllers[index].text.trim();
+    if (stopName.isEmpty) {
+      _showCustomSnackBar('Please enter a stop name first', isError: true);
+      return;
+    }
+
+    setState(() => _geocodingIndex = index);
+
+    try {
+      final response = await _apiService.get('routes/geocode-stop?name=${Uri.encodeComponent(stopName)}');
+      if (response != null && response['lat'] != null && response['lng'] != null) {
+        final double lat = (response['lat'] as num).toDouble();
+        final double lng = (response['lng'] as num).toDouble();
+
+        setState(() {
+          _stops[index]['lat'] = lat;
+          _stops[index]['lng'] = lng;
+          _latControllers[index].text = lat.toStringAsFixed(5);
+          _lngControllers[index].text = lng.toStringAsFixed(5);
+        });
+
+        _showCustomSnackBar('Pinned "$stopName" to ($lat, $lng)', isSuccess: true);
+      }
+    } catch (e) {
+      _showCustomSnackBar('Failed to auto-geocode "$stopName": $e', isError: true);
+    } finally {
+      if (mounted) setState(() => _geocodingIndex = null);
+    }
+  }
+
+  // ─── Bulk Auto-Geocode All Stops in Route ──────────────────────────────────
+  Future<void> _autoGeocodeAllStops() async {
+    if (_stops.isEmpty) return;
+
+    setState(() => _isBatchGeocoding = true);
+    int resolvedCount = 0;
+
+    for (int i = 0; i < _stops.length; i++) {
+      final String stopName = _stopNameControllers[i].text.trim();
+      if (stopName.isEmpty) continue;
+
+      try {
+        final response = await _apiService.get('routes/geocode-stop?name=${Uri.encodeComponent(stopName)}');
+        if (response != null && response['lat'] != null && response['lng'] != null) {
+          final double lat = (response['lat'] as num).toDouble();
+          final double lng = (response['lng'] as num).toDouble();
+
+          setState(() {
+            _stops[i]['lat'] = lat;
+            _stops[i]['lng'] = lng;
+            _latControllers[i].text = lat.toStringAsFixed(5);
+            _lngControllers[i].text = lng.toStringAsFixed(5);
+          });
+          resolvedCount++;
+        }
+      } catch (_) {}
+    }
+
+    if (mounted) {
+      setState(() => _isBatchGeocoding = false);
+      _showCustomSnackBar('Auto-geocoded $resolvedCount / ${_stops.length} stops', isSuccess: true);
+    }
+  }
+
+  // ─── Interactive Map Picker ───────────────────────────────────────────────
+  Future<void> _pickOnMap(int index) async {
+    final double curLat = double.tryParse(_latControllers[index].text) ?? (_stops[index]['lat'] ?? 0.0);
+    final double curLng = double.tryParse(_lngControllers[index].text) ?? (_stops[index]['lng'] ?? 0.0);
+    final String stopName = _stopNameControllers[index].text.trim();
+
+    final LatLng? picked = await showDialog<LatLng>(
+      context: context,
+      builder: (ctx) => MapPickerDialog(
+        initialLat: curLat,
+        initialLng: curLng,
+        stopName: stopName,
+        themeColor: _getParsedColor(),
+      ),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _stops[index]['lat'] = picked.latitude;
+        _stops[index]['lng'] = picked.longitude;
+        _latControllers[index].text = picked.latitude.toStringAsFixed(5);
+        _lngControllers[index].text = picked.longitude.toStringAsFixed(5);
+      });
+      _showCustomSnackBar('Position updated for "${_stopNameControllers[index].text}"', isSuccess: true);
+    }
+  }
+
+  // ─── Save Route ───────────────────────────────────────────────────────────
   Future<void> _saveRoute() async {
     if (_nameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Route name cannot be empty', style: GoogleFonts.plusJakartaSans()),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showCustomSnackBar('Route name cannot be empty', isError: true);
       return;
+    }
+
+    for (int i = 0; i < _stops.length; i++) {
+      _stops[i]['name'] = _stopNameControllers[i].text.trim();
+      _stops[i]['lat'] = double.tryParse(_latControllers[i].text) ?? 0.0;
+      _stops[i]['lng'] = double.tryParse(_lngControllers[i].text) ?? 0.0;
     }
 
     setState(() => _isSaving = true);
@@ -91,25 +233,50 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
       await _apiService.put('manager/routes/${widget.route['_id']}', data);
 
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Route changes saved successfully!', style: GoogleFonts.plusJakartaSans(color: Colors.black, fontWeight: FontWeight.bold)),
-          backgroundColor: Colors.blueAccent,
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-      Navigator.pop(context, true); // return true to indicate changes were saved
+      _showCustomSnackBar('Route & waypoints saved successfully!', isSuccess: true);
+      Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Failed to save route: $e', style: GoogleFonts.plusJakartaSans()),
-          backgroundColor: Colors.redAccent,
-        ),
-      );
+      _showCustomSnackBar('Failed to save route: $e', isError: true);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
+  }
+
+  void _showCustomSnackBar(String message, {bool isError = false, bool isSuccess = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline_rounded : isSuccess ? Icons.check_circle_rounded : Icons.info_outline_rounded,
+              color: isError ? Colors.redAccent : const Color(0xFF00F0FF),
+              size: 20,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                message,
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF131D33),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: isError ? Colors.redAccent.withOpacity(0.4) : const Color(0xFF00F0FF).withOpacity(0.3)),
+        ),
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      ),
+    );
   }
 
   Color _getParsedColor() {
@@ -121,49 +288,105 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
         return Color(int.parse('0x$colorStr'));
       }
     } catch (_) {}
-    return Colors.blueAccent;
+    return const Color(0xFF06B6D4);
   }
 
   @override
   Widget build(BuildContext context) {
     final parsedColor = _getParsedColor();
+    final int configuredStopsCount = _stops.where((s) => (s['lat'] ?? 0.0) != 0.0 && (s['lng'] ?? 0.0) != 0.0).length;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF121212),
+      backgroundColor: const Color(0xFF090D16),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: const Color(0xFF0F172A),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          'Edit Route Configuration',
-          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.white, letterSpacing: 1),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Edit Route',
+              style: GoogleFonts.plusJakartaSans(
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              '${_stops.length} Stops • $configuredStopsCount Pinned',
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 11,
+                color: parsedColor,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
         ),
         actions: [
-          IconButton(
-            icon: _isSaving 
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.blueAccent, strokeWidth: 2))
-              : const Icon(Icons.save_rounded, color: Colors.blueAccent),
-            onPressed: _isSaving ? null : _saveRoute,
+          // Auto-Geocode All Button
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF00F0FF).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.3)),
+            ),
+            child: IconButton(
+              tooltip: 'Auto-Geocode All Stops',
+              constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              icon: _isBatchGeocoding 
+                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: Color(0xFF00F0FF), strokeWidth: 2))
+                : const Icon(Icons.auto_awesome_rounded, color: Color(0xFF00F0FF), size: 18),
+              onPressed: (_isBatchGeocoding || _isSaving) ? null : _autoGeocodeAllStops,
+            ),
           ),
-          const SizedBox(width: 8),
+          
+          // Save Button
+          Container(
+            margin: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(colors: [Color(0xFF10B981), Color(0xFF059669)]),
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [
+                BoxShadow(color: const Color(0xFF10B981).withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 2)),
+              ],
+            ),
+            child: IconButton(
+              tooltip: 'Save Changes',
+              constraints: const BoxConstraints(minWidth: 38, minHeight: 38),
+              padding: EdgeInsets.zero,
+              icon: _isSaving 
+                ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                : const Icon(Icons.check_rounded, color: Colors.white, size: 22),
+              onPressed: (_isSaving || _isBatchGeocoding) ? null : _saveRoute,
+            ),
+          ),
         ],
       ),
       body: CustomScrollView(
         slivers: [
-          // ─── Header Configuration Card ──────────────────────────────────────
+          // ─── Route Identity Card ───────────────────────────────────────────
           SliverToBoxAdapter(
             child: Container(
-              margin: const EdgeInsets.all(20),
-              padding: const EdgeInsets.all(20),
+              margin: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+              padding: const EdgeInsets.all(18),
               decoration: BoxDecoration(
-                color: const Color(0xFF1E1E1E),
-                borderRadius: BorderRadius.circular(28),
-                border: Border.all(color: parsedColor.withOpacity(0.15)),
+                color: const Color(0xFF131D33),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: parsedColor.withOpacity(0.25)),
                 boxShadow: [
-                  BoxShadow(color: parsedColor.withOpacity(0.03), blurRadius: 20, spreadRadius: 2),
-                ]
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.3),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  )
+                ],
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -171,148 +394,204 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(12),
+                        padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: parsedColor.withOpacity(0.1),
+                          color: parsedColor.withOpacity(0.15),
                           shape: BoxShape.circle,
-                          border: Border.all(color: parsedColor.withOpacity(0.2)),
                         ),
-                        child: Icon(Icons.route_rounded, color: parsedColor, size: 24),
+                        child: Icon(Icons.alt_route_rounded, color: parsedColor, size: 20),
                       ),
-                      const SizedBox(width: 16),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('CORE METRICS', style: GoogleFonts.plusJakartaSans(color: parsedColor, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-                          Text('Configure Identity', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
-                        ],
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'ROUTE CONFIGURATION',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: parsedColor,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            Text(
+                              'Identity & Theme Color',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
                   
                   // Route Name Field
                   TextField(
                     controller: _nameController,
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                     decoration: InputDecoration(
-                      labelText: 'ROUTE NAME',
-                      labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-                      enabledBorder: const OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(16)),
-                        borderSide: BorderSide(color: Colors.white10),
+                      labelText: 'Route Name',
+                      labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600),
+                      filled: true,
+                      fillColor: const Color(0xFF0F172A),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: const BorderSide(color: Colors.white10),
                       ),
                       focusedBorder: OutlineInputBorder(
-                        borderRadius: const BorderRadius.all(Radius.circular(16)),
-                        borderSide: BorderSide(color: parsedColor.withOpacity(0.5)),
+                        borderRadius: BorderRadius.circular(16),
+                        borderSide: BorderSide(color: parsedColor.withOpacity(0.6), width: 1.5),
                       ),
-                      prefixIcon: const Icon(Icons.edit_note_rounded, color: Colors.white38),
+                      prefixIcon: const Icon(Icons.edit_note_rounded, color: Colors.white38, size: 20),
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
                   
-                  // Route Color Field
+                  // Route Color Picker
                   Row(
                     children: [
                       Expanded(
                         child: TextField(
                           controller: _colorController,
-                          onChanged: (_) => setState(() {}), // refresh picker color preview
-                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                          onChanged: (_) => setState(() {}),
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                           decoration: InputDecoration(
-                            labelText: 'THEMATIC COLOR (HEX)',
-                            labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1),
-                            enabledBorder: const OutlineInputBorder(
-                              borderRadius: BorderRadius.all(Radius.circular(16)),
-                              borderSide: BorderSide(color: Colors.white10),
+                            labelText: 'Hex Color Accent',
+                            labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w600),
+                            filled: true,
+                            fillColor: const Color(0xFF0F172A),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: const BorderSide(color: Colors.white10),
                             ),
                             focusedBorder: OutlineInputBorder(
-                              borderRadius: const BorderRadius.all(Radius.circular(16)),
-                              borderSide: BorderSide(color: parsedColor.withOpacity(0.5)),
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide(color: parsedColor.withOpacity(0.6), width: 1.5),
                             ),
-                            prefixIcon: const Icon(Icons.palette_rounded, color: Colors.white38),
+                            prefixIcon: const Icon(Icons.palette_rounded, color: Colors.white38, size: 20),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      // Color preview dot
+                      const SizedBox(width: 12),
                       Container(
-                        width: 54,
-                        height: 54,
+                        width: 46,
+                        height: 46,
                         decoration: BoxDecoration(
                           color: parsedColor,
                           shape: BoxShape.circle,
                           border: Border.all(color: Colors.white24, width: 2),
                           boxShadow: [
-                            BoxShadow(color: parsedColor.withOpacity(0.3), blurRadius: 10, spreadRadius: 1)
-                          ]
+                            BoxShadow(color: parsedColor.withOpacity(0.4), blurRadius: 10, spreadRadius: 1)
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ],
               ),
-            ).animate().fadeIn().slideY(begin: 0.1),
+            ).animate().fadeIn().slideY(begin: 0.05),
           ),
           
-          // ─── Stops Header ───────────────────────────────────────────────────
+          // ─── Waypoints Section Header (Flexible & Overflow-Free) ───────────
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'STOPS & COORDINATES',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Define the waypoint sequence for this route',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.w500),
-                      ),
-                    ],
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'WAYPOINTS & STOPS',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.1,
+                          ),
+                        ),
+                        Text(
+                          'Sequence & accurate coordinates',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white38,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: parsedColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: parsedColor.withOpacity(0.2)),
+                  const SizedBox(width: 8),
+                  // Add Waypoint Button
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: parsedColor.withOpacity(0.15),
+                      foregroundColor: parsedColor,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        side: BorderSide(color: parsedColor.withOpacity(0.3)),
+                      ),
                     ),
-                    child: IconButton(
-                      icon: Icon(Icons.add_location_alt_rounded, color: parsedColor, size: 20),
-                      onPressed: _addStop,
+                    icon: const Icon(Icons.add_location_alt_rounded, size: 16),
+                    label: Text(
+                      'Add Stop',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
                     ),
+                    onPressed: _addStop,
                   ),
                 ],
               ),
             ),
           ),
           
-          // ─── Stops List View ────────────────────────────────────────────────
+          // ─── Stops Waypoint List ───────────────────────────────────────────
           if (_stops.isEmpty)
             SliverToBoxAdapter(
               child: Container(
-                margin: const EdgeInsets.all(24),
-                padding: const EdgeInsets.all(40),
+                margin: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(36),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1E1E1E),
+                  color: const Color(0xFF131D33),
                   borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: Colors.white.withOpacity(0.05)),
+                  border: Border.all(color: Colors.white.withOpacity(0.06)),
                 ),
                 child: Center(
                   child: Column(
                     children: [
-                      const Icon(Icons.add_road_rounded, color: Colors.white24, size: 40),
+                      const Icon(Icons.add_road_rounded, color: Colors.white24, size: 44),
                       const SizedBox(height: 12),
-                      Text('NO WAYPOINTS CONFIGURED', style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 11, fontWeight: FontWeight.w900, letterSpacing: 2)),
-                      const SizedBox(height: 16),
-                      TextButton.icon(
-                        icon: const Icon(Icons.add, color: Colors.blueAccent),
-                        label: Text('Add First Waypoint', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                      Text(
+                        'NO WAYPOINTS CONFIGURED',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white38,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF00F0FF),
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text('Add First Waypoint', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 12)),
                         onPressed: _addStop,
                       )
                     ],
@@ -322,135 +601,227 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
             )
           else
             SliverPadding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, index) {
-                    final stop = _stops[index];
-                    final String name = stop['name'] ?? '';
-                    final double lat = stop['lat'] ?? 0.0;
-                    final double lng = stop['lng'] ?? 0.0;
+                    final bool isGeocodingThis = _geocodingIndex == index;
+                    final double lat = double.tryParse(_latControllers[index].text) ?? 0.0;
+                    final double lng = double.tryParse(_lngControllers[index].text) ?? 0.0;
+                    final bool hasCoords = lat != 0.0 && lng != 0.0;
+                    final bool isFirst = index == 0;
+                    final bool isLast = index == _stops.length - 1;
                     
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 14),
+                      margin: const EdgeInsets.only(bottom: 12),
                       padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E),
+                        color: const Color(0xFF131D33),
                         borderRadius: BorderRadius.circular(20),
-                        border: Border.all(color: Colors.white10),
+                        border: Border.all(
+                          color: hasCoords ? Colors.white.withOpacity(0.08) : Colors.amber.withOpacity(0.4),
+                          width: hasCoords ? 1 : 1.5,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          )
+                        ],
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.center,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Index Circle / Reordering Indicators
-                          Column(
+                          // ── Top Row: Reorder Handles + Stop Name + Delete ───
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              GestureDetector(
-                                onTap: index > 0 ? () => _swapStops(index, index - 1) : null,
-                                child: Icon(
-                                  Icons.keyboard_arrow_up_rounded, 
-                                  color: index > 0 ? Colors.white30 : Colors.white12,
-                                  size: 22
-                                ),
+                              // Sequence Number Badge with Up/Down Controls
+                              Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (!isFirst)
+                                    GestureDetector(
+                                      onTap: () => _swapStops(index, index - 1),
+                                      child: const Icon(Icons.keyboard_arrow_up_rounded, color: Colors.white54, size: 18),
+                                    )
+                                  else
+                                    const SizedBox(height: 6),
+                                  
+                                  Container(
+                                    width: 28,
+                                    height: 28,
+                                    decoration: BoxDecoration(
+                                      color: parsedColor.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: parsedColor.withOpacity(0.35)),
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '${index + 1}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: parsedColor,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w900,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+
+                                  if (!isLast)
+                                    GestureDetector(
+                                      onTap: () => _swapStops(index, index + 1),
+                                      child: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white54, size: 18),
+                                    )
+                                  else
+                                    const SizedBox(height: 6),
+                                ],
                               ),
-                              Container(
-                                width: 28,
-                                height: 28,
-                                decoration: BoxDecoration(
-                                  color: parsedColor.withOpacity(0.1),
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: parsedColor.withOpacity(0.2)),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '${index + 1}',
-                                    style: GoogleFonts.plusJakartaSans(color: parsedColor, fontSize: 12, fontWeight: FontWeight.w900),
+                              const SizedBox(width: 12),
+                              
+                              // Stop Name Input
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _stopNameControllers[index],
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                  decoration: InputDecoration(
+                                    labelText: isFirst ? 'START WAYPOINT' : isLast ? 'FINAL TERMINUS' : 'WAYPOINT STOP',
+                                    labelStyle: GoogleFonts.plusJakartaSans(
+                                      color: isFirst ? const Color(0xFF10B981) : isLast ? const Color(0xFFEF4444) : Colors.white38,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                      letterSpacing: 1,
+                                    ),
+                                    isDense: true,
+                                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                                    enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white12)),
+                                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: parsedColor.withOpacity(0.7))),
                                   ),
                                 ),
                               ),
-                              GestureDetector(
-                                onTap: index < _stops.length - 1 ? () => _swapStops(index, index + 1) : null,
-                                child: Icon(
-                                  Icons.keyboard_arrow_down_rounded, 
-                                  color: index < _stops.length - 1 ? Colors.white30 : Colors.white12,
-                                  size: 22
-                                ),
+                              const SizedBox(width: 8),
+                              
+                              // Delete Button
+                              IconButton(
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                padding: EdgeInsets.zero,
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                onPressed: () => _removeStop(index),
                               ),
                             ],
                           ),
-                          const SizedBox(width: 16),
                           
-                          // Form Inputs
-                          Expanded(
-                            child: Column(
+                          const SizedBox(height: 12),
+
+                          // ── Middle Row: Coordinate Status / Readout ─────────
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF0F172A),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.white.withOpacity(0.05)),
+                            ),
+                            child: Row(
                               children: [
-                                // Stop Name Input
-                                TextFormField(
-                                  initialValue: name,
-                                  onChanged: (val) => stop['name'] = val,
-                                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                                  decoration: InputDecoration(
-                                    labelText: 'STOP NAME',
-                                    labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 1),
-                                    isDense: true,
-                                    contentPadding: const EdgeInsets.symmetric(vertical: 8),
-                                    enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
-                                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: parsedColor.withOpacity(0.5))),
-                                  ),
+                                Icon(
+                                  hasCoords ? Icons.check_circle_rounded : Icons.warning_amber_rounded,
+                                  color: hasCoords ? const Color(0xFF10B981) : Colors.amber,
+                                  size: 15,
                                 ),
-                                const SizedBox(height: 8),
-                                
-                                // Lat/Lng side-by-side
-                                Row(
-                                  children: [
-                                    Expanded(
-                                      child: TextFormField(
-                                        initialValue: lat.toString(),
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        onChanged: (val) => stop['lat'] = double.tryParse(val) ?? 0.0,
-                                        style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12),
-                                        decoration: InputDecoration(
-                                          labelText: 'LATITUDE',
-                                          labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900),
-                                          isDense: true,
-                                          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white12)),
-                                          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: parsedColor.withOpacity(0.3))),
-                                        ),
-                                      ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Text(
+                                    hasCoords 
+                                      ? '(${lat.toStringAsFixed(5)}, ${lng.toStringAsFixed(5)})' 
+                                      : 'Coordinates unpinned (tap auto-geocode or map)',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: hasCoords ? Colors.white70 : Colors.amber.shade200,
+                                      fontSize: 11,
+                                      fontWeight: hasCoords ? FontWeight.w600 : FontWeight.w500,
                                     ),
-                                    const SizedBox(width: 16),
-                                    Expanded(
-                                      child: TextFormField(
-                                        initialValue: lng.toString(),
-                                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                                        onChanged: (val) => stop['lng'] = double.tryParse(val) ?? 0.0,
-                                        style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 12),
-                                        decoration: InputDecoration(
-                                          labelText: 'LONGITUDE',
-                                          labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 8, fontWeight: FontWeight.w900),
-                                          isDense: true,
-                                          contentPadding: const EdgeInsets.symmetric(vertical: 4),
-                                          enabledBorder: const UnderlineInputBorder(borderSide: BorderSide(color: Colors.white12)),
-                                          focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: parsedColor.withOpacity(0.3))),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          
-                          // Delete Option
-                          IconButton(
-                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                            onPressed: () => _removeStop(index),
+
+                          const SizedBox(height: 10),
+
+                          // ── Bottom Action Row: Auto-Geocode & Map Picker ───
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              // 1-Tap Auto-Geocode Action
+                              InkWell(
+                                onTap: isGeocodingThis ? null : () => _autoGeocodeStop(index),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF00F0FF).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isGeocodingThis)
+                                        const SizedBox(width: 12, height: 12, child: CircularProgressIndicator(color: Color(0xFF00F0FF), strokeWidth: 1.5))
+                                      else
+                                        const Icon(Icons.auto_fix_high_rounded, color: Color(0xFF00F0FF), size: 14),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Auto-Geocode',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: const Color(0xFF00F0FF),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+
+                              // Pick on Map Action
+                              InkWell(
+                                onTap: () => _pickOnMap(index),
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withOpacity(0.12),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: const Color(0xFF10B981).withOpacity(0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.map_rounded, color: Color(0xFF10B981), size: 14),
+                                      const SizedBox(width: 6),
+                                      Text(
+                                        'Pick on Map',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: const Color(0xFF10B981),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ).animate().fadeIn(delay: (index * 40).ms).slideX(begin: 0.1);
+                    ).animate().fadeIn(delay: (index * 25).ms).slideX(begin: 0.04);
                   },
                   childCount: _stops.length,
                 ),
@@ -458,7 +829,7 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
             ),
           
           const SliverToBoxAdapter(
-            child: SizedBox(height: 50),
+            child: SizedBox(height: 60),
           )
         ],
       ),

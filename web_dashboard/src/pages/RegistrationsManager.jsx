@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, UserX, Search, Download, CheckCircle, XCircle, ShieldCheck, Key, RefreshCw } from 'lucide-react';
+import { 
+  UserCheck, UserX, Search, Download, CheckCircle, XCircle, 
+  ShieldCheck, Key, RefreshCw, UploadCloud, UserPlus, FileSpreadsheet,
+  Trash2, Mail, Phone, MapPin, Eye, Check, AlertCircle
+} from 'lucide-react';
 import { registrationAPI } from '../services/api';
+import BulkRegistrationModal from '../components/BulkRegistrationModal';
+import AddStudentModal from '../components/AddStudentModal';
 
 export default function RegistrationsManager() {
   const [registrations, setRegistrations] = useState([]);
@@ -10,6 +16,8 @@ export default function RegistrationsManager() {
   const [selectedIds, setSelectedIds] = useState([]);
   const [credentialsModal, setCredentialsModal] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
 
   useEffect(() => {
     fetchRegistrations();
@@ -19,11 +27,7 @@ export default function RegistrationsManager() {
     setLoading(true);
     try {
       const res = await registrationAPI.getAll();
-      setRegistrations(res.data?.submissions || res.data || [
-        { _id: 's1', name: 'Rahul Sharma', studentId: '0192CS211045', phone: '9876543210', routeName: 'Indrapuri Express', pickupStop: 'BHEL Gate 1', courseName: 'B.Tech CSE', status: 'pending', submittedAt: new Date() },
-        { _id: 's2', name: 'Ananya Verma', studentId: '0192EC211019', phone: '9876543211', routeName: 'MP Nagar Shuttle', pickupStop: 'Board Office', courseName: 'B.Tech ECE', status: 'pending', submittedAt: new Date() },
-        { _id: 's3', name: 'Vikas Kumar', studentId: '0192ME211002', phone: '9876543212', routeName: 'Bairagarh Direct', pickupStop: 'Halalpur Bus Stand', courseName: 'B.Tech ME', status: 'approved', generatedUsername: '0192ME211002', generatedPassword: 'Pass#9876', submittedAt: new Date() },
-      ]);
+      setRegistrations(res.data?.submissions || res.data || []);
     } catch (err) {
       console.error('Failed to fetch registrations:', err);
     } finally {
@@ -46,13 +50,14 @@ export default function RegistrationsManager() {
       fetchRegistrations();
     } catch (err) {
       console.error('Approval failed:', err);
+      alert('Failed to approve registration.');
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleReject = async (id) => {
-    const note = prompt('Enter rejection reason:');
+    const note = prompt('Enter rejection reason for student notification:');
     if (note === null) return;
     setActionLoading(true);
     try {
@@ -67,15 +72,17 @@ export default function RegistrationsManager() {
 
   const handleBulkApprove = async () => {
     if (selectedIds.length === 0) return;
-    if (!window.confirm(`Approve transport access for ${selectedIds.length} selected students?`)) return;
+    if (!window.confirm(`Approve transport access and generate login credentials for ${selectedIds.length} selected students?`)) return;
     
     setActionLoading(true);
     try {
       await registrationAPI.bulkApprove(selectedIds);
       setSelectedIds([]);
       fetchRegistrations();
+      alert(`Successfully approved ${selectedIds.length} student registrations!`);
     } catch (err) {
       console.error('Bulk approval failed:', err);
+      alert('Bulk approval failed.');
     } finally {
       setActionLoading(false);
     }
@@ -96,7 +103,7 @@ export default function RegistrationsManager() {
   };
 
   const exportCSV = () => {
-    const headers = ["Student Name", "Student ID", "Phone", "Route Name", "Pickup Stop", "Course", "Status"];
+    const headers = ["Student Name", "Student ID / Roll No", "Phone", "Route Name", "Pickup Stop", "Course", "Status", "Generated Username", "Password"];
     const rows = filteredData.map(r => [
       `"${r.name}"`,
       `"${r.studentId}"`,
@@ -104,14 +111,16 @@ export default function RegistrationsManager() {
       `"${r.routeName || ''}"`,
       `"${r.pickupStop || ''}"`,
       `"${r.courseName || ''}"`,
-      `"${r.status}"`
+      `"${r.status}"`,
+      `"${r.generatedUsername || ''}"`,
+      `"${r.generatedPassword || ''}"`
     ]);
 
     const csvContent = "data:text/csv;charset=utf-8," + [headers.join(","), ...rows.map(e => e.join(","))].join("\n");
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `transport_registrations_${filterStatus}.csv`);
+    link.setAttribute("download", `sistecchalo_registrations_${filterStatus}_${new Date().toISOString().slice(0,10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -126,60 +135,86 @@ export default function RegistrationsManager() {
   return (
     <div className="space-y-6 pb-12">
       
-      {/* Top Header */}
-      <div className="glass-panel p-6 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4">
+      {/* Top Header & Actions */}
+      <div className="glass-panel p-6 rounded-3xl flex flex-col lg:flex-row lg:items-center justify-between gap-4 border border-gray-800/80 shadow-2xl">
         <div>
-          <h2 className="text-2xl font-display font-bold text-white">Student Transport Registrations</h2>
-          <p className="text-xs text-gray-400 mt-1">Review student applications, issue transport passes, and manage approvals</p>
+          <div className="flex items-center space-x-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+            <h2 className="text-2xl font-display font-bold text-white tracking-tight">Student Registrations & Passes</h2>
+          </div>
+          <p className="text-xs text-gray-400 mt-1">
+            Import Excel/CSV spreadsheets, approve student bus passes, and auto-dispatch login credentials
+          </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex flex-wrap items-center gap-3">
+          
+          {/* Add Single Student */}
+          <button 
+            onClick={() => setIsAddModalOpen(true)}
+            className="bg-gray-800 hover:bg-gray-700 text-white border border-gray-700 px-4 py-2.5 rounded-2xl text-xs font-semibold flex items-center space-x-2 shadow-lg transition active:scale-95"
+          >
+            <UserPlus className="w-4 h-4 text-emerald-400" />
+            <span>+ Add Single Student</span>
+          </button>
+
+          {/* Bulk Import by Excel / CSV / JSON */}
+          <button 
+            onClick={() => setIsBulkModalOpen(true)}
+            className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-2xl text-xs font-semibold shadow-lg glow-primary flex items-center space-x-2 transition active:scale-95"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-white" />
+            <span>📁 Import Excel / CSV File</span>
+          </button>
+
+          {/* Bulk Approve (if items selected) */}
           {selectedIds.length > 0 && (
             <button 
               onClick={handleBulkApprove}
               disabled={actionLoading}
-              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-xl text-xs font-semibold shadow-lg glow-emerald flex items-center space-x-2 transition"
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2.5 rounded-2xl text-xs font-semibold shadow-lg glow-emerald flex items-center space-x-2 transition"
             >
               <CheckCircle className="w-4 h-4" />
-              <span>Bulk Approve Selected ({selectedIds.length})</span>
+              <span>Approve Selected ({selectedIds.length})</span>
             </button>
           )}
 
+          {/* Export CSV */}
           <button 
             onClick={exportCSV}
-            className="bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 px-4 py-2.5 rounded-xl text-xs font-semibold flex items-center space-x-2 transition"
+            className="bg-gray-900/80 hover:bg-gray-800 text-gray-300 border border-gray-800 px-4 py-2.5 rounded-2xl text-xs font-semibold flex items-center space-x-2 transition"
           >
             <Download className="w-4 h-4 text-cyan-400" />
-            <span>Export CSV</span>
+            <span>Export Sheet</span>
           </button>
         </div>
       </div>
 
       {/* Filter & Search Bar */}
-      <div className="glass-panel p-4 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div className="glass-panel p-4 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4 border border-gray-800">
         
         {/* Search */}
         <div className="relative w-full sm:w-80">
-          <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+          <Search className="w-4 h-4 text-gray-400 absolute left-3.5 top-3" />
           <input 
             type="text" 
             value={search} 
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search student name, ID, route, stop..."
-            className="w-full glass-input pl-9 pr-3 py-2 rounded-xl text-xs"
+            placeholder="Search student name, roll no, route, stop..."
+            className="w-full glass-input pl-10 pr-3 py-2 rounded-xl text-xs"
           />
         </div>
 
         {/* Status Tabs */}
-        <div className="flex items-center space-x-2 text-xs">
+        <div className="flex items-center space-x-2 text-xs w-full sm:w-auto overflow-x-auto pb-1 sm:pb-0">
           {['pending', 'approved', 'rejected', 'ALL'].map((st) => (
             <button
               key={st}
               onClick={() => setFilterStatus(st)}
-              className={`px-4 py-2 rounded-xl font-semibold capitalize transition ${
+              className={`px-4 py-2 rounded-xl font-semibold capitalize whitespace-nowrap transition ${
                 filterStatus === st 
-                  ? 'bg-indigo-600 text-white shadow-lg' 
-                  : 'bg-gray-800/60 text-gray-400 hover:text-gray-200'
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-600/30' 
+                  : 'bg-gray-900/60 text-gray-400 hover:text-gray-200 border border-gray-800'
               }`}
             >
               {st} ({registrations.filter(r => st === 'ALL' ? true : r.status === st).length})
@@ -190,10 +225,10 @@ export default function RegistrationsManager() {
       </div>
 
       {/* Main Table */}
-      <div className="glass-panel rounded-2xl overflow-hidden border border-gray-800">
+      <div className="glass-panel rounded-3xl overflow-hidden border border-gray-800 shadow-2xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-gray-900/80 text-gray-400 font-semibold border-b border-gray-800 uppercase tracking-wider text-[10px]">
+            <thead className="bg-gray-900/90 text-gray-400 font-semibold border-b border-gray-800 uppercase tracking-wider text-[10px]">
               <tr>
                 <th className="p-4 w-10 text-center">
                   <input 
@@ -213,10 +248,19 @@ export default function RegistrationsManager() {
             </thead>
 
             <tbody className="divide-y divide-gray-800/60">
-              {filteredData.length === 0 ? (
+              {loading ? (
                 <tr>
-                  <td colSpan="7" className="p-8 text-center text-gray-500">
-                    No registrations found matching criteria.
+                  <td colSpan="7" className="p-10 text-center text-gray-400">
+                    <RefreshCw className="w-6 h-6 animate-spin mx-auto text-indigo-400 mb-2" />
+                    <span>Loading student registrations...</span>
+                  </td>
+                </tr>
+              ) : filteredData.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="p-12 text-center text-gray-500 space-y-3">
+                    <FileSpreadsheet className="w-10 h-10 mx-auto text-gray-600 mb-2" />
+                    <p className="text-sm font-semibold text-gray-400">No registrations found.</p>
+                    <p className="text-xs text-gray-500">Click "Import Excel / CSV File" above to bulk register students from your college files.</p>
                   </td>
                 </tr>
               ) : (
@@ -238,46 +282,72 @@ export default function RegistrationsManager() {
 
                     <td className="p-4">
                       <p className="font-semibold text-gray-200">{reg.routeName || 'General Route'}</p>
-                      <p className="text-[11px] text-cyan-400">Stop: {reg.pickupStop}</p>
+                      <p className="text-[11px] text-cyan-400 flex items-center space-x-1 mt-0.5">
+                        <MapPin className="w-3 h-3" />
+                        <span>{reg.pickupStop || 'Assigned Stop'}</span>
+                      </p>
                     </td>
 
                     <td className="p-4 text-gray-300">
-                      <p>{reg.phone}</p>
-                      <p className="text-[10px] text-gray-500">{reg.email || 'No email'}</p>
+                      <p className="font-mono text-[11px] flex items-center space-x-1">
+                        <Phone className="w-3 h-3 text-gray-500" />
+                        <span>{reg.phone}</span>
+                      </p>
+                      {reg.email && (
+                        <p className="text-[10px] text-gray-400 flex items-center space-x-1 mt-0.5">
+                          <Mail className="w-3 h-3 text-gray-500" />
+                          <span>{reg.email}</span>
+                        </p>
+                      )}
                     </td>
 
                     <td className="p-4 text-gray-400">
-                      {reg.courseName || 'N/A'}
-                    </td>
-
-                    <td className="p-4">
-                      <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider ${
-                        reg.status === 'approved' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
-                        reg.status === 'rejected' ? 'bg-red-500/20 text-red-400 border border-red-500/30' :
-                        'bg-amber-500/20 text-amber-400 border border-amber-500/30'
-                      }`}>
-                        {reg.status}
+                      <span className="px-2.5 py-1 rounded-lg bg-gray-800/60 border border-gray-700/60 text-[11px] text-gray-300">
+                        {reg.courseName || 'Student'}
                       </span>
                     </td>
 
-                    <td className="p-4 text-right space-x-2">
+                    <td className="p-4">
+                      {reg.status === 'approved' && (
+                        <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] font-semibold flex items-center space-x-1 w-max">
+                          <CheckCircle className="w-3 h-3" />
+                          <span>Approved & Active</span>
+                        </span>
+                      )}
                       {reg.status === 'pending' && (
-                        <>
+                        <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-[11px] font-semibold flex items-center space-x-1 w-max">
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Pending Review</span>
+                        </span>
+                      )}
+                      {reg.status === 'rejected' && (
+                        <span className="px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400 text-[11px] font-semibold flex items-center space-x-1 w-max">
+                          <XCircle className="w-3 h-3" />
+                          <span>Rejected</span>
+                        </span>
+                      )}
+                    </td>
+
+                    <td className="p-4 text-right">
+                      {reg.status === 'pending' && (
+                        <div className="flex items-center justify-end space-x-2">
                           <button
                             onClick={() => handleApprove(reg._id)}
                             disabled={actionLoading}
-                            className="bg-emerald-600/30 hover:bg-emerald-600 text-emerald-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition"
+                            className="p-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-emerald-300 transition"
+                            title="Approve & Generate Credentials"
                           >
-                            Approve
+                            <Check className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => handleReject(reg._id)}
                             disabled={actionLoading}
-                            className="bg-red-600/30 hover:bg-red-600 text-red-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold transition"
+                            className="p-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-rose-400 hover:text-rose-300 transition"
+                            title="Reject Application"
                           >
-                            Reject
+                            <XCircle className="w-4 h-4" />
                           </button>
-                        </>
+                        </div>
                       )}
 
                       {reg.status === 'approved' && (
@@ -285,12 +355,12 @@ export default function RegistrationsManager() {
                           onClick={() => setCredentialsModal({
                             name: reg.name,
                             username: reg.generatedUsername || reg.studentId,
-                            password: reg.generatedPassword || 'Pass#Updated'
+                            password: reg.generatedPassword || 'Pass#' + reg.studentId.slice(-4)
                           })}
-                          className="bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white px-3 py-1.5 rounded-lg font-semibold flex items-center space-x-1 ml-auto"
+                          className="px-3 py-1 rounded-xl bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/30 text-indigo-400 text-[11px] font-semibold flex items-center space-x-1 ml-auto transition"
                         >
-                          <Key className="w-3.5 h-3.5" />
-                          <span>Credentials</span>
+                          <Key className="w-3 h-3" />
+                          <span>View Credentials</span>
                         </button>
                       )}
                     </td>
@@ -302,39 +372,67 @@ export default function RegistrationsManager() {
         </div>
       </div>
 
-      {/* Generated Pass Credentials Modal */}
+      {/* Credentials Modal */}
       {credentialsModal && (
-        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="glass-panel p-6 rounded-2xl max-w-md w-full border border-indigo-500/40 shadow-2xl space-y-4">
-            <div className="flex items-center space-x-3 text-emerald-400">
-              <ShieldCheck className="w-6 h-6" />
-              <h3 className="font-display font-bold text-lg text-white">Student Transport Pass Generated</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-md bg-[#0B1120] border border-gray-800 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-800/80 pb-4">
+              <div className="flex items-center space-x-2">
+                <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                <h4 className="font-bold text-white text-base font-display">Student Pass Credentials</h4>
+              </div>
+              <button 
+                onClick={() => setCredentialsModal(null)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
             </div>
 
             <p className="text-xs text-gray-300">
-              Share these mobile app login credentials with student <strong>{credentialsModal.name}</strong>:
+              Student account details for <strong className="text-white">{credentialsModal.name}</strong>:
             </p>
 
-            <div className="glass-card p-4 rounded-xl space-y-2 text-xs font-mono">
-              <div className="flex justify-between">
-                <span className="text-gray-400">Username:</span>
-                <span className="text-cyan-400 font-bold">{credentialsModal.username}</span>
+            <div className="glass-panel p-4 rounded-2xl border border-indigo-500/30 space-y-2.5 text-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Username / Roll No:</span>
+                <span className="font-mono font-bold text-indigo-400">{credentialsModal.username}</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-gray-400">Password:</span>
-                <span className="text-amber-400 font-bold">{credentialsModal.password}</span>
+              <div className="flex items-center justify-between">
+                <span className="text-gray-400">Initial Password:</span>
+                <span className="font-mono font-bold text-emerald-400 bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-500/30">
+                  {credentialsModal.password}
+                </span>
               </div>
             </div>
 
-            <button 
+            <button
               onClick={() => setCredentialsModal(null)}
-              className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs py-2.5 rounded-xl transition"
+              className="w-full py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg glow-primary transition"
             >
-              Done & Close
+              Close
             </button>
           </div>
         </div>
       )}
+
+      {/* Bulk Registration File Upload Modal */}
+      <BulkRegistrationModal 
+        isOpen={isBulkModalOpen}
+        onClose={() => setIsBulkModalOpen(false)}
+        onSuccess={() => {
+          fetchRegistrations();
+        }}
+      />
+
+      {/* Single Student Registration Modal */}
+      <AddStudentModal 
+        isOpen={isAddModalOpen}
+        onClose={() => setIsAddModalOpen(false)}
+        onSuccess={() => {
+          fetchRegistrations();
+        }}
+      />
 
     </div>
   );

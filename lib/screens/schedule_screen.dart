@@ -63,9 +63,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   String _period(String t) {
     final h = int.tryParse(t.split(':').first) ?? 12;
-    if (h < 12) return '🌅 Morning';
-    if (h < 17) return '☀️ Afternoon';
-    return '🌙 Evening';
+    if (h < 12) return 'Morning Slot';
+    if (h < 17) return 'Afternoon Slot';
+    return 'Evening Slot';
+  }
+
+  IconData _periodIcon(String t) {
+    final h = int.tryParse(t.split(':').first) ?? 12;
+    if (h < 12) return Icons.wb_sunny_rounded;
+    if (h < 17) return Icons.light_mode_rounded;
+    return Icons.nightlight_round;
   }
 
   @override
@@ -246,22 +253,30 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Widget _buildTimeChip(String time) {
     final color = _timeColor(time);
     final period = _period(time);
+    final icon = _periodIcon(time);
     return Tooltip(
       message: period,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
         decoration: BoxDecoration(
           color: color.withOpacity(0.08),
           borderRadius: BorderRadius.circular(12),
           border: Border.all(color: color.withOpacity(0.2)),
         ),
-        child: Text(
-          time,
-          style: GoogleFonts.plusJakartaSans(
-            color: color,
-            fontWeight: FontWeight.w900,
-            fontSize: 13,
-          ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 12, color: color),
+            const SizedBox(width: 6),
+            Text(
+              time,
+              style: GoogleFonts.plusJakartaSans(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 12,
+              ),
+            ),
+          ],
         ),
       ),
     );

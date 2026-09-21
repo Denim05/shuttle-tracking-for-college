@@ -15,6 +15,7 @@ import '../models/route_model.dart';
 import '../components/bus_map.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'profile_settings_screen.dart';
+import '../theme/app_theme.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -454,9 +455,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     color: Colors.redAccent.withOpacity(0.8),
                     child: Center(
-                      child: Text(
-                        '📡 SYNCHRONIZING WITH COMMAND...',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(
+                            width: 8,
+                            height: 8,
+                            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'SYNCHRONIZING WITH COMMAND...',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                          ),
+                        ],
                       ),
                     ),
                   ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -554,12 +566,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
                 builder: (context, scrollController) {
                   return Container(
                     decoration: BoxDecoration(
-                      color: const Color(0xFF0D0B14),
-                      borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
+                      color: AppColors.surface.withValues(alpha: 0.98),
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(36)),
                       boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.8), blurRadius: 40, spreadRadius: 10),
+                        BoxShadow(color: Colors.black.withValues(alpha: 0.6), blurRadius: 36, spreadRadius: 4),
                       ],
-                      border: Border.all(color: Colors.white.withOpacity(0.05)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                     ),
                     child: ClipRRect(
                       borderRadius: const BorderRadius.vertical(top: Radius.circular(40)),
@@ -1270,7 +1282,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       }
                       setModalState(() => isSubmitting = true);
                       try {
-                        await _apiService.post('driver/fuel-log', body: {
+                        await _apiService.post('driver/fuel-log', {
                           'busId': _selectedBusId ?? 'BUS_01',
                           'odometerKm': double.parse(odoController.text),
                           'liters': double.parse(litersController.text),
@@ -1281,8 +1293,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           Navigator.pop(context);
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              backgroundColor: const Color(0xFF1B2E1E),
-                              content: Text('⛽ Fuel Refill Logged Successfully!', style: GoogleFonts.plusJakartaSans(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+                              backgroundColor: const Color(0xFF13222A),
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                                side: BorderSide(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                              ),
+                              content: Row(
+                                children: [
+                                  const Icon(Icons.local_gas_station_rounded, color: AppColors.accentGreen, size: 18),
+                                  const SizedBox(width: 10),
+                                  Text('Fuel refill logged successfully', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                                ],
+                              ),
                             ),
                           );
                         }

@@ -202,6 +202,86 @@ class AuthService with ChangeNotifier {
     }
   }
 
+  Future<bool> forceChangePassword(String oldPassword, String newPassword) async {
+    try {
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (_token != null) {
+        headers['Authorization'] = 'Bearer $_token';
+      }
+
+      final response = await http.post(
+        Uri.parse('${AppConstants.apiUrl}/auth/force-change-password'),
+        headers: headers,
+        body: jsonEncode({
+          'username': _currentUser?.username,
+          'currentPassword': oldPassword.trim(),
+          'oldPassword': oldPassword.trim(),
+          'newPassword': newPassword.trim(),
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        if (data['token'] != null) {
+          _token = data['token'];
+          await _storage.write(key: 'auth_token', value: _token);
+        }
+        if (data['user'] != null) {
+          _currentUser = User.fromJson(data['user']);
+          await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+        }
+        notifyListeners();
+        return true;
+      } else {
+        throw Exception(data['error'] ?? 'Failed to update password');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
+  Future<bool> updateCommuteSetup({
+    required String routeId,
+    required String pickupPoint,
+    String? localAddress,
+    String? name,
+  }) async {
+    try {
+      final headers = <String, String>{'Content-Type': 'application/json'};
+      if (_token != null) {
+        headers['Authorization'] = 'Bearer $_token';
+      }
+
+      final response = await http.put(
+        Uri.parse('${AppConstants.apiUrl}/users/profile'),
+        headers: headers,
+        body: jsonEncode({
+          'routeId': routeId,
+          'pickupPoint': pickupPoint,
+          if (name != null && name.trim().isNotEmpty)
+            'name': name.trim(),
+          if (localAddress != null && localAddress.trim().isNotEmpty)
+            'localAddress': localAddress.trim(),
+          'isCommuteConfigured': true,
+        }),
+      ).timeout(const Duration(seconds: 15));
+
+      final data = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        _currentUser = User.fromJson(data);
+        await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+        notifyListeners();
+        return true;
+      } else {
+        throw Exception(data['error'] ?? 'Failed to save commute setup');
+      }
+    } catch (e) {
+      rethrow;
+    }
+  }
+
   Future<void> _uploadFcmToken() async {
     if (_token == null) return;
     try {

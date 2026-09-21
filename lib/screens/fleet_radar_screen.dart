@@ -308,7 +308,7 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('🚨 Emergency Alert', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.5)),
+                    Text('Emergency Alert', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 13, letterSpacing: 1.2)),
                     const SizedBox(height: 2),
                     Text(
                       sos['name']?.toString() ?? sos['routeName']?.toString() ?? 'Alert received',

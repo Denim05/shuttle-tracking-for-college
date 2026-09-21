@@ -22,6 +22,8 @@ import 'fleet_radar_screen.dart';
 import 'schedule_screen.dart';
 import 'complaint_screen.dart';
 import 'profile_settings_screen.dart';
+import 'package:flutter/services.dart';
+import '../theme/app_theme.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -164,7 +166,7 @@ class _UserDashboardState extends State<UserDashboard> {
       if (data['routeId'] == myRouteId) {
         final msg = data['message'] ?? 'Your bus is running late.';
         NotificationService().showNotification(
-          title: '⚠️ Bus Delay Alert',
+          title: 'Bus Delay Alert',
           body: msg,
         );
         ScaffoldMessenger.of(context).showSnackBar(
@@ -219,10 +221,19 @@ class _UserDashboardState extends State<UserDashboard> {
         setState(() => _delaySubscribed = true);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('✅ You will be notified if the bus is late!'),
-            backgroundColor: const Color(0xFF2D5BFF),
+            content: Row(
+              children: [
+                const Icon(Icons.notifications_active_rounded, color: Colors.white, size: 18),
+                const SizedBox(width: 10),
+                Text('You will be notified if this bus runs late.', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: Colors.blueAccent.withValues(alpha: 0.3)),
+            ),
           ),
         );
       }
@@ -269,7 +280,7 @@ class _UserDashboardState extends State<UserDashboard> {
         }
 
         return Scaffold(
-          backgroundColor: const Color(0xFF121212),
+          backgroundColor: AppColors.bg,
           body: ValueListenableBuilder<bool>(
             valueListenable: socketService.connectionStatus,
             builder: (context, isConnected, child) {
@@ -282,11 +293,22 @@ class _UserDashboardState extends State<UserDashboard> {
                       left: 0, right: 0,
                       child: Container(
                         padding: const EdgeInsets.symmetric(vertical: 4),
-                        color: Colors.redAccent.withOpacity(0.8),
+                        color: AppColors.danger.withValues(alpha: 0.8),
                         child: Center(
-                          child: Text(
-                            '📡 SYNCHRONIZING Tracker...',
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const SizedBox(
+                                width: 8,
+                                height: 8,
+                                child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                'SYNCHRONIZING LIVE TRACKER...',
+                                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 1.5),
+                              ),
+                            ],
                           ),
                         ),
                       ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -493,8 +515,14 @@ class _UserDashboardState extends State<UserDashboard> {
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('⚠️ Hold down to send Emergency SOS!', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-                        backgroundColor: Colors.redAccent,
+                        content: Row(
+                          children: [
+                            const Icon(Icons.touch_app_rounded, color: Colors.white, size: 18),
+                            const SizedBox(width: 10),
+                            Text('Hold down to send Emergency SOS', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13)),
+                          ],
+                        ),
+                        backgroundColor: const Color(0xFF7F1D1D),
                         behavior: SnackBarBehavior.floating,
                         duration: const Duration(seconds: 2),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1319,10 +1347,19 @@ class _UserDashboardState extends State<UserDashboard> {
               if (mounted) {
                 nav.pop();
                 messenger.showSnackBar(SnackBar(
-                  content: const Text('✅ Password changed successfully!'),
-                  backgroundColor: const Color(0xFF38EF7D),
+                  content: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded, color: AppColors.accentGreen, size: 18),
+                      const SizedBox(width: 10),
+                      Text('Password changed successfully', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                    ],
+                  ),
+                  backgroundColor: const Color(0xFF13222A),
                   behavior: SnackBarBehavior.floating,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                  ),
                 ));
               }
             } catch (e) {
@@ -1506,10 +1543,11 @@ class _UserDashboardState extends State<UserDashboard> {
     return Consumer<BusStore>(
       builder: (context, busStore, _) {
         return Container(
-          padding: EdgeInsets.fromLTRB(20, 10, 20, bottomPadding > 0 ? bottomPadding : 20),
+          padding: EdgeInsets.fromLTRB(20, 10, 20, bottomPadding > 0 ? bottomPadding : 16),
           decoration: BoxDecoration(
-            color: const Color(0xFF121212),
-            border: Border(top: BorderSide(color: Colors.white.withOpacity(0.05))),
+            color: AppColors.surface.withValues(alpha: 0.95),
+            border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.06))),
+            boxShadow: AppShadows.card,
           ),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -1527,27 +1565,31 @@ class _UserDashboardState extends State<UserDashboard> {
   Widget _buildNavItem(int index, IconData icon, String label, int badge) {
     bool isSel = _currentIndex == index;
     return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
+      onTap: () {
+        HapticFeedback.lightImpact();
+        setState(() => _currentIndex = index);
+      },
       child: AnimatedContainer(
         duration: 300.ms,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
-          color: isSel ? const Color(0xFF2D5BFF).withOpacity(0.1) : Colors.transparent,
+          color: isSel ? AppColors.primary.withValues(alpha: 0.15) : Colors.transparent,
           borderRadius: BorderRadius.circular(16),
+          border: isSel ? Border.all(color: AppColors.primary.withValues(alpha: 0.35)) : null,
         ),
         child: Row(
           children: [
             Stack(
               clipBehavior: Clip.none,
               children: [
-                Icon(icon, color: isSel ? const Color(0xFF2D5BFF) : Colors.white24, size: 22),
+                Icon(icon, color: isSel ? AppColors.primary : AppColors.textMuted, size: 22),
                 if (badge > 0)
                   Positioned(
                     top: -4, right: -6,
                     child: Container(
                       padding: const EdgeInsets.all(3),
                       decoration: const BoxDecoration(
-                        color: Colors.redAccent,
+                        color: AppColors.danger,
                         shape: BoxShape.circle,
                       ),
                       child: Text(
@@ -1560,7 +1602,15 @@ class _UserDashboardState extends State<UserDashboard> {
             ),
             if (isSel) ...[
               const SizedBox(width: 8),
-              Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 11)),
+              Text(
+                label, 
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white, 
+                  fontWeight: FontWeight.w900, 
+                  fontSize: 11,
+                  letterSpacing: 0.8,
+                ),
+              ),
             ]
           ],
         ),

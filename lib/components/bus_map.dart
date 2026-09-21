@@ -80,6 +80,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   // ── Icon caches ───────────────────────────────────────────────────────────
   final Map<String, BitmapDescriptor> _busIcons        = {};
   final Map<String, BitmapDescriptor> _focusedBusIcons = {};
+  BitmapDescriptor? _firstStopIcon;
   BitmapDescriptor? _stopIcon;
   BitmapDescriptor? _lastStopIcon;
 
@@ -345,17 +346,25 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         if (lat == 0 && lng == 0) continue;
 
         final stopId = 'stop_${stop['name']}';
+        final isFirst = i == 0;
         final isLast = i == stops.length - 1;
+
+        final BitmapDescriptor markerIcon = isFirst
+            ? (_firstStopIcon ?? BitmapDescriptor.defaultMarker)
+            : (isLast
+                ? (_lastStopIcon ?? BitmapDescriptor.defaultMarker)
+                : (_stopIcon ?? BitmapDescriptor.defaultMarker));
 
         _cachedStopMarkers.add(Marker(
           markerId: MarkerId(stopId),
           position: LatLng(lat, lng),
           anchor:   const Offset(0.5, 0.5),
-          icon: isLast
-              ? (_lastStopIcon ?? BitmapDescriptor.defaultMarker)
-              : (_stopIcon     ?? BitmapDescriptor.defaultMarker),
-          alpha: 0.9,
-          infoWindow: InfoWindow(title: stop['name'], snippet: 'Bus Stop'),
+          icon:     markerIcon,
+          alpha:    0.95,
+          infoWindow: InfoWindow(
+            title: stop['name'],
+            snippet: isFirst ? 'Origin Stop' : (isLast ? 'SISTec Campus Terminal' : 'Bus Stop #${i + 1}'),
+          ),
         ));
       }
     }
@@ -438,32 +447,37 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       final routeColor = Color(
           int.parse(widget.selectedRoute!.color.replaceAll('#', '0xFF')));
 
-      // Glow
+      // 1. Ambient Road Glow Layer
       result['route_glow'] = Polyline(
         polylineId: const PolylineId('route_glow'),
         points:     _selectedRoutePoints,
-        width:      10,
-        color:      routeColor.withOpacity(0.15),
+        width:      8,
+        color:      routeColor.withValues(alpha: 0.25),
+        jointType:  JointType.round,
+        endCap:     Cap.roundCap,
+        startCap:   Cap.roundCap,
       );
 
-      // Solid line
+      // 2. High-Contrast Core Road Polyline
       result['route'] = Polyline(
         polylineId: const PolylineId('route'),
         points:     _selectedRoutePoints,
-        width:      5,
+        width:      4,
         color:      routeColor,
         jointType:  JointType.round,
         endCap:     Cap.roundCap,
         startCap:   Cap.roundCap,
       );
 
-      // Static Flow Overlay (no animation offset, so no timer needed!)
+      // 3. Subtle Inner Road Highlight
       result['route_flow'] = Polyline(
         polylineId: const PolylineId('route_flow'),
         points:     _selectedRoutePoints,
-        width:      5,
-        color:      Colors.white.withOpacity(0.35),
-        patterns:   [PatternItem.dash(10), PatternItem.gap(10)],
+        width:      2,
+        color:      Colors.white.withValues(alpha: 0.45),
+        jointType:  JointType.round,
+        endCap:     Cap.roundCap,
+        startCap:   Cap.roundCap,
       );
     }
 
@@ -562,8 +576,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       await _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: false);
       await _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: true);
     }
-    _stopIcon     = await _drawStopMarker(false);
-    _lastStopIcon = await _drawStopMarker(true);
+    _firstStopIcon = await _drawStopMarker(0);
+    _stopIcon      = await _drawStopMarker(1);
+    _lastStopIcon  = await _drawStopMarker(2);
   }
 
   Future<void> _ensureBusIcon(String busId, String label, String routeColorHex, {required bool isFocused}) async {
@@ -807,29 +822,54 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     return BitmapDescriptor.fromBytes(data.buffer.asUint8List());
   }
 
-  Future<BitmapDescriptor> _drawStopMarker(bool isLast) async {
-    const double scale = 1.4; // Refined stop marker size for proportional mapping
-    const double size = 40.0 * scale;
-    const double drawSize = 40.0;
+  Future<BitmapDescriptor> _drawStopMarker(int type) async {
+    const double scale = 1.4;
+    const double size = 36.0 * scale;
+    const double drawSize = 36.0;
     
     final ui.PictureRecorder rec = ui.PictureRecorder();
     final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, size, size));
 
     canvas.scale(scale);
 
-    canvas.drawCircle(const Offset(drawSize / 2, drawSize / 2), drawSize / 2 - 4,
-        Paint()..color = isLast ? Colors.redAccent : Colors.white);
+    final isFirst = type == 0;
+    final isLast = type == 2;
+
+    final primaryColor = isFirst
+        ? const Color(0xFF10B981) // Emerald Green for Origin
+        : (isLast
+            ? const Color(0xFFEF4444) // Coral Red for Campus Destination
+            : const Color(0xFF3B82F6)); // Royal Blue for Intermediate Stops
+
+    // Drop Shadow
     canvas.drawCircle(
-      const Offset(drawSize / 2, drawSize / 2), drawSize / 2 - 4,
+      const Offset(drawSize / 2, drawSize / 2 + 1.5),
+      drawSize / 2 - 4,
       Paint()
-        ..color = isLast ? Colors.white : const Color(0xFF1A4CFF)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 3,
+        ..color = Colors.black.withValues(alpha: 0.35)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5),
     );
-    if (isLast) {
-      canvas.drawCircle(const Offset(drawSize / 2, drawSize / 2), drawSize / 2 - 12,
-          Paint()..color = Colors.white);
-    }
+
+    // Outer Ring
+    canvas.drawCircle(
+      const Offset(drawSize / 2, drawSize / 2),
+      drawSize / 2 - 3,
+      Paint()..color = Colors.white,
+    );
+
+    // Inner Color Circle
+    canvas.drawCircle(
+      const Offset(drawSize / 2, drawSize / 2),
+      drawSize / 2 - 5.5,
+      Paint()..color = primaryColor,
+    );
+
+    // Core Dot
+    canvas.drawCircle(
+      const Offset(drawSize / 2, drawSize / 2),
+      isLast ? 4.5 : 3.0,
+      Paint()..color = Colors.white,
+    );
 
     final ui.Image img = await rec.endRecording().toImage(size.toInt(), size.toInt());
     final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
@@ -1346,11 +1386,12 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                             ),
                           ),
                           child: Text(
-                            (_focusedBus?.isDropoff ?? false) ? '🌇 CAMPUS➔CITY' : '🌅 CITY➔CAMPUS',
+                            (_focusedBus?.isDropoff ?? false) ? 'CAMPUS → CITY' : 'CITY → CAMPUS',
                             style: GoogleFonts.plusJakartaSans(
                               color: (_focusedBus?.isDropoff ?? false) ? Colors.orangeAccent : Colors.blueAccent,
                               fontSize: 10,
                               fontWeight: FontWeight.w900,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),

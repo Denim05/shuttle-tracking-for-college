@@ -11,6 +11,7 @@ import RouteManager from './pages/RouteManager';
 import DriverFleetManager from './pages/DriverFleetManager';
 import BroadcastSystem from './pages/BroadcastSystem';
 import ReportsAnalytics from './pages/ReportsAnalytics';
+import ForcePasswordModal from './components/ForcePasswordModal';
 import socketService from './services/socket';
 import { registrationAPI } from './services/api';
 
@@ -69,6 +70,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#060911] text-gray-100 flex flex-col font-sans">
+      {/* Mandatory First-Time Password Reset Modal */}
+      {user.mustChangePassword && (
+        <ForcePasswordModal
+          user={user}
+          onPasswordUpdated={(updatedUser) => setUser(updatedUser)}
+          onLogout={handleLogout}
+        />
+      )}
       
       {/* Top Navbar */}
       <Navbar 

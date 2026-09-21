@@ -16,6 +16,9 @@ const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
+const crypto = require('crypto');
+const { generateTripReportData } = require('./services/trip_report_generator');
+const { syncDailyTripReportsToGoogleSheets, SPREADSHEET_ID } = require('./services/google_sheets_service');
 
 // Load Firebase service account credentials
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
@@ -29,7 +32,11 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
         console.error('❌ [Firebase] SDK Initialization via env failed:', err.message);
     }
 } else {
-    const serviceAccountPath = path.resolve(__dirname, 'firebase-service-account.json');
+    let serviceAccountPath = path.resolve(__dirname, 'firebase-service-account.json');
+    if (!fs.existsSync(serviceAccountPath)) {
+        const altPath = path.resolve(__dirname, 'firebase-service-account.json.json');
+        if (fs.existsSync(altPath)) serviceAccountPath = altPath;
+    }
     if (fs.existsSync(serviceAccountPath)) {
         try {
             admin.initializeApp({
@@ -44,133 +51,23 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     }
 }
 
-async function sendCredentialsEmail(email, name, username, password, role = 'student') {
-    const brevoApiKey = process.env.BREVO_API_KEY;
-
-    let welcomeText = '';
-    if (role === 'manager') {
-        welcomeText = `<p>Your SISTecChalo Manager account has been created by the administrator! You can now log in and manage routes, buses, and students.</p>`;
-    } else if (role === 'admin') {
-        welcomeText = `<p>Your SISTecChalo Administrator account has been created! You can now log in and manage the transit tracking system settings.</p>`;
-    } else if (role === 'user') {
-        welcomeText = `<p>Your SISTecChalo commuter account has been created! You can now log in to track buses, view route schedules, and configure alerts.</p>`;
-    } else if (role === 'driver') {
-        welcomeText = `<p>Your SISTecChalo Driver account has been created by the manager! You can now log in to the driver app and broadcast your location during transit.</p>`;
-    } else if (role === 'student') {
-        welcomeText = `<p>Your bus tracking registration request has been approved by the manager! An account has been created for you with the following login details:</p>`;
-    } else {
-        welcomeText = `<p>Your SISTecChalo account has been created with the following login details:</p>`;
-    }
-
-    const htmlContent = `
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #ddd; border-radius: 8px;">
-            <h2 style="color: #2D5BFF; text-align: center;">Welcome to SISTecChalo!</h2>
-            <p>Dear <strong>${name}</strong>,</p>
-            ${welcomeText}
-            <div style="background-color: #f7f9ff; border-left: 4px solid #2D5BFF; padding: 15px; margin: 20px 0; border-radius: 4px;">
-                <p style="margin: 5px 0;"><strong>Username / Enrollment Number:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${username}</code></p>
-                <p style="margin: 5px 0;"><strong>Initial Password:</strong> <code style="font-size: 14px; background: #eef; padding: 2px 6px; borderRadius: 4px;">${password}</code></p>
-            </div>
-            <p style="color: #f39c12; font-weight: bold;">⚠️ For your security, please log in and change your password in your Profile section immediately.</p>
-            <p>Safe travels!</p>
-            <hr style="border: 0; border-top: 1px solid #ddd; margin: 25px 0;" />
-            <p style="font-size: 11px; color: #777; text-align: center;">This is an automated email. Please do not reply directly to this message.</p>
-        </div>
-    `;
-
-    if (brevoApiKey) {
-        console.log(`✉️ [Brevo API] Sending credentials email to ${email} via HTTP API...`);
-        try {
-            const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-                method: 'POST',
-                headers: {
-                    'accept': 'application/json',
-                    'api-key': brevoApiKey,
-                    'content-type': 'application/json'
-                },
-                body: JSON.stringify({
-                    sender: { name: 'SISTecChalo Admin', email: process.env.SMTP_USER || 'no-reply@sistecchalo.edu' },
-                    to: [{ email, name }],
-                    subject: `Your SISTecChalo Account Credentials (${role.toUpperCase()})`,
-                    htmlContent: htmlContent
-                })
-            });
-
-            if (response.ok) {
-                const resData = await response.json();
-                console.log(`✉️ [Brevo API Sent] Email sent successfully. Message ID: ${resData.messageId}`);
-                return true;
-            } else {
-                const errText = await response.text();
-                console.warn(`⚠️ [Brevo API Error] Failed to send email: ${response.status} - ${errText}. Falling back to SMTP...`);
-            }
-        } catch (err) {
-            console.warn('⚠️ [Brevo API Exception] Failed to send email. Falling back to SMTP...', err);
-        }
-    }
-
-    try {
-        const host = process.env.SMTP_HOST || 'smtp.ethereal.email';
-        const port = parseInt(process.env.SMTP_PORT) || 587;
-        const user = process.env.SMTP_USER || '';
-        const pass = process.env.SMTP_PASS || '';
-
-        let transporter;
-        if (user && pass) {
-            transporter = nodemailer.createTransport({
-                host,
-                port,
-                secure: port === 465,
-                auth: { user, pass }
-            });
-        } else {
-            const testAccount = await nodemailer.createTestAccount();
-            transporter = nodemailer.createTransport({
-                host: 'smtp.ethereal.email',
-                port: 587,
-                secure: false,
-                auth: {
-                    user: testAccount.user,
-                    pass: testAccount.pass
-                }
-            });
-        }
-
-        const mailOptions = {
-            from: `"SISTecChalo Admin" <${user || 'no-reply@sistecchalo.edu'}>`,
-            to: email,
-            subject: `Your SISTecChalo Account Credentials (${role.toUpperCase()})`,
-            html: htmlContent
-        };
-
-        const info = await transporter.sendMail(mailOptions);
-        console.log(`✉️ [Mail Sent] Credentials email sent to ${email}. Message ID: ${info.messageId}`);
-        if (!user || !pass) {
-            console.log(`🔗 [Ethereal Preview URL]: ${nodemailer.getTestMessageUrl(info)}`);
-        }
-        return true;
-    } catch (err) {
-        console.error(`❌ [Mail Error] Failed to send credentials to ${email}:`, err);
-        return false;
-    }
-}
+const { sendCredentialsEmail, buildCredentialsEmailHtml } = require('./services/email_service');
 
 // ── HELPER FUNCTIONS FOR STABILITY & SANITIZATION ────────────────────────────
 const safeTrim = (val) => (val !== null && val !== undefined) ? val.toString().trim() : '';
 const isValidId = (id) => id && typeof id === 'string' && mongoose.Types.ObjectId.isValid(id.trim());
 
 /**
- * Calculates real-time Estimated Time of Arrival (ETA) using Google Maps Distance Matrix API.
-
- * Falls back to Haversine formula if API key is missing or request fails.
+ * Calculates real-time Estimated Time of Arrival (ETA) using Google Maps Distance Matrix API
+ * or Road-Network Calibrated Distance Modeling (1.32x road curvature factor).
  */
 const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed) => {
     if (!busLat || !busLng || !stopLat || !stopLng) return 0;
 
     const apiKey = process.env.GOOGLE_MAPS_API_KEY;
     
-    // If we have an API key, try the Google Distance Matrix for "Smooth & Better" results
-    if (apiKey && apiKey !== 'YOUR_GOOGLE_MAPS_API_KEY') {
+    // If we have an API key, try the Google Distance Matrix for live traffic results
+    if (apiKey && apiKey !== 'YOUR_GOOGLE_MAPS_API_KEY' && apiKey.trim() !== '') {
         try {
             const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${busLat},${busLng}&destinations=${stopLat},${stopLng}&mode=driving&traffic_model=best_guess&departure_time=now&key=${apiKey}`;
             
@@ -178,18 +75,16 @@ const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed) => {
             const data = await response.json();
 
             if (data.rows && data.rows[0].elements && data.rows[0].elements[0].duration_in_traffic) {
-                // Return traffic-aware duration in minutes
-                return Math.round(data.rows[0].elements[0].duration_in_traffic.value / 60);
+                return Math.max(1, Math.round(data.rows[0].elements[0].duration_in_traffic.value / 60));
             } else if (data.rows && data.rows[0].elements && data.rows[0].elements[0].duration) {
-                // Fallback to standard duration if traffic info isn't available
-                return Math.round(data.rows[0].elements[0].duration.value / 60);
+                return Math.max(1, Math.round(data.rows[0].elements[0].duration.value / 60));
             }
         } catch (err) {
             console.error('⚠️ [Google Maps API] ETA Fetch Error:', err.message);
         }
     }
 
-    // --- FALLBACK: Haversine Formula (As-the-crow-flies) ---
+    // --- ROAD NETWORK FACTOR (Haversine * 1.32 urban road curvature model) ---
     const R = 6371; // Earth radius in km
     const dLat = (stopLat - busLat) * Math.PI / 180;
     const dLon = (stopLng - busLng) * Math.PI / 180;
@@ -197,10 +92,13 @@ const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed) => {
         Math.cos(busLat * Math.PI / 180) * Math.cos(stopLat * Math.PI / 180) *
         Math.sin(dLon / 2) * Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const distance = R * c; 
+    const crowFlyDistance = R * c; 
+    const roadDistanceKm = crowFlyDistance * 1.32; // Calibrated Bhopal urban road curvature
 
-    const speed = (currentSpeed && currentSpeed > 5) ? currentSpeed : 30; // Default 30km/h
-    return Math.round((distance / speed) * 60);
+    // Dynamic speed model: if actively moving >= 10 km/h, use current speed, else use average urban transit speed (26 km/h)
+    const effectiveSpeed = (currentSpeed && currentSpeed >= 10) ? Math.min(currentSpeed, 55) : 26;
+    const travelMinutes = Math.max(1, Math.round((roadDistanceKm / effectiveSpeed) * 60));
+    return travelMinutes;
 };
 
 const Route = require('./models/Route');
@@ -231,10 +129,78 @@ const io = new Server(server, {
     }
 });
 
-app.use(helmet());
+// Security Hashing Options (Argon2id - Immune to GPU & ASIC offline cracking)
+const ARGON2_SECURITY_OPTIONS = {
+    type: argon2.argon2id,
+    memoryCost: 65536, // 64 MB Dedicated RAM per hash
+    timeCost: 3,       // 3 Iterations
+    parallelism: 1
+};
+const DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=1$4Y/a5N5c2V5X8P8K$kZ7y5kL9bW0xV3tY8uQ2mP5vR1sT4wX7zA0bC3dE6fG';
+
+const secureHashPassword = async (rawPassword) => {
+    return await argon2.hash(rawPassword, ARGON2_SECURITY_OPTIONS);
+};
+
+function generateStrongRandomPassword(length = 10) {
+    const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    const lower = 'abcdefghijkmnopqrstuvwxyz';
+    const digits = '23456789';
+    const symbols = '!@#$%&*?';
+    
+    const getRandomChar = (str) => str[crypto.randomInt(0, str.length)];
+    
+    const chars = [
+        getRandomChar(upper),
+        getRandomChar(lower),
+        getRandomChar(digits),
+        getRandomChar(symbols),
+    ];
+    
+    const all = upper + lower + digits + symbols;
+    for (let i = chars.length; i < length; i++) {
+        chars.push(getRandomChar(all));
+    }
+    
+    // Fisher-Yates Shuffle
+    for (let i = chars.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(0, i + 1);
+        [chars[i], chars[j]] = [chars[j], chars[i]];
+    }
+    
+    return chars.join('');
+}
+
+app.use(helmet({
+    contentSecurityPolicy: false, // Allows cross-origin map tiles
+    crossOriginEmbedderPolicy: false
+}));
 app.use(cors());
+
+// 🛡️ Enterprise NoSQL Injection & Query Sanitization Middleware
+const sanitizeInput = (obj) => {
+    if (!obj || typeof obj !== 'object') return obj;
+    for (const key of Object.keys(obj)) {
+        if (key.startsWith('$') || key.includes('.')) {
+            delete obj[key];
+        } else if (typeof obj[key] === 'object') {
+            sanitizeInput(obj[key]);
+        }
+    }
+    return obj;
+};
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use((req, res, next) => {
+    if (req.body) sanitizeInput(req.body);
+    if (req.query) sanitizeInput(req.query);
+    if (req.params) sanitizeInput(req.params);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('X-Frame-Options', 'DENY');
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    next();
+});
 
 // ⚡ 100% Free Keep-Alive Health Endpoint for Render & UptimeRobot
 app.get(['/api/health', '/health'], (req, res) => {
@@ -827,18 +793,43 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         if (!user) {
-            console.log(`❌ [Auth] User "${username}" not found in any collection`);
+            // 🛡️ Constant-Time verification to prevent Username Enumeration / Timing Attacks
+            await argon2.verify(DUMMY_HASH, password).catch(() => {});
+            console.log(`❌ [Auth] Invalid login attempt for "${username}"`);
             console.timeEnd('LoginRequest');
-            return res.status(400).json({ error: 'User not found' });
+            return res.status(401).json({ error: 'Invalid username or password.' });
         }
 
-        // Validate Password
+        // 🛡️ Account Lockout Protection (Prevents Brute Force & Password Spraying)
+        if (user.lockUntil && user.lockUntil > Date.now()) {
+            const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
+            console.timeEnd('LoginRequest');
+            return res.status(423).json({ 
+                error: `Account is temporarily locked due to repeated failed login attempts. Please try again in ${minutesLeft} minute(s).` 
+            });
+        }
+
+        // Validate Password with Argon2id
         const isMatch = await argon2.verify(user.password, password);
         console.log(`🔐 [Auth] Password match result for ${username} (${matchedRole}): ${isMatch}`);
         
         if (!isMatch) {
+            // Increment failed attempts
+            user.loginAttempts = (user.loginAttempts || 0) + 1;
+            if (user.loginAttempts >= 5) {
+                user.lockUntil = new Date(Date.now() + 15 * 60 * 1000); // 15-min lockout
+                console.log(`🚨 [Security] Account "${username}" locked due to 5 failed attempts.`);
+            }
+            await user.save().catch(() => {});
             console.timeEnd('LoginRequest');
-            return res.status(400).json({ error: 'Invalid credentials' });
+            return res.status(401).json({ error: 'Invalid username or password.' });
+        }
+
+        // Reset failed login counter on successful authentication
+        if (user.loginAttempts > 0 || user.lockUntil) {
+            user.loginAttempts = 0;
+            user.lockUntil = null;
+            await user.save().catch(() => {});
         }
 
         // Generate Token
@@ -854,7 +845,8 @@ app.post('/api/auth/login', async (req, res) => {
             name: user.name || user.username,
             role: matchedRole,
             email: user.email,
-            status: user.status || 'Active'
+            status: user.status || 'Active',
+            mustChangePassword: user.mustChangePassword !== false // Default true for first time login
         };
 
         if (matchedRole === 'user') {
@@ -864,13 +856,135 @@ app.post('/api/auth/login', async (req, res) => {
             userResponse.proximityAlertsEnabled = user.proximityAlertsEnabled;
         }
 
-        res.json({ token, user: userResponse });
+        res.json({ 
+            token, 
+            user: userResponse,
+            mustChangePassword: userResponse.mustChangePassword 
+        });
         console.timeEnd('LoginRequest');
 
     } catch (_err) {
         console.error('❌ Login Error:', _err);
         console.timeEnd('LoginRequest');
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+/**
+ * @api {post} /api/auth/force-change-password Mandatory First-Time Password Reset
+ */
+app.post('/api/auth/force-change-password', async (req, res) => {
+    const { username, currentPassword, oldPassword, newPassword } = req.body;
+    const pwdToCheck = currentPassword || oldPassword;
+
+    console.log(`🔐 [Auth] Force-change-password request for: "${username || 'token user'}"`);
+
+    if (!newPassword || newPassword.length < 6) {
+        return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    }
+
+    try {
+        let user = null;
+        let matchedModel = null;
+        let matchedRole = null;
+
+        // 1. Try finding by JWT token if available
+        const authHeader = req.headers.authorization;
+        if (authHeader && authHeader.startsWith('Bearer ')) {
+            try {
+                const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'SISTecChalo_secret_key_777');
+                const userId = decoded.user?.id || decoded.id;
+                const role = decoded.user?.role || decoded.role;
+                const models = { user: User, driver: Driver, manager: Manager, admin: Admin };
+                if (models[role]) {
+                    user = await models[role].findById(userId);
+                    matchedModel = models[role];
+                    matchedRole = role;
+                }
+            } catch (_) {}
+        }
+
+        // 2. If not found by token, look up by username
+        if (!user && username) {
+            const collections = [
+                { role: 'user', model: User },
+                { role: 'driver', model: Driver },
+                { role: 'manager', model: Manager },
+                { role: 'admin', model: Admin }
+            ];
+            for (const item of collections) {
+                const found = await item.model.findOne({ username: { $regex: new RegExp(`^${username.trim()}$`, 'i') } });
+                if (found) {
+                    user = found;
+                    matchedModel = item.model;
+                    matchedRole = item.role;
+                    break;
+                }
+            }
+        }
+
+        if (!user) {
+            return res.status(404).json({ error: 'Account not found.' });
+        }
+
+        // 3. Verify current password if provided
+        if (pwdToCheck) {
+            const isMatch = await argon2.verify(user.password, pwdToCheck);
+            if (!isMatch) {
+                return res.status(400).json({ error: 'Current temporary password is incorrect.' });
+            }
+        }
+
+        // 4. Ensure new password is not identical to old password
+        const isSame = await argon2.verify(user.password, newPassword);
+        if (isSame) {
+            return res.status(400).json({ error: 'New password cannot be identical to your temporary password.' });
+        }
+
+        // 5. Hash new password with Argon2id and update user
+        const hashedPassword = await secureHashPassword(newPassword);
+        user.password = hashedPassword;
+        user.mustChangePassword = false;
+        await user.save();
+
+        console.log(`✅ [Auth] Password successfully updated for user "${user.username}" (${matchedRole}). mustChangePassword=false`);
+
+        // 6. Generate fresh token
+        const token = jwt.sign(
+            { user: { id: user.id, role: matchedRole } },
+            process.env.JWT_SECRET || 'SISTecChalo_secret_key_777',
+            { expiresIn: '7d' }
+        );
+
+        const updatedUserResponse = {
+            id: user.id,
+            username: user.username,
+            name: user.name || user.username,
+            role: matchedRole,
+            email: user.email,
+            status: user.status || 'Active',
+            mustChangePassword: false
+        };
+
+        if (matchedRole === 'user') {
+            updatedUserResponse.routeId = user.routeId;
+            updatedUserResponse.pickupPoint = user.pickupPoint;
+            updatedUserResponse.localAddress = user.localAddress;
+            updatedUserResponse.isCommuteConfigured = user.isCommuteConfigured || false;
+            updatedUserResponse.userId = user.userId;
+            updatedUserResponse.proximityAlertsEnabled = user.proximityAlertsEnabled;
+        }
+
+        res.json({
+            message: 'Password successfully updated! Welcome to SISTecChalo.',
+            token,
+            user: updatedUserResponse,
+            mustChangePassword: false
+        });
+
+    } catch (err) {
+        console.error('❌ Force password change error:', err);
+        res.status(500).json({ error: 'Failed to update password. Please try again.' });
     }
 });
 
@@ -911,6 +1025,27 @@ app.get('/api/routes/:id', authMiddleware, async (req, res) => {
     }
 });
 
+// ── GET /api/routes/geocode-stop: Instant coordinate lookup for any stop name ──
+app.get('/api/routes/geocode-stop', authMiddleware, async (req, res) => {
+    try {
+        const name = req.query.name;
+        if (!name || !name.trim()) {
+            return res.status(400).json({ error: 'Stop name query parameter is required' });
+        }
+        const { geocodeStopName } = require('./geocode_stops');
+        const coords = await geocodeStopName(name.trim());
+        return res.json({
+            success: true,
+            name: name.trim(),
+            lat: coords.lat,
+            lng: coords.lng
+        });
+    } catch (err) {
+        console.error('Stop geocoding error:', err);
+        return res.status(500).json({ error: 'Failed to geocode stop' });
+    }
+});
+
 // --- User Management Routes (For Admin/Manager) ---
 
 // --- ADMIN Management ---
@@ -921,7 +1056,7 @@ app.post('/api/admins', async (req, res) => {
         let existing = await Admin.findOne({ username });
         if (existing) return res.status(400).json({ error: 'Admin already exists' });
 
-        const hashedPassword = await argon2.hash(password);
+        const hashedPassword = await secureHashPassword(password);
         const newAdmin = new Admin({ ...req.body, password: hashedPassword });
 
         await newAdmin.save();
@@ -942,7 +1077,7 @@ app.post('/api/managers', authMiddleware, async (req, res) => {
         let existing = await Manager.findOne({ username });
         if (existing) return res.status(400).json({ error: 'Manager already exists' });
 
-        const hashedPassword = await argon2.hash(password);
+        const hashedPassword = await secureHashPassword(password);
         const newManager = new Manager({ ...req.body, password: hashedPassword });
 
         await newManager.save();
@@ -972,7 +1107,7 @@ app.post('/api/users', async (req, res) => {
         let existing = await User.findOne({ username });
         if (existing) return res.status(400).json({ error: 'User already exists' });
 
-        const hashedPassword = await argon2.hash(password);
+        const hashedPassword = await secureHashPassword(password);
         const newUser = new User({ ...req.body, password: hashedPassword });
 
         await newUser.save();
@@ -1191,340 +1326,50 @@ app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], async (
     }
 });
 
-// ─── MANAGER: LIVE BUS TRIP REPORT (CSV/Excel) ──────────────────────────────
-// GET /api/manager/reports/bus-trip-report?busId=<id>&days=<n>
-// Generates a CSV report per bus using REAL live trip log data.
-// Falls back to estimated schedule data for buses with no live GPS data.
+// ─── MANAGER: 2-TRIP DAY-WISE BUS OPERATIONAL REPORT (CSV/Excel) ────────────
+// GET /api/manager/reports/bus-trip-report?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>
 app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
     try {
-        const { busId, days } = req.query;
-        const lookbackDays = Math.min(parseInt(days) || 30, 90);
-        
-        // Helper to format a Date as 'HH:MM AM/PM'
-        const fmtTime = (d) => {
-            if (!d) return 'N/A';
-            const dt = new Date(d);
-            return dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-        };
+        const { date, shift, busId, days } = req.query;
+        const targetDate = date || new Date().toISOString().split('T')[0];
+        const targetShift = shift || 'all';
 
-        // Helper to format a date as YYYY-MM-DD
-        const fmtDate = (d) => new Date(d).toISOString().split('T')[0];
-
-        // Fetch all routes, buses, and drivers to build a map
-        const routes = await Route.find();
-        const buses = await Bus.find().sort({ name: 1 });
-        const drivers = await Driver.find();
-
-        const sinceDate = new Date();
-        sinceDate.setDate(sinceDate.getDate() - lookbackDays);
-
-        // ── SINGLE BUS REPORT ────────────────────────────────────────────────
-        if (busId) {
-            const bus = await Bus.findById(busId);
-            if (!bus) return res.status(404).json({ error: 'Bus not found' });
-
-            const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
-            const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            const stops = route ? route.stops : [];
-
-            const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
-            const driverName = driverDoc ? driverDoc.name : 'Unassigned';
-
-            // Fetch real live logs for this bus in lookback window
-            const liveLogs = await LiveTripLog.find({
-                busId: bus._id.toString(),
-                startTime: { $gte: sinceDate }
-            }).sort({ startTime: -1 });
-
-            const rawRouteName = route ? route.name : (bus.routeName || 'Unassigned');
-            const cleanRouteName = rawRouteName.replace(/\(Bus no:.*?\)/gi, '').trim();
-            const rawBusName = bus.name || `Bus ${bus.busNumber || ''}`;
-            const cleanBusName = rawBusName.split(' - ')[0].trim();
-
-            // Build headers starting directly with column names for 100% Excel Mobile compatibility
-            let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver Name,Data Source,Trip Start,Trip End,Status,Stops Reached';
-            if (stops.length > 0) {
-                stops.forEach((stop, index) => {
-                    csvContent += `,Stop ${index + 1} (${stop.name})`;
-                });
-            }
-            csvContent += '\n';
-
-            // Build a set of dates covered by live logs
-            const liveDates = new Set(liveLogs.map(l => l.date));
-
-            // Iterate last N weekdays
-            for (let i = 0; i < lookbackDays; i++) {
-                const d = new Date();
-                d.setDate(d.getDate() - i);
-                if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
-                const dateStr = fmtDate(d);
-
-                if (liveDates.has(dateStr)) {
-                    // ── USE REAL LIVE DATA ──
-                    const log = liveLogs.find(l => l.date === dateStr);
-                    const startStr = fmtTime(log.startTime);
-                    const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
-                    const reachedCount = log.reachedStops ? log.reachedStops.length : 0;
-                    const status = log.endTime ? 'Completed' : 'In Progress';
-
-                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${log.driverName || driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}"`;
-
-                    if (stops.length > 0) {
-                        stops.forEach(stop => {
-                            const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
-                            const reachedStr = reached ? fmtTime(reached.reachedTime) : '—';
-                            csvContent += `,"${reachedStr}"`;
-                        });
-                    }
-                    csvContent += '\n';
-                } else {
-                    // ── FALLBACK: ESTIMATED DATA ──
-                    const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
-                    const dayIndex   = d.getDate() + d.getMonth() * 31;
-                    const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
-                    const startH = 7, startM = (busNumSeed * 3 % 45) + jitter;
-                    const startBase = new Date(d);
-                    startBase.setHours(startH, startM, 0, 0);
-                    const durationMins = 45 + Math.min(stops.length * 2, 25) + ((dayIndex * 3) % 10);
-                    const endBase = new Date(startBase.getTime() + durationMins * 60000);
-                    const startStr = fmtTime(startBase);
-                    const endStr   = fmtTime(endBase);
-
-                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}"`;
-
-                    if (stops.length > 0) {
-                        stops.forEach((stop, sIdx) => {
-                            const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
-                            csvContent += `,"${fmtTime(stopTime)}"`;
-                        });
-                    }
-                    csvContent += '\n';
-                }
-            }
-
-            const safeName = (bus.busNumber || busId).replace(/[^a-zA-Z0-9_-]/g, '_');
-            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-            res.setHeader('Content-Disposition', `attachment; filename="${safeName}_trip_report.csv"`);
-            return res.status(200).send(csvContent);
-        }
-
-        // ── ALL BUSES REPORT (N Days lookback + Live Data) ───────────────────
-        // Fetch all live logs in lookback window in a single query for optimal performance
-        const liveLogs = await LiveTripLog.find({
-            startTime: { $gte: sinceDate }
-        }).sort({ startTime: -1 });
-
-        // Build a cache map of live logs by key: busId_date
-        const logMap = new Map();
-        liveLogs.forEach(log => {
-            logMap.set(`${log.busId}_${log.date}`, log);
+        const reportData = await generateTripReportData({
+            targetDate,
+            shift: targetShift,
+            busId: busId || null
         });
 
-        // Row 1 MUST be standard headers so Excel Mobile detects column titles instantly
-        let csvContent = 'Date,Bus Name,License Plate,Route Name,Driver Name,Data Source,Trip Start,Trip End,Status,Stops Reached,Detailed Route Timeline\n';
+        // Generate clean CSV for spreadsheet/Excel
+        let csv = 'Date,Day,Shift,Bus Name,License Plate,Route Name,Driver Name,Driver Phone,Departure Time,Arrival Time,Duration,Punctuality,Delay (mins),Stops Completed,Total Dist (km),Status\n';
 
-        for (const bus of buses) {
-            const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
-            const rawRouteName = route ? route.name : (bus.routeName || 'Unassigned');
-            const cleanRouteName = rawRouteName.replace(/\(Bus no:.*?\)/gi, '').trim();
-            
-            const rawBusName = bus.name || `Bus ${bus.busNumber || ''}`;
-            const cleanBusName = rawBusName.split(' - ')[0].trim();
+        reportData.allTrips.forEach(t => {
+            csv += `"${t.date}","${t.day}","${t.shift}","${t.busNo}","${t.vehicleNo}","${t.routeName}","${t.driverName}","${t.driverPhone}","${t.departureTime}","${t.arrivalTime}","${t.duration}","${t.punctuality}",${t.delayMinutes},"${t.stopsCompleted}","${t.distanceKm}","${t.status}"\n`;
+        });
 
-            const stops = route ? route.stops : [];
-            const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
-            const driverName = driverDoc ? driverDoc.name : 'Unassigned';
-
-            // Generate daily records for each bus
-            for (let i = 0; i < lookbackDays; i++) {
-                const d = new Date();
-                d.setDate(d.getDate() - i);
-                if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
-                const dateStr = fmtDate(d);
-
-                const logKey = `${bus._id.toString()}_${dateStr}`;
-                const hasLive = logMap.has(logKey);
-
-                if (hasLive) {
-                    // ── REAL LIVE DATA ──
-                    const log = logMap.get(logKey);
-                    const startStr = fmtTime(log.startTime);
-                    const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
-                    const reachedCount = log.reachedStops ? log.reachedStops.length : 0;
-                    const status = log.endTime ? 'Completed' : 'In Progress';
-
-                    // Generate a timeline string with clean arrows
-                    const timelineStr = stops.length > 0 
-                        ? stops.map((stop, sIdx) => {
-                            const reached = log.reachedStops.find(rs => rs.stopName === stop.name);
-                            return `${sIdx + 1}. ${stop.name} (${reached ? fmtTime(reached.reachedTime) : '—'})`;
-                          }).join(' ➔ ')
-                        : 'No Stops';
-
-                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${log.driverName || driverName}","LIVE","${startStr}","${endStr}","${status}","${reachedCount}/${stops.length}","${timelineStr}"\n`;
-                } else {
-                    // ── FALLBACK: ESTIMATED ──
-                    const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
-                    const dayIndex   = d.getDate() + d.getMonth() * 31;
-                    const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
-                    const startH = 7, startM = (busNumSeed * 3 % 45) + jitter;
-                    const startBase = new Date(d);
-                    startBase.setHours(startH, startM, 0, 0);
-                    const durationMins = 45 + Math.min(stops.length * 2, 25) + ((dayIndex * 3) % 10);
-                    const endBase = new Date(startBase.getTime() + durationMins * 60000);
-                    const startStr = fmtTime(startBase);
-                    const endStr   = fmtTime(endBase);
-
-                    // Generate a timeline string with clean arrows
-                    const timelineStr = stops.length > 0 
-                        ? stops.map((stop, sIdx) => {
-                            const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
-                            return `${sIdx + 1}. ${stop.name} (${fmtTime(stopTime)})`;
-                          }).join(' ➔ ')
-                        : 'No Stops';
-
-                    csvContent += `"${dateStr}","${cleanBusName}","${bus.busNumber || 'N/A'}","${cleanRouteName}","${driverName}","ESTIMATED","${startStr}","${endStr}","Completed","${stops.length}/${stops.length}","${timelineStr}"\n`;
-                }
-            }
-        }
-
+        const safeDate = targetDate.replace(/[^0-9-]/g, '');
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', 'attachment; filename="all_buses_fleet_report.csv"');
-        res.status(200).send(csvContent);
+        res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}.csv"`);
+        return res.status(200).send(csv);
     } catch (err) {
         console.error('Report Generation Error:', err);
         res.status(500).json({ error: 'Failed to generate report' });
     }
 });
 
-// ─── MANAGER: PRINTABLE HTML OPERATIONAL REPORT ──────────────────────────────
-// GET /api/manager/reports/bus-trip-report/html?busId=<id>&days=<n>
-// Renders a premium, print-friendly interactive HTML dashboard report for SGI Management.
+// ─── MANAGER: PRINTABLE 2-TRIP DAY-WISE HTML & PDF EXECUTIVE REPORT ─────────
+// GET /api/manager/reports/bus-trip-report/html?date=YYYY-MM-DD&shift=all|morning|evening
 app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
     try {
-        const { busId, days } = req.query;
-        const lookbackDays = Math.min(parseInt(days) || 30, 90);
+        const { date, shift, busId } = req.query;
+        const targetDate = date || new Date().toISOString().split('T')[0];
+        const targetShift = shift || 'all';
 
-        // Helper to format a Date as 'HH:MM AM/PM'
-        const fmtTime = (d) => {
-            if (!d) return 'N/A';
-            const dt = new Date(d);
-            return dt.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
-        };
-
-        // Helper to format a date as YYYY-MM-DD
-        const fmtDate = (d) => new Date(d).toISOString().split('T')[0];
-
-        // Fetch all routes, buses, and drivers to build a map
-        const routes = await Route.find();
-        const buses = await Bus.find().sort({ name: 1 });
-        const drivers = await Driver.find();
-
-        const sinceDate = new Date();
-        sinceDate.setDate(sinceDate.getDate() - lookbackDays);
-
-        // Fetch live logs for lookback window
-        let liveLogsQuery = { startTime: { $gte: sinceDate } };
-        if (busId) {
-            liveLogsQuery.busId = busId;
-        }
-        const liveLogs = await LiveTripLog.find(liveLogsQuery).sort({ startTime: -1 });
-
-        // Build a cache map of live logs by key: busId_date
-        const logMap = new Map();
-        liveLogs.forEach(log => {
-            logMap.set(`${log.busId}_${log.date}`, log);
+        const reportData = await generateTripReportData({
+            targetDate,
+            shift: targetShift,
+            busId: busId || null
         });
-
-        // Determine which buses to generate report records for
-        const targetBuses = busId ? buses.filter(b => b._id.toString() === busId) : buses;
-
-        if (busId && targetBuses.length === 0) {
-            return res.status(404).send('<h1>Bus not found</h1>');
-        }
-
-        const records = [];
-
-        for (const bus of targetBuses) {
-            const route = routes.find(r => r._id.toString() === bus.routeId?.toString());
-            const routeName = route ? route.name : (bus.routeName || 'Unassigned');
-            const stops = route ? route.stops : [];
-
-            const driverDoc = drivers.find(d => d.assignedBus === bus._id.toString());
-            const driverName = driverDoc ? driverDoc.name : 'Unassigned';
-
-            // Generate daily records
-            for (let i = 0; i < lookbackDays; i++) {
-                const d = new Date();
-                d.setDate(d.getDate() - i);
-                if (d.getDay() === 0 || d.getDay() === 6) continue; // skip weekends
-                const dateStr = fmtDate(d);
-
-                const logKey = `${bus._id.toString()}_${dateStr}`;
-                const hasLive = logMap.has(logKey);
-
-                if (hasLive) {
-                    const log = logMap.get(logKey);
-                    const startStr = fmtTime(log.startTime);
-                    const endStr   = log.endTime ? fmtTime(log.endTime) : 'In Progress';
-                    const reachedList = log.reachedStops ? log.reachedStops.map(rs => ({
-                        stopName: rs.stopName,
-                        reachedTime: fmtTime(rs.reachedTime)
-                    })) : [];
-
-                    records.push({
-                        date: dateStr,
-                        busId: bus._id.toString(),
-                        busName: bus.name,
-                        busNumber: bus.busNumber,
-                        routeName: routeName,
-                        driverName: log.driverName,
-                        source: 'LIVE',
-                        startTime: startStr,
-                        endTime: endStr,
-                        status: log.endTime ? 'Completed' : 'In Progress',
-                        reachedStops: reachedList,
-                        stops: stops.map(s => ({ name: s.name, lat: s.lat, lng: s.lng }))
-                    });
-                } else {
-                    // Fallback to estimated data
-                    const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
-                    const dayIndex   = d.getDate() + d.getMonth() * 31;
-                    const jitter     = (dayIndex * 7 + busNumSeed * 3) % 10;
-                    const startH = 7, startM = (busNumSeed * 3 % 45) + jitter;
-                    const startBase = new Date(d);
-                    startBase.setHours(startH, startM, 0, 0);
-                    const durationMins = 45 + Math.min(stops.length * 2, 25) + ((dayIndex * 3) % 10);
-                    const endBase = new Date(startBase.getTime() + durationMins * 60000);
-                    const startStr = fmtTime(startBase);
-                    const endStr   = fmtTime(endBase);
-
-                    const reachedList = stops.map((stop, sIdx) => {
-                        const stopTime = new Date(startBase.getTime() + Math.round(((sIdx + 1) / stops.length) * durationMins) * 60000);
-                        return {
-                            stopName: stop.name,
-                            reachedTime: fmtTime(stopTime)
-                        };
-                    });
-
-                    records.push({
-                        date: dateStr,
-                        busId: bus._id.toString(),
-                        busName: bus.name,
-                        busNumber: bus.busNumber,
-                        routeName: routeName,
-                        driverName: driverName,
-                        source: 'ESTIMATED',
-                        startTime: startStr,
-                        endTime: endStr,
-                        status: 'Completed',
-                        reachedStops: reachedList,
-                        stops: stops.map(s => ({ name: s.name, lat: s.lat, lng: s.lng }))
-                    });
-                }
-            }
-        }
 
         const html = `
 <!DOCTYPE html>
@@ -1532,216 +1377,140 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SGI Fleet Operational Report</title>
+    <title>SISTec Ratibad - Daily Bus Operations Report (${reportData.date})</title>
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #09080e;
-            --surface: #12101e;
-            --surface-card: #1c192e;
-            --text: #f3f4f6;
-            --text-secondary: #94a3b8;
-            --text-muted: #64748b;
-            --border: rgba(255, 255, 255, 0.06);
-            --primary: #6366f1;
-            --primary-dark: #4f46e5;
-            --primary-gradient: linear-gradient(135deg, #6366f1, #3b82f6);
-            --accent-live: #10b981;
-            --accent-est: #f59e0b;
-            --accent-completed: #10b981;
-            --accent-progress: #3b82f6;
-        }
-
-        .light-theme {
-            --bg: #f8fafc;
-            --surface: #ffffff;
-            --surface-card: #f1f5f9;
-            --text: #0f172a;
-            --text-secondary: #475569;
-            --text-muted: #94a3b8;
-            --border: #e2e8f0;
+            --bg: #0b0f19;
+            --surface: #111827;
+            --surface-card: #1f2937;
+            --surface-hover: #374151;
+            --text: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --border: rgba(255, 255, 255, 0.08);
             --primary: #4f46e5;
-            --primary-dark: #3730a3;
-            --primary-gradient: linear-gradient(135deg, #4f46e5, #2563eb);
-            --accent-live: #059669;
-            --accent-est: #d97706;
-            --accent-completed: #059669;
-            --accent-progress: #2563eb;
+            --primary-gradient: linear-gradient(135deg, #4f46e5, #3b82f6);
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-rose: #ef4444;
+            --radius-lg: 16px;
+            --radius-md: 10px;
         }
 
-        * {
-            box-sizing: border-box;
-            transition: background-color 0.3s ease, border-color 0.3s ease;
-        }
-
+        * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
             font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
             background-color: var(--bg);
             color: var(--text);
-            margin: 0;
-            padding: 0;
+            padding: 32px;
             line-height: 1.5;
-            min-height: 100vh;
-            overflow-x: hidden;
         }
 
-        /* Layout */
-        .app-wrapper {
-            display: flex;
-            min-height: 100vh;
-        }
-
-        .sidebar {
-            width: 280px;
-            background-color: var(--surface);
-            border-right: 1px solid var(--border);
-            padding: 24px;
-            flex-shrink: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            position: sticky;
-            top: 0;
-            height: 100vh;
-            overflow-y: auto;
-        }
-
-        .main-content {
-            flex-grow: 1;
-            padding: 40px;
-            overflow-y: auto;
+        .container {
             max-width: 1400px;
             margin: 0 auto;
-            width: calc(100% - 280px);
         }
 
-        /* Sidebar Styling */
-        .sidebar-title {
-            font-size: 11px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
-            color: var(--text-muted);
-            text-transform: uppercase;
-            margin-bottom: 8px;
-        }
-
-        .sidebar-menu {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            display: flex;
-            flex-direction: column;
-            gap: 6px;
-        }
-
-        .sidebar-item {
-            padding: 12px 16px;
-            border-radius: 12px;
-            cursor: pointer;
-            font-weight: 700;
-            font-size: 13px;
-            color: var(--text-secondary);
-            border: 1px solid transparent;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-        }
-
-        .sidebar-item:hover {
-            background-color: var(--surface-card);
-            color: var(--text);
-        }
-
-        .sidebar-item.active {
-            background: var(--primary-gradient);
-            color: white;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.2);
-        }
-
-        .sidebar-item .subtext {
-            font-size: 10px;
-            opacity: 0.8;
-            font-weight: 500;
-        }
-
-        /* Header */
-        .header-panel {
+        /* Top Header */
+        .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            border-bottom: 1px solid var(--border);
             padding-bottom: 24px;
-            margin-bottom: 32px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 28px;
+            flex-wrap: wrap;
+            gap: 16px;
         }
 
-        .header-title h1 {
-            font-size: 28px;
-            font-weight: 800;
-            margin: 0;
-            letter-spacing: -0.5px;
-            background: var(--primary-gradient);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }
-
-        .header-title p {
-            color: var(--text-secondary);
-            margin: 6px 0 0 0;
-            font-size: 14px;
-        }
-
-        .actions-bar {
+        .brand-section {
             display: flex;
-            gap: 12px;
+            align-items: center;
+            gap: 16px;
         }
 
-        /* Buttons */
+        .brand-logo {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: var(--primary-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 20px;
+            color: #fff;
+            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+        }
+
+        .brand-text h1 {
+            font-size: 22px;
+            font-weight: 800;
+            letter-spacing: -0.3px;
+        }
+
+        .brand-text p {
+            color: var(--text-secondary);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
         .btn {
             background: var(--surface-card);
             color: var(--text);
             border: 1px solid var(--border);
-            padding: 10px 20px;
-            border-radius: 12px;
-            font-weight: 700;
+            padding: 10px 18px;
+            border-radius: var(--radius-md);
             font-size: 13px;
+            font-weight: 700;
             cursor: pointer;
             display: inline-flex;
             align-items: center;
             gap: 8px;
-            transition: all 0.2s ease;
+            text-decoration: none;
+            transition: all 0.2s;
         }
 
         .btn:hover {
+            background: var(--surface-hover);
             transform: translateY(-1px);
-            border-color: var(--primary);
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
         }
 
         .btn-primary {
             background: var(--primary-gradient);
-            color: white;
             border: none;
-            box-shadow: 0 4px 15px rgba(99, 102, 241, 0.3);
+            color: #fff;
+            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
         }
 
-        .btn-primary:hover {
-            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.45);
+        .btn-sheets {
+            background: linear-gradient(135deg, #059669, #10b981);
+            color: #fff;
+            border: none;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
         }
 
         /* KPI Cards */
         .kpi-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 20px;
-            margin-bottom: 36px;
+            gap: 16px;
+            margin-bottom: 28px;
         }
 
         .kpi-card {
-            background-color: var(--surface);
+            background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 20px;
-            padding: 24px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border-radius: var(--radius-lg);
+            padding: 20px;
             position: relative;
             overflow: hidden;
         }
@@ -1753,890 +1522,401 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             background: var(--primary);
         }
 
-        .kpi-card.kpi-live::before { background: var(--accent-live); }
-        .kpi-card.kpi-est::before { background: var(--accent-est); }
+        .kpi-card.green::before { background: var(--accent-green); }
+        .kpi-card.amber::before { background: var(--accent-amber); }
 
-        .kpi-card .label {
-            color: var(--text-secondary);
+        .kpi-label {
             font-size: 11px;
             font-weight: 800;
             text-transform: uppercase;
-            letter-spacing: 1.5px;
-            margin-bottom: 8px;
+            letter-spacing: 1.2px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
         }
 
-        .kpi-card .value {
-            font-size: 32px;
+        .kpi-val {
+            font-size: 28px;
             font-weight: 800;
-            color: var(--text);
+            color: #fff;
         }
 
-        /* Filter Panel */
-        .filter-panel {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 24px;
-            margin-bottom: 30px;
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-            align-items: center;
-        }
-
-        .filter-panel .filter-group {
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            flex-grow: 1;
-            min-width: 200px;
-        }
-
-        .filter-group-label {
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 1.5px;
+        .kpi-sub {
+            font-size: 12px;
             color: var(--text-muted);
-            text-transform: uppercase;
+            margin-top: 4px;
         }
 
-        .search-input {
-            width: 100%;
-            background: var(--surface-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 12px 16px;
-            color: var(--text);
-            font-size: 13px;
-            font-weight: 600;
-        }
-
-        .search-input:focus {
-            outline: none;
-            border-color: var(--primary);
-        }
-
-        .filter-btn-group {
-            display: flex;
-            background: var(--surface-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 4px;
-            gap: 4px;
-        }
-
-        .filter-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            padding: 8px 16px;
-            border-radius: 8px;
-            font-size: 12px;
-            font-weight: 700;
-            cursor: pointer;
-        }
-
-        .filter-btn:hover {
-            color: var(--text);
-        }
-
-        .filter-btn.active {
-            background: var(--surface);
-            color: var(--primary);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-        }
-
-        /* View Toggle */
-        .view-toggle {
-            display: flex;
-            background: var(--surface-card);
-            border: 1px solid var(--border);
-            border-radius: 12px;
-            padding: 4px;
-            margin-left: auto;
-        }
-
-        .view-btn {
-            background: transparent;
-            border: none;
-            color: var(--text-secondary);
-            padding: 10px 16px;
-            border-radius: 8px;
-            cursor: pointer;
-            display: inline-flex;
-            align-items: center;
-            gap: 6px;
-            font-size: 12px;
-            font-weight: 700;
-        }
-
-        .view-btn.active {
-            background: var(--surface);
-            color: var(--primary);
-            box-shadow: 0 2px 6px rgba(0,0,0,0.15);
-        }
-
-        /* Trip Cards View */
-        .trips-list {
-            display: flex;
-            flex-direction: column;
-            gap: 24px;
-        }
-
-        .trip-card {
+        /* Filter Controls */
+        .controls-bar {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 24px;
-            padding: 24px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-        }
-
-        .trip-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 1px solid var(--border);
-            padding-bottom: 16px;
-        }
-
-        .trip-date {
-            font-size: 18px;
-            font-weight: 800;
-            color: var(--text);
-        }
-
-        .trip-bus {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-secondary);
-            margin-top: 2px;
-        }
-
-        .trip-bus code {
-            font-family: 'JetBrains Mono', monospace;
-            background: var(--surface-card);
-            color: var(--primary);
-            padding: 2px 6px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: bold;
-            margin-left: 6px;
-        }
-
-        .trip-badges {
-            display: flex;
-            gap: 8px;
-        }
-
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 4px 10px;
-            border-radius: 8px;
-            font-size: 10px;
-            font-weight: 800;
-            letter-spacing: 0.5px;
-        }
-
-        .badge-live {
-            background-color: rgba(16, 185, 129, 0.1);
-            color: var(--accent-live);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-        }
-
-        .badge-est {
-            background-color: rgba(245, 158, 11, 0.1);
-            color: var(--accent-est);
-            border: 1px solid rgba(245, 158, 11, 0.2);
-        }
-
-        .badge-completed {
-            background-color: rgba(16, 185, 129, 0.1);
-            color: var(--accent-completed);
-            border: 1px solid rgba(16, 185, 129, 0.2);
-        }
-
-        .badge-progress {
-            background-color: rgba(59, 130, 246, 0.1);
-            color: var(--accent-progress);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-        }
-
-        .trip-details-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 16px;
-            background: var(--surface-card);
-            border-radius: 16px;
+            border-radius: var(--radius-lg);
             padding: 16px 20px;
+            margin-bottom: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 16px;
         }
 
-        .detail-item {
+        .filter-group {
             display: flex;
-            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .input-box {
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
+            font-weight: 600;
+            outline: none;
+        }
+
+        .shift-tabs {
+            display: flex;
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            padding: 4px;
             gap: 4px;
         }
 
-        .detail-label {
-            font-size: 9px;
-            font-weight: 800;
-            color: var(--text-muted);
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-        }
-
-        .detail-val {
-            font-size: 13px;
-            font-weight: 700;
-            color: var(--text);
-        }
-
-        .font-mono {
-            font-family: 'JetBrains Mono', monospace;
-        }
-
-        /* Stops Grid Timeline */
-        .timeline-track-wrapper {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-top: 8px;
-        }
-
-        .timeline-stop {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-            background: var(--surface-card);
-            padding: 8px 14px;
-            border-radius: 12px;
-            border: 1px solid var(--border);
-            flex-grow: 1;
-            min-width: 170px;
-        }
-
-        .timeline-stop.reached {
-            border-color: rgba(16, 185, 129, 0.25);
-            background: rgba(16, 185, 129, 0.03);
-        }
-
-        .stop-dot {
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            background: rgba(255, 255, 255, 0.05);
-            border: 2px solid var(--border);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 10px;
-            font-weight: 800;
-            color: var(--text-secondary);
-            flex-shrink: 0;
-        }
-
-        .timeline-stop.reached .stop-dot {
-            background: var(--primary-gradient);
-            border-color: transparent;
-            color: white;
-            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
-        }
-
-        .stop-details {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-
-        .stop-name {
+        .shift-tab {
+            padding: 6px 14px;
+            border-radius: 6px;
             font-size: 12px;
             font-weight: 700;
-            color: var(--text);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            color: var(--text-secondary);
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            background: transparent;
         }
 
-        .stop-time {
-            font-size: 10px;
-            color: var(--text-muted);
-            margin-top: 1px;
-            font-weight: 600;
+        .shift-tab.active {
+            background: var(--primary);
+            color: #fff;
         }
 
-        .timeline-stop.reached .stop-time {
-            color: var(--accent-live);
-            font-weight: 700;
+        /* Section Headings */
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin: 28px 0 16px 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid var(--border);
         }
 
-        /* Table View */
-        .table-container {
+        .section-title {
+            font-size: 16px;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* Tables */
+        .table-wrap {
             background: var(--surface);
             border: 1px solid var(--border);
-            border-radius: 24px;
+            border-radius: var(--radius-lg);
             overflow-x: auto;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 32px;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
-            text-align: left;
             font-size: 13px;
+            text-align: left;
         }
 
         th {
-            background: rgba(255,255,255,0.01);
+            background: rgba(31, 41, 55, 0.6);
             color: var(--text-secondary);
-            font-weight: 700;
+            font-weight: 800;
+            font-size: 11px;
             text-transform: uppercase;
-            font-size: 10px;
             letter-spacing: 1px;
-            padding: 16px 20px;
+            padding: 14px 16px;
             border-bottom: 1px solid var(--border);
+            white-space: nowrap;
         }
 
         td {
-            padding: 14px 20px;
+            padding: 14px 16px;
             border-bottom: 1px solid var(--border);
             color: var(--text);
-            max-width: 300px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
+            vertical-align: middle;
         }
 
-        tr:last-child td {
-            border-bottom: none;
-        }
+        tr:last-child td { border-bottom: none; }
+        tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
-        tr:hover td {
-            background-color: rgba(255,255,255,0.01);
-        }
-
-        .timeline-summary {
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 8px;
+            border-radius: 6px;
             font-size: 11px;
-            color: var(--text-secondary);
+            font-weight: 700;
         }
 
-        /* Empty State */
-        .empty-state {
-            padding: 60px 40px;
-            text-align: center;
-            background: var(--surface);
+        .badge-ontime { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
+        .badge-delayed { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+        .badge-status { background: rgba(79, 70, 229, 0.15); color: #818cf8; }
+
+        .bus-badge {
+            font-family: 'JetBrains Mono', monospace;
+            font-weight: 700;
+            background: var(--surface-card);
+            padding: 4px 8px;
+            border-radius: 6px;
             border: 1px solid var(--border);
-            border-radius: 24px;
-            color: var(--text-muted);
+            color: #818cf8;
         }
 
-        .empty-state svg {
-            margin-bottom: 16px;
-            opacity: 0.5;
-        }
-
-        .empty-state h3 {
-            color: var(--text);
-            margin: 0 0 8px 0;
-            font-size: 16px;
-        }
-
-        /* Print Override */
+        /* Print Media Styles */
         @media print {
             body {
                 background: #ffffff !important;
                 color: #000000 !important;
+                padding: 10px !important;
+                font-size: 11px !important;
             }
-            .sidebar, .filter-panel, .actions-bar {
-                display: none !important;
-            }
-            .main-content {
-                width: 100% !important;
-                padding: 0 !important;
-                margin: 0 !important;
-            }
-            .trip-card {
+            .header-actions, .controls-bar { display: none !important; }
+            .kpi-card, .table-wrap {
                 background: #ffffff !important;
-                border: 1px solid #cbd5e1 !important;
+                border: 1px solid #cccccc !important;
                 box-shadow: none !important;
-                page-break-inside: avoid;
-                margin-bottom: 24px !important;
-            }
-            .trip-details-grid {
-                background: #f8fafc !important;
-                border: 1px solid #cbd5e1 !important;
-            }
-            .detail-val, .stop-name, .stop-time {
                 color: #000000 !important;
             }
-            .badge {
-                border: 1px solid #000000 !important;
+            .kpi-val, .kpi-label, td, th { color: #000000 !important; }
+            th { background: #f3f4f6 !important; }
+            .badge-ontime, .badge-delayed, .badge-status, .bus-badge {
+                border: 1px solid #999999 !important;
                 color: #000000 !important;
-                background: transparent !important;
-            }
-            .timeline-stop {
-                background: #ffffff !important;
-                border: 1px solid #cbd5e1 !important;
-            }
-            .stop-dot {
-                border-color: #cbd5e1 !important;
-                background: #f1f5f9 !important;
-                color: #000000 !important;
-            }
-            .timeline-stop.reached .stop-dot {
-                background: #000000 !important;
-                color: #ffffff !important;
-            }
-            .table-container {
-                border: 1px solid #cbd5e1 !important;
-                box-shadow: none !important;
-            }
-            th {
-                background: #f8fafc !important;
-                color: #000000 !important;
-                border-bottom: 2px solid #cbd5e1 !important;
-            }
-            td {
-                color: #000000 !important;
-                border-bottom: 1px solid #cbd5e1 !important;
-            }
-        }
-
-        @media (max-width: 992px) {
-            .app-wrapper {
-                flex-direction: column;
-            }
-            .sidebar {
-                width: 100%;
-                height: auto;
-                position: relative;
-                border-right: none;
-                border-bottom: 1px solid var(--border);
-            }
-            .main-content {
-                width: 100%;
-                padding: 24px;
+                background: none !important;
             }
         }
     </style>
 </head>
 <body>
-    <div class="app-wrapper">
-        <!-- Sidebar -->
-        <div class="sidebar">
-            <div>
-                <div class="sidebar-title">NAVIGATION</div>
-                <ul class="sidebar-menu">
-                    <li class="sidebar-item active" id="sidebar-all" onclick="selectBus('')">
-                        <span>All Fleet Reports</span>
-                        <span class="subtext">Overview of all active units</span>
-                    </li>
-                </ul>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="brand-section">
+                <div class="brand-logo">SC</div>
+                <div class="brand-text">
+                    <h1>SISTec Ratibad - Daily Fleet Operations Report</h1>
+                    <p>Generated for: <strong>${reportData.day}, ${reportData.date}</strong> | Official 2-Trip Operational Log</p>
+                </div>
             </div>
-            <div>
-                <div class="sidebar-title">ACTIVE BUS UNITS</div>
-                <ul class="sidebar-menu" id="bus-list">
-                    <!-- Loaded dynamically -->
-                </ul>
+            <div class="header-actions">
+                <button class="btn btn-sheets" onclick="syncSheets()">
+                    📊 Sync to Google Sheets
+                </button>
+                <a href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}" class="btn" download>
+                    📥 Download CSV
+                </a>
+                <button class="btn btn-primary" onclick="window.print()">
+                    🖨️ Print / Save PDF
+                </button>
             </div>
         </div>
 
-        <!-- Main Content -->
-        <div class="main-content">
-            <!-- Header -->
-            <div class="header-panel">
-                <div class="header-title">
-                    <h1 id="main-title">SGI Fleet Operational Report</h1>
-                    <p>Report window: Last ${lookbackDays} days (weekdays only)</p>
-                </div>
-                <div class="actions-bar">
-                    <button class="btn theme-btn" onclick="toggleTheme()" id="theme-btn">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
-                        Light Mode
-                    </button>
-                    <button class="btn btn-primary" onclick="window.print()">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
-                        Print Report
-                    </button>
-                </div>
+        <!-- KPI Grid -->
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <div class="kpi-label">Active Fleet Buses</div>
+                <div class="kpi-val">${reportData.totalBuses}</div>
+                <div class="kpi-sub">Total operational buses today</div>
+            </div>
+            <div class="kpi-card green">
+                <div class="kpi-label">Daily Scheduled Trips</div>
+                <div class="kpi-val">${reportData.totalTrips}</div>
+                <div class="kpi-sub">27 Morning + 27 Evening</div>
+            </div>
+            <div class="kpi-card amber">
+                <div class="kpi-label">Fleet On-Time Rate</div>
+                <div class="kpi-val">${reportData.punctualityRate}%</div>
+                <div class="kpi-sub">${reportData.onTimeTrips} of ${reportData.totalTrips} trips on-time</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-label">Total Fleet Distance</div>
+                <div class="kpi-val">${reportData.totalDistance} km</div>
+                <div class="kpi-sub">Total covered commute km</div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-bar">
+            <div class="filter-group">
+                <label style="font-size:12px; font-weight:700; color:var(--text-secondary);">Select Date:</label>
+                <input type="date" id="dateSelector" class="input-box" value="${reportData.date}" onchange="changeDate(this.value)">
+                <button class="btn" style="padding:6px 12px; font-size:12px;" onclick="setQuickDate(0)">Today</button>
+                <button class="btn" style="padding:6px 12px; font-size:12px;" onclick="setQuickDate(-1)">Yesterday</button>
             </div>
 
-            <!-- KPIs -->
-            <div class="kpi-grid">
-                <div class="kpi-card">
-                    <div class="label" id="scope-kpi-label">Units Tracked</div>
-                    <div class="value" id="kpi-units">-</div>
-                </div>
-                <div class="kpi-card">
-                    <div class="label">Total Trips / Logs</div>
-                    <div class="value" id="kpi-trips">-</div>
-                </div>
-                <div class="kpi-card kpi-live">
-                    <div class="label">Live Runs %</div>
-                    <div class="value" id="kpi-live-pct">-</div>
-                </div>
-                <div class="kpi-card kpi-est">
-                    <div class="label">Avg Stops Reached</div>
-                    <div class="value" id="kpi-stops-avg">-</div>
+            <div class="filter-group">
+                <div class="shift-tabs">
+                    <button class="shift-tab ${reportData.shift === 'all' ? 'active' : ''}" onclick="changeShift('all')">All 54 Trips</button>
+                    <button class="shift-tab ${reportData.shift === 'morning' ? 'active' : ''}" onclick="changeShift('morning')">🌅 Morning (27)</button>
+                    <button class="shift-tab ${reportData.shift === 'evening' ? 'active' : ''}" onclick="changeShift('evening')">🌆 Evening (27)</button>
                 </div>
             </div>
+        </div>
 
-            <!-- Filters -->
-            <div class="filter-panel">
-                <div class="filter-group" style="flex-grow: 2;">
-                    <div class="filter-group-label">Search Context</div>
-                    <input type="text" class="search-input" placeholder="Search by driver, date, or route name..." id="search-box" oninput="handleSearch(this.value)">
-                </div>
-                <div class="filter-group">
-                    <div class="filter-group-label">Data Source</div>
-                    <div class="filter-btn-group">
-                        <button class="filter-btn active" onclick="setSourceFilter('ALL')" id="source-all">All</button>
-                        <button class="filter-btn" onclick="setSourceFilter('LIVE')" id="source-live">Live</button>
-                        <button class="filter-btn" onclick="setSourceFilter('ESTIMATED')" id="source-est">Est</button>
-                    </div>
-                </div>
-                <div class="filter-group">
-                    <div class="filter-group-label">Trip Status</div>
-                    <div class="filter-btn-group">
-                        <button class="filter-btn active" onclick="setStatusFilter('ALL')" id="status-all">All</button>
-                        <button class="filter-btn" onclick="setStatusFilter('Completed')" id="status-completed">Completed</button>
-                        <button class="filter-btn" onclick="setStatusFilter('In Progress')" id="status-progress">Active</button>
-                    </div>
-                </div>
-                <div class="filter-group" style="flex-grow: 0; min-width: auto; align-self: flex-end;">
-                    <div class="view-toggle">
-                        <button class="view-btn active" onclick="setViewMode('timeline')" id="view-timeline">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20v-8M5 20v-6M19 20v-10"></path><line x1="2" y1="20" x2="22" y2="20"></line></svg>
-                            Timeline
-                        </button>
-                        <button class="view-btn" onclick="setViewMode('table')" id="view-table">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><line x1="9" y1="3" x2="9" y2="21"></line><line x1="15" y1="3" x2="15" y2="21"></line><line x1="3" y1="9" x2="21" y2="9"></line><line x1="3" y1="15" x2="21" y2="15"></line></svg>
-                            Table
-                        </button>
-                    </div>
-                </div>
+        <!-- TRIP 1: MORNING PICKUP TABLE -->
+        ${reportData.shift === 'all' || reportData.shift === 'morning' ? `
+        <div class="section-header">
+            <div class="section-title">
+                🌅 Trip 1: Morning Pickup (City Stops ➔ SISTec Ratibad Campus)
             </div>
+            <span style="font-size:13px; color:var(--text-secondary); font-weight:600;">27 Buses Scheduled | Target Arrival ~08:45 AM</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Bus No</th>
+                        <th>Plate No</th>
+                        <th>Route Name</th>
+                        <th>Driver & Phone</th>
+                        <th>Depart Time</th>
+                        <th>Campus Arrival</th>
+                        <th>Duration</th>
+                        <th>Punctuality</th>
+                        <th>Stops</th>
+                        <th>Dist (km)</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${reportData.morningTrips.map(t => `
+                    <tr>
+                        <td><span class="bus-badge">${t.busNo}</span></td>
+                        <td style="font-family:'JetBrains Mono'; font-weight:600;">${t.vehicleNo}</td>
+                        <td style="font-weight:700;">${t.routeName}</td>
+                        <td>${t.driverName}<br><span style="font-size:11px; color:var(--text-muted);">${t.driverPhone}</span></td>
+                        <td>${t.departureTime}</td>
+                        <td style="font-weight:700;">${t.arrivalTime}</td>
+                        <td>${t.duration}</td>
+                        <td><span class="badge ${t.punctuality.includes('On-Time') ? 'badge-ontime' : 'badge-delayed'}">${t.punctuality}</span></td>
+                        <td>${t.stopsCompleted}</td>
+                        <td>${t.distanceKm}</td>
+                        <td><span class="badge badge-status">${t.status}</span></td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        ` : ''}
 
-            <!-- Content Area -->
-            <div id="report-view-root">
-                <!-- Dynamic Content Loads Here -->
+        <!-- TRIP 2: EVENING DROP-OFF TABLE -->
+        ${reportData.shift === 'all' || reportData.shift === 'evening' ? `
+        <div class="section-header">
+            <div class="section-title">
+                🌆 Trip 2: Evening Drop-off (SISTec Ratibad Campus ➔ City Stops)
             </div>
+            <span style="font-size:13px; color:var(--text-secondary); font-weight:600;">27 Buses Scheduled | Departure ~04:45 PM</span>
+        </div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Bus No</th>
+                        <th>Plate No</th>
+                        <th>Route Name</th>
+                        <th>Driver & Phone</th>
+                        <th>Depart Time</th>
+                        <th>Final Stop Drop</th>
+                        <th>Duration</th>
+                        <th>Punctuality</th>
+                        <th>Stops</th>
+                        <th>Dist (km)</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${reportData.eveningTrips.map(t => `
+                    <tr>
+                        <td><span class="bus-badge">${t.busNo}</span></td>
+                        <td style="font-family:'JetBrains Mono'; font-weight:600;">${t.vehicleNo}</td>
+                        <td style="font-weight:700;">${t.routeName}</td>
+                        <td>${t.driverName}<br><span style="font-size:11px; color:var(--text-muted);">${t.driverPhone}</span></td>
+                        <td>${t.departureTime}</td>
+                        <td style="font-weight:700;">${t.arrivalTime}</td>
+                        <td>${t.duration}</td>
+                        <td><span class="badge ${t.punctuality.includes('On-Time') ? 'badge-ontime' : 'badge-delayed'}">${t.punctuality}</span></td>
+                        <td>${t.stopsCompleted}</td>
+                        <td>${t.distanceKm}</td>
+                        <td><span class="badge badge-status">${t.status}</span></td>
+                    </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+        ` : ''}
+
+        <div style="text-align:center; padding: 24px; font-size:12px; color:var(--text-muted);">
+            SISTec Chalo Shuttle Tracking System • Verified Manager Operations Report • Official SGI Ratibad
         </div>
     </div>
 
-        <!-- Data Injection -->
     <script>
-        const buses = ${JSON.stringify(buses.map(b => ({ id: b._id.toString(), name: b.name, busNumber: b.busNumber, routeName: b.routeName || 'Unassigned' })))};
-        const records = ${JSON.stringify(records)};
-        const initialBusId = ${JSON.stringify(busId || '')};
-
-        const state = {
-            selectedBusId: initialBusId,
-            searchQuery: '',
-            sourceFilter: 'ALL',
-            statusFilter: 'ALL',
-            viewMode: 'timeline',
-            theme: 'dark'
-        };
-
-        // Initialize App
-        window.addEventListener('DOMContentLoaded', () => {
-            initSidebar();
-            applyTheme();
-            updateUI();
-        });
-
-        function initSidebar() {
-            const list = document.getElementById('bus-list');
-            buses.forEach(b => {
-                const li = document.createElement('li');
-                li.className = 'sidebar-item' + (state.selectedBusId === b.id ? ' active' : '');
-                li.id = 'sidebar-' + b.id;
-                li.onclick = () => selectBus(b.id);
-                li.innerHTML = '<span>' + b.name + '</span>' +
-                               '<span class="subtext">' + b.busNumber + ' | ' + b.routeName + '</span>';
-                list.appendChild(li);
-            });
+        function changeDate(val) {
+            const url = new URL(window.location);
+            url.searchParams.set('date', val);
+            window.location.href = url.toString();
         }
 
-        function selectBus(busId) {
-            state.selectedBusId = busId;
-            
-            // Update active sidebar item
-            document.querySelectorAll('.sidebar-item').forEach(el => el.classList.remove('active'));
-            if (busId === '') {
-                document.getElementById('sidebar-all').classList.add('active');
-            } else {
-                const el = document.getElementById('sidebar-' + busId);
-                if (el) el.classList.add('active');
-            }
-
-            // Update UI Title
-            const titleEl = document.getElementById('main-title');
-            if (busId === '') {
-                titleEl.textContent = 'SGI Fleet Operational Report';
-            } else {
-                const busObj = buses.find(b => b.id === busId);
-                titleEl.textContent = 'SGI Operational Report: ' + (busObj ? busObj.name : 'Unit');
-            }
-
-            updateUI();
+        function changeShift(shift) {
+            const url = new URL(window.location);
+            url.searchParams.set('shift', shift);
+            window.location.href = url.toString();
         }
 
-        function toggleTheme() {
-            state.theme = state.theme === 'dark' ? 'light' : 'dark';
-            applyTheme();
+        function setQuickDate(offsetDays) {
+            const d = new Date();
+            d.setDate(d.getDate() + offsetDays);
+            const iso = d.toISOString().split('T')[0];
+            changeDate(iso);
         }
 
-        function applyTheme() {
-            const body = document.body;
-            const btn = document.getElementById('theme-btn');
-            if (state.theme === 'light') {
-                body.classList.add('light-theme');
-                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg> Dark Mode';
-            } else {
-                body.classList.remove('light-theme');
-                btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg> Light Mode';
-            }
-        }
+        async function syncSheets() {
+            const date = document.getElementById('dateSelector').value;
+            const btn = event.target;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Syncing...';
+            btn.disabled = true;
 
-        function handleSearch(val) {
-            state.searchQuery = val.toLowerCase().trim();
-            updateUI();
-        }
-
-        function setSourceFilter(val) {
-            state.sourceFilter = val;
-            document.querySelectorAll('[id^="source-"]').forEach(el => el.classList.remove('active'));
-            document.getElementById('source-' + val.toLowerCase().slice(0, 4)).classList.add('active');
-            updateUI();
-        }
-
-        function setStatusFilter(val) {
-            state.statusFilter = val;
-            document.querySelectorAll('[id^="status-"]').forEach(el => el.classList.remove('active'));
-            
-            const btnId = val === 'ALL' ? 'status-all' : (val === 'Completed' ? 'status-completed' : 'status-progress');
-            const btn = document.getElementById(btnId);
-            if (btn) btn.classList.add('active');
-            updateUI();
-        }
-
-        function setViewMode(val) {
-            state.viewMode = val;
-            document.getElementById('view-timeline').classList.remove('active');
-            document.getElementById('view-table').classList.remove('active');
-            document.getElementById('view-' + val).classList.add('active');
-            updateUI();
-        }
-
-        function updateUI() {
-            // 1. Filter records
-            let filtered = records;
-            
-            // Filter by selected bus
-            if (state.selectedBusId !== '') {
-                filtered = filtered.filter(r => r.busId === state.selectedBusId);
-            }
-
-            // Filter by source
-            if (state.sourceFilter !== 'ALL') {
-                filtered = filtered.filter(r => r.source === state.sourceFilter);
-            }
-
-            // Filter by status
-            if (state.statusFilter !== 'ALL') {
-                filtered = filtered.filter(r => r.status === state.statusFilter);
-            }
-
-            // Filter by search
-            if (state.searchQuery !== '') {
-                filtered = filtered.filter(r => 
-                    r.date.includes(state.searchQuery) ||
-                    r.driverName.toLowerCase().includes(state.searchQuery) ||
-                    r.routeName.toLowerCase().includes(state.searchQuery) ||
-                    r.busName.toLowerCase().includes(state.searchQuery) ||
-                    r.busNumber.toLowerCase().includes(state.searchQuery)
-                );
-            }
-
-            // 2. Compute KPI Stats
-            const totalTrips = filtered.length;
-            const uniqueBuses = [...new Set(filtered.map(r => r.busId))].length;
-            const liveTrips = filtered.filter(r => r.source === 'LIVE').length;
-            const livePct = totalTrips > 0 ? Math.round((liveTrips / totalTrips) * 100) : 0;
-
-            let reachedTotal = 0;
-            let stopsTotal = 0;
-            filtered.forEach(r => {
-                reachedTotal += r.reachedStops.length;
-                stopsTotal += r.stops.length;
-            });
-            const stopsAvg = stopsTotal > 0 ? (reachedTotal / filtered.length).toFixed(1) : '0.0';
-            const stopsAvgMax = stopsTotal > 0 ? (stopsTotal / filtered.length).toFixed(0) : '0';
-
-            // Render KPI values
-            document.getElementById('scope-kpi-label').textContent = state.selectedBusId !== '' ? 'Unit Status' : 'Units Tracked';
-            document.getElementById('kpi-units').textContent = state.selectedBusId !== '' ? (totalTrips > 0 ? 'Active' : 'Offline') : uniqueBuses + ' units';
-            document.getElementById('kpi-trips').textContent = totalTrips + ' logs';
-            document.getElementById('kpi-live-pct').textContent = livePct + '%';
-            document.getElementById('kpi-stops-avg').textContent = stopsAvg + ' / ' + stopsAvgMax;
-
-            // 3. Render View
-            const root = document.getElementById('report-view-root');
-            if (state.viewMode === 'timeline') {
-                root.innerHTML = renderTimelineCards(filtered);
-            } else {
-                root.innerHTML = renderPivotedTable(filtered);
-            }
-        }
-
-        function renderTimelineCards(filtered) {
-            if (filtered.length === 0) {
-                return '<div class="empty-state">' +
-                       '<svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>' +
-                       '<h3>No Logs Found</h3>' +
-                       '<p>No operational entries matched your search filters.</p>' +
-                       '</div>';
-            }
-
-            let html = '<div class="trips-list">';
-            filtered.forEach(r => {
-                const sourceClass = r.source === 'LIVE' ? 'badge-live' : 'badge-est';
-                const statusClass = r.status === 'Completed' ? 'badge-completed' : 'badge-progress';
-                
-                let timelineHtml = '<div class="timeline-track-wrapper">';
-                if (r.stops && r.stops.length > 0) {
-                    r.stops.forEach((stop, idx) => {
-                        const reached = r.reachedStops.find(rs => rs.stopName === stop.name);
-                        const reachedTime = reached ? reached.reachedTime : '—';
-                        const isReached = reached ? 'reached' : '';
-                        
-                        timelineHtml += '<div class="timeline-stop ' + isReached + '">' +
-                                            '<div class="stop-dot">' + (idx + 1) + '</div>' +
-                                            '<div class="stop-details">' +
-                                                '<div class="stop-name" title="' + stop.name + '">' + stop.name + '</div>' +
-                                                '<div class="stop-time">' + reachedTime + '</div>' +
-                                            '</div>' +
-                                        '</div>';
-                    });
+            try {
+                const res = await fetch('/api/manager/reports/sync-google-sheets', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ date })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    alert('✅ Successfully synced ' + data.syncedTrips + ' trip records to Google Sheets!');
+                    window.open(data.spreadsheetUrl, '_blank');
                 } else {
-                    timelineHtml += '<div style="color: var(--text-muted); font-size: 12px; padding: 12px;">No stops configured on this route</div>';
+                    alert('❌ Sync failed: ' + (data.error || 'Unknown error'));
                 }
-                timelineHtml += '</div>';
-
-                html += '<div class="trip-card">' +
-                            '<div class="trip-header">' +
-                                '<div>' +
-                                    '<div class="trip-date">' + r.date + '</div>' +
-                                    '<div class="trip-bus">' + r.busName + ' <code>' + r.busNumber + '</code></div>' +
-                                '</div>' +
-                                '<div class="trip-badges">' +
-                                    '<span class="badge ' + sourceClass + '">' + r.source + '</span>' +
-                                    '<span class="badge ' + statusClass + '">' + r.status.toUpperCase() + '</span>' +
-                                '</div>' +
-                            '</div>' +
-                            '<div class="trip-details-grid">' +
-                                '<div class="detail-item">' +
-                                    '<span class="detail-label">ROUTE</span>' +
-                                    '<span class="detail-val">' + r.routeName + '</span>' +
-                                    '</div>' +
-                                '<div class="detail-item">' +
-                                    '<span class="detail-label">DRIVER</span>' +
-                                    '<span class="detail-val">' + r.driverName + '</span>' +
-                                '</div>' +
-                                '<div class="detail-item">' +
-                                    '<span class="detail-label">TRIP INTERVAL</span>' +
-                                    '<span class="detail-val">' + r.startTime + ' - ' + r.endTime + '</span>' +
-                                '</div>' +
-                                '<div class="detail-item">' +
-                                    '<span class="detail-label">STOPS REACHED</span>' +
-                                    '<span class="detail-val font-mono">' + r.reachedStops.length + ' / ' + r.stops.length + '</span>' +
-                                '</div>' +
-                            '</div>' +
-                            '<div class="trip-timeline-section">' +
-                                '<div class="detail-label" style="margin-bottom: 8px;">STOPS RUN TIMELINE</div>' +
-                                timelineHtml +
-                            '</div>' +
-                        '</div>';
-            });
-            html += '</div>';
-            return html;
-        }
-
-        function renderPivotedTable(filtered) {
-            if (filtered.length === 0) {
-                return '<div class="empty-state"><h3>No Logs Found</h3></div>';
+            } catch (err) {
+                alert('❌ Sync request failed: ' + err.message);
+            } finally {
+                btn.innerHTML = originalText;
+                btn.disabled = false;
             }
-
-            const isSingleBus = state.selectedBusId !== '';
-            let html = '<div class="table-container"><table><thead><tr>';
-            html += '<th>Date</th>';
-            if (!isSingleBus) {
-                html += '<th>Bus Name</th>';
-                html += '<th>Plate</th>';
-                html += '<th>Route</th>';
-            }
-            html += '<th>Driver</th>';
-            html += '<th>Source</th>';
-            html += '<th>Start</th>';
-            html += '<th>End</th>';
-            html += '<th>Status</th>';
-            html += '<th>Reached</th>';
-
-            if (isSingleBus) {
-                const sample = filtered[0];
-                if (sample && sample.stops && sample.stops.length > 0) {
-                    sample.stops.forEach((stop, idx) => {
-                        html += '<th>Stop ' + (idx + 1) + ': ' + stop.name + '</th>';
-                    });
-                }
-            } else {
-                html += '<th>Stops Timeline</th>';
-            }
-            html += '</tr></thead><tbody>';
-
-            filtered.forEach(r => {
-                const sourceClass = r.source === 'LIVE' ? 'badge-live' : 'badge-est';
-                const statusClass = r.status === 'Completed' ? 'badge-completed' : 'badge-progress';
-
-                html += '<tr>';
-                html += '<td><strong>' + r.date + '</strong></td>';
-                if (!isSingleBus) {
-                    html += '<td>' + r.busName + '</td>';
-                    html += '<td><code>' + r.busNumber + '</code></td>';
-                    html += '<td>' + r.routeName + '</td>';
-                }
-                html += '<td>' + r.driverName + '</td>';
-                html += '<td><span class="badge ' + sourceClass + '">' + r.source + '</span></td>';
-                html += '<td>' + r.startTime + '</td>';
-                html += '<td>' + r.endTime + '</td>';
-                html += '<td><span class="badge ' + statusClass + '">' + r.status + '</span></td>';
-                html += '<td class="font-mono font-bold">' + r.reachedStops.length + '/' + r.stops.length + '</td>';
-
-                if (isSingleBus) {
-                    if (r.stops && r.stops.length > 0) {
-                        r.stops.forEach(stop => {
-                            const reached = r.reachedStops.find(rs => rs.stopName === stop.name);
-                            html += '<td>' + (reached ? reached.reachedTime : '—') + '</td>';
-                        });
-                    }
-                } else {
-                    const timelineParts = r.stops.length > 0
-                        ? r.stops.map((stop, sIdx) => {
-                            const reached = r.reachedStops.find(rs => rs.stopName === stop.name);
-                            return (sIdx + 1) + '. ' + stop.name + ' (' + (reached ? reached.reachedTime : '—') + ')';
-                          }).join(' ➔ ')
-                        : 'No Stops';
-                    html += '<td class="timeline-summary" title="' + timelineParts + '">' + timelineParts + '</td>';
-                }
-                html += '</tr>';
-            });
-
-            html += '</tbody></table></div>';
-            return html;
         }
     </script>
 </body>
@@ -2650,6 +1930,40 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
         res.status(500).send('<h1>Failed to generate report</h1>');
     }
 });
+
+// ─── MANAGER: SYNC DAILY TRIP REPORT TO GOOGLE SHEETS ────────────────────────
+// POST /api/manager/reports/sync-google-sheets
+// Body: { date: 'YYYY-MM-DD' }
+app.post('/api/manager/reports/sync-google-sheets', async (req, res) => {
+    try {
+        const { date } = req.body;
+        const targetDate = date || new Date().toISOString().split('T')[0];
+
+        // Generate full 2-trip records with real official timetable and live logs
+        const reportData = await generateTripReportData({ targetDate, shift: 'all' });
+        const syncResult = await syncDailyTripReportsToGoogleSheets(reportData, targetDate);
+
+        if (syncResult.success) {
+            res.json({
+                success: true,
+                message: `Successfully synced ${syncResult.syncedMorning} Morning Trips, ${syncResult.syncedEvening} Evening Trips, and ${syncResult.syncedStops} Stop Logs for ${targetDate} to Google Sheets.`,
+                syncedMorning: syncResult.syncedMorning,
+                syncedEvening: syncResult.syncedEvening,
+                syncedStops: syncResult.syncedStops,
+                spreadsheetUrl: syncResult.spreadsheetUrl
+            });
+        } else {
+            res.status(500).json({
+                success: false,
+                error: syncResult.error || 'Failed to sync with Google Sheets'
+            });
+        }
+    } catch (err) {
+        console.error('❌ Error in /sync-google-sheets endpoint:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 
 // Notifications: Get History
 app.get('/api/notifications', async (req, res) => {
@@ -2927,8 +2241,14 @@ app.put('/api/users/profile', authMiddleware, async (req, res) => {
             if (role === 'driver' || role === 'user') allowedUpdates.name = req.body.name;
         }
         if (req.body.contactNumber !== undefined && role === 'driver') allowedUpdates.contactNumber = req.body.contactNumber;
-        if (req.body.proximityAlertsEnabled !== undefined && role === 'user') allowedUpdates.proximityAlertsEnabled = req.body.proximityAlertsEnabled;
-        if (req.body.proximityRadiusKm !== undefined && role === 'user') allowedUpdates.proximityRadiusKm = Number(req.body.proximityRadiusKm) || 1.0;
+        if (role === 'user') {
+            if (req.body.proximityAlertsEnabled !== undefined) allowedUpdates.proximityAlertsEnabled = req.body.proximityAlertsEnabled;
+            if (req.body.proximityRadiusKm !== undefined) allowedUpdates.proximityRadiusKm = Number(req.body.proximityRadiusKm) || 1.0;
+            if (req.body.routeId !== undefined) allowedUpdates.routeId = req.body.routeId;
+            if (req.body.pickupPoint !== undefined) allowedUpdates.pickupPoint = req.body.pickupPoint;
+            if (req.body.localAddress !== undefined) allowedUpdates.localAddress = req.body.localAddress;
+            if (req.body.isCommuteConfigured !== undefined) allowedUpdates.isCommuteConfigured = req.body.isCommuteConfigured;
+        }
 
         const updated = await Model.findByIdAndUpdate(id, { $set: allowedUpdates }, { new: true }).select('-password');
         
@@ -2937,6 +2257,10 @@ app.put('/api/users/profile', authMiddleware, async (req, res) => {
             if (allowedUpdates.name !== undefined) updateSubmissionFields.name = allowedUpdates.name;
             if (allowedUpdates.email !== undefined) updateSubmissionFields.email = allowedUpdates.email;
             if (allowedUpdates.phone !== undefined) updateSubmissionFields.phone = allowedUpdates.phone;
+            if (allowedUpdates.pickupPoint !== undefined) updateSubmissionFields.pickupPoint = allowedUpdates.pickupPoint;
+            if (allowedUpdates.routeId !== undefined) updateSubmissionFields.routeId = allowedUpdates.routeId;
+            if (allowedUpdates.localAddress !== undefined) updateSubmissionFields.localAddress = allowedUpdates.localAddress;
+            if (allowedUpdates.isCommuteConfigured !== undefined) updateSubmissionFields.isCommuteConfigured = allowedUpdates.isCommuteConfigured;
             
             if (Object.keys(updateSubmissionFields).length > 0) {
                 await RegistrationSubmission.findOneAndUpdate(
@@ -2946,7 +2270,10 @@ app.put('/api/users/profile', authMiddleware, async (req, res) => {
             }
         }
 
-        res.json(updated);
+        const resData = updated.toObject ? updated.toObject() : { ...updated };
+        if (!resData.role) resData.role = role;
+
+        res.json(resData);
     } catch (err) {
         console.error('Update profile error:', err);
         res.status(500).json({ error: 'Failed to update profile' });
@@ -2979,7 +2306,7 @@ app.put('/api/users/change-password', authMiddleware, async (req, res) => {
         const valid = await argon2.verify(user.password, currentPassword);
         if (!valid) return res.status(401).json({ error: 'Current password is incorrect.' });
 
-        const hashed = await argon2.hash(newPassword);
+        const hashed = await secureHashPassword(newPassword);
         await Model.findByIdAndUpdate(id, { password: hashed });
 
         console.log(`🔑 [Password Changed] User: ${user.username} (Role: ${role})`);
@@ -3075,7 +2402,7 @@ app.post('/api/manager/drivers', authMiddleware, async (req, res) => {
             return res.status(409).json({ error: `Driver with username "${username}" already exists.` });
         }
 
-        const hashedPassword = await argon2.hash(password);
+        const hashedPassword = await secureHashPassword(password);
         const newDriver = await Driver.create({
             username: username.trim().toLowerCase(),
             password: hashedPassword,
@@ -3169,23 +2496,40 @@ app.delete('/api/manager/drivers/:id', authMiddleware, async (req, res) => {
 });
 
 // ─── MANAGER: EDIT ROUTE (name, color, stops) ────────────────────────────────
-// PUT /api/manager/routes/:id
 // Body: { name, color, stops: [{ name, lat, lng }] }
 app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
     try {
         const { name, color, stops } = req.body;
+        const { geocodeStopName } = require('./geocode_stops');
         const updateData = {};
         if (name)  updateData.name  = name;
         if (color) updateData.color = color;
         if (stops && Array.isArray(stops)) {
-            // Sanitise: ensure each stop has at least a name
-            updateData.stops = stops
-                .filter(s => s.name && s.name.trim())
-                .map(s => ({
+            const geocodedStops = [];
+            for (const s of stops) {
+                if (!s.name || !s.name.trim()) continue;
+                let lat = s.lat != null ? parseFloat(s.lat) : null;
+                let lng = s.lng != null ? parseFloat(s.lng) : null;
+                
+                // If coordinates are missing, invalid, or 0, auto-resolve them
+                if (lat == null || lng == null || isNaN(lat) || isNaN(lng) || (lat === 0 && lng === 0)) {
+                    const coords = await geocodeStopName(s.name.trim());
+                    lat = coords.lat;
+                    lng = coords.lng;
+                }
+
+                geocodedStops.push({
                     name: s.name.trim(),
-                    lat:  parseFloat(s.lat)  || 0,
-                    lng:  parseFloat(s.lng)  || 0,
-                }));
+                    lat,
+                    lng,
+                });
+            }
+            updateData.stops = geocodedStops;
+
+            // Generate polyline coordinates connecting valid stops
+            updateData.coordinates = geocodedStops
+                .filter(s => s.lat != null && s.lng != null && s.lat !== 0 && s.lng !== 0)
+                .map(s => ({ latitude: s.lat, longitude: s.lng }));
         }
 
         const updatedRoute = await Route.findByIdAndUpdate(
@@ -3203,7 +2547,7 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
 
         // Notify all clients of the route change
         io.emit('routeUpdated', updatedRoute);
-        console.log(`✏️  [Manager] Route updated: ${updatedRoute.name}`);
+        console.log(`✏️  [Manager] Route updated: ${updatedRoute.name} (${updatedRoute.stops.length} stops)`);
         res.json(updatedRoute);
     } catch (err) {
         console.error('Route update error:', err);
@@ -3532,20 +2876,31 @@ io.on('connection', (socket) => {
             bus.lastUpdated = new Date();
             bus.status = speed > 2 ? 'On-time' : bus.status;
             
-            // Calculate ETAs and Geofencing against directional stops order
+            // Calculate Road-Calibrated Cumulative ETAs and Geofencing against directional stops order
             const etas = [];
             if (bus.routeId) {
                 const route = await Route.findById(bus.routeId);
-                if (route && route.stops) {
+                if (route && route.stops && route.stops.length > 0) {
                     const stopsList = tripType === 'dropoff' ? [...route.stops].reverse() : route.stops;
-                    const upcomingStops = stopsList.slice(0, 5);
+                    const upcomingStops = stopsList.slice(0, 7);
                     
-                    for (const stop of upcomingStops) {
-                        if (stop.lat && stop.lng) {
-                            const minutes = await calculateETA(lat, lng, stop.lat, stop.lng, speed);
-                            etas.push({ stopName: stop.name, minutes });
+                    let cumulativeMinutes = 0;
+                    let prevLat = lat;
+                    let prevLng = lng;
 
-                            // GEOFENCE LOGIC
+                    for (let sIdx = 0; sIdx < upcomingStops.length; sIdx++) {
+                        const stop = upcomingStops[sIdx];
+                        if (stop.lat && stop.lng) {
+                            // Calculate travel duration from previous waypoint/bus position
+                            const legMinutes = await calculateETA(prevLat, prevLng, stop.lat, stop.lng, speed);
+                            cumulativeMinutes += legMinutes;
+                            
+                            // Add 1 minute boarding dwell time for intermediate stops
+                            if (sIdx > 0) cumulativeMinutes += 1;
+
+                            etas.push({ stopName: stop.name, minutes: cumulativeMinutes });
+
+                            // GEOFENCE LOGIC (Direct proximity to bus)
                             const R = 6371;
                             const dLat = (stop.lat - lat) * Math.PI / 180;
                             const dLon = (stop.lng - lng) * Math.PI / 180;
@@ -3554,6 +2909,10 @@ io.on('connection', (socket) => {
                                 Math.sin(dLon / 2) * Math.sin(dLon / 2);
                             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                             const distanceKm = R * c;
+
+                            // Advance next leg starting position to current stop
+                            prevLat = stop.lat;
+                            prevLng = stop.lng;
 
                             // ── TARGETED FCM PUSH NOTIFICATIONS (Custom Geofence Radius) ──
                             if (distanceKm <= 3.0) {
@@ -4296,6 +3655,21 @@ app.get('/api/manager/registration-form', authMiddleware, async (req, res) => {
     }
 });
 
+// ── PUBLIC: Get active registration form status & URL for mobile app ─────────
+app.get('/api/public/active-form', async (req, res) => {
+    try {
+        const form = await RegistrationForm.findOne({ isActive: true }).sort({ createdAt: -1 });
+        if (!form) {
+            return res.json({ active: false, form: null, url: null });
+        }
+        const shareUrl = `${getBaseUrl(req)}/register/${form._id}`;
+        res.json({ active: true, form, url: shareUrl });
+    } catch (err) {
+        console.error('Public active form error:', err);
+        res.status(500).json({ active: false, error: 'Failed to fetch registration portal status' });
+    }
+});
+
 // ── MANAGER: Close a form ─────────────────────────────────────────────────
 app.put('/api/manager/registration-form/:id/close', authMiddleware, async (req, res) => {
     try {
@@ -4436,7 +3810,7 @@ app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => 
     }
 });
 
-// ── MANAGER: Approve → auto-create user account ───────────────────────────
+// ── MANAGER: Approve → auto-create user account & dispatch credentials email ──
 app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
@@ -4454,18 +3828,17 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
             return res.status(409).json({ error: `An account with enrollment number "${username}" already exists.` });
         }
 
-        // PASSWORD: Use manager-supplied custom password or auto-generate college-standard one
+        // PASSWORD: Use manager-supplied custom password or auto-generate secure random one
         const rawPassword = (req.body.password && req.body.password.trim().length >= 6)
             ? req.body.password.trim()
-            : `SGI@${username}`;
-        const hashedPassword = await argon2.hash(rawPassword);
+            : generateStrongRandomPassword(10);
+        const hashedPassword = await secureHashPassword(rawPassword);
 
         // Update email if manually supplied in req.body.email
         let email = submission.email;
         if (req.body.email && req.body.email.trim().length > 0) {
             email = req.body.email.trim();
             submission.email = email;
-            await submission.save();
         }
 
         const newUser = await User.create({
@@ -4486,22 +3859,35 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
         });
 
         // Update submission record
-        await RegistrationSubmission.findByIdAndUpdate(req.params.id, {
-            status: 'approved',
-            generatedUsername: username,
-            generatedPassword: rawPassword,        // plain — manager can share it once
-            createdUserId: newUser._id.toString(),
-            reviewedAt: new Date(),
-        });
+        submission.status = 'approved';
+        submission.generatedUsername = username;
+        submission.generatedPassword = rawPassword;
+        submission.createdUserId = newUser._id.toString();
+        submission.reviewedAt = new Date();
+        await submission.save();
 
-        // Send Email in the background to avoid blocking and triggering client timeouts
+        // Send Email & Track Dispatch
+        let emailResult = { success: false };
         if (submission.email && (req.body.sendEmail !== false)) {
-            sendCredentialsEmail(
+            emailResult = await sendCredentialsEmail(
                 submission.email.trim(),
                 submission.name,
                 username,
-                rawPassword
-            ).catch(err => console.error('Background email dispatch failed:', err));
+                rawPassword,
+                'student',
+                {
+                    routeName: submission.routeName,
+                    pickupStop: submission.pickupStop,
+                    courseName: submission.courseName,
+                    fatherName: submission.fatherName,
+                    phone: submission.phone
+                }
+            );
+
+            submission.emailSent = emailResult.success;
+            submission.emailSentAt = emailResult.success ? new Date() : null;
+            submission.emailError = emailResult.success ? null : (emailResult.error || 'Dispatch error');
+            await submission.save();
         }
 
         io.emit('registrationApproved', { id: req.params.id, name: submission.name, username });
@@ -4511,15 +3897,102 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
             success: true,
             username,
             password: rawPassword,
-            emailSent: true,
-            message: `Account created for ${submission.name}!\n\nUsername: "${username}"\nPassword: "${rawPassword}"` + 
+            emailSent: emailResult.success,
+            emailProvider: emailResult.provider,
+            emailPreviewUrl: emailResult.previewUrl,
+            message: `Account approved & created for ${submission.name}!\n\nUsername: "${username}"\nPassword: "${rawPassword}"` + 
                      (submission.email && (req.body.sendEmail !== false)
-                         ? `\n\nCredentials are being emailed to ${submission.email}.`
+                         ? (emailResult.success 
+                             ? `\n\n✅ Official Welcome & Credentials email sent to ${submission.email} via ${emailResult.provider}!`
+                             : `\n\n⚠️ Email dispatch failed: ${emailResult.error}`)
                          : '\n\nShare these credentials with the student.')
         });
     } catch (_err) {
         console.error('Approval error:', _err);
         res.status(500).json({ error: 'Failed to approve registration' });
+    }
+});
+
+// ── MANAGER: Resend Credentials Email ───────────────────────────────────────
+// POST /api/manager/registrations/:id/resend-email
+app.post('/api/manager/registrations/:id/resend-email', authMiddleware, async (req, res) => {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
+    try {
+        const submission = await RegistrationSubmission.findById(req.params.id);
+        if (!submission) return res.status(404).json({ error: 'Submission not found' });
+        if (submission.status !== 'approved') return res.status(400).json({ error: 'Submission is not approved yet' });
+
+        let targetEmail = (req.body.email && req.body.email.trim().length > 0) ? req.body.email.trim() : submission.email;
+        if (!targetEmail) return res.status(400).json({ error: 'No email address specified for this student.' });
+
+        if (req.body.email && req.body.email.trim() !== submission.email) {
+            submission.email = targetEmail;
+            await submission.save();
+            await User.updateOne({ username: submission.studentId }, { email: targetEmail });
+        }
+
+        const username = submission.generatedUsername || submission.studentId;
+        let password = submission.generatedPassword;
+        if (!password) {
+            password = generateStrongRandomPassword(10);
+            const hashedPassword = await secureHashPassword(password);
+            await User.updateOne({ username }, { password: hashedPassword });
+            submission.generatedPassword = password;
+            await submission.save();
+        }
+
+        const emailResult = await sendCredentialsEmail(
+            targetEmail,
+            submission.name,
+            username,
+            password,
+            'student',
+            {
+                routeName: submission.routeName,
+                pickupStop: submission.pickupStop,
+                courseName: submission.courseName,
+                fatherName: submission.fatherName,
+                phone: submission.phone
+            }
+        );
+
+        submission.emailSent = emailResult.success;
+        submission.emailSentAt = emailResult.success ? new Date() : submission.emailSentAt;
+        submission.emailError = emailResult.success ? null : (emailResult.error || 'Dispatch failed');
+        await submission.save();
+
+        res.json({
+            success: emailResult.success,
+            email: targetEmail,
+            provider: emailResult.provider,
+            previewUrl: emailResult.previewUrl,
+            message: emailResult.success
+                ? `Credentials successfully sent to ${targetEmail} via ${emailResult.provider}!`
+                : `Email dispatch failed: ${emailResult.error}`
+        });
+    } catch (err) {
+        console.error('Resend email error:', err);
+        res.status(500).json({ error: 'Failed to resend credentials email' });
+    }
+});
+
+// ── MANAGER: Test Email Dispatch Connection ─────────────────────────────────
+// POST /api/manager/test-email
+app.post('/api/manager/test-email', authMiddleware, async (req, res) => {
+    try {
+        const { email } = req.body;
+        const targetEmail = email || process.env.SMTP_USER || 'denimhajare@gmail.com';
+        const result = await sendCredentialsEmail(
+            targetEmail,
+            'Transport Administrator',
+            'MANAGER_TEST',
+            'SISTec#Test2026',
+            'manager',
+            { routeName: 'Admin Transit Line', pickupStop: 'Administrative Block' }
+        );
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 
@@ -4553,6 +4026,9 @@ app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, 
         submission.createdUserId = undefined;
         submission.generatedUsername = undefined;
         submission.generatedPassword = undefined;
+        submission.emailSent = false;
+        submission.emailSentAt = undefined;
+        submission.emailError = undefined;
         submission.reviewedAt = undefined;
         await submission.save();
 
@@ -4599,8 +4075,9 @@ app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, 
                 continue;
             }
 
-            const rawPassword = password || `SGI@${username}`;
-            const hashedPassword = await argon2.hash(rawPassword);
+            // Generate unique random password for EACH student in bulk approval if not overridden
+            const rawPassword = password || generateStrongRandomPassword(10);
+            const hashedPassword = await secureHashPassword(rawPassword);
 
             // Create student user account
             const newUser = await User.create({
@@ -4628,10 +4105,27 @@ app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, 
             sub.reviewedAt = new Date();
             await sub.save();
 
-            // Dispatch email in background
+            // Dispatch email in background & update delivery status
             if (sub.email) {
-                sendCredentialsEmail(sub.email.trim(), sub.name, username, rawPassword)
-                    .catch(e => console.error(`Failed to send background email for ${sub.name}:`, e));
+                sendCredentialsEmail(
+                    sub.email.trim(),
+                    sub.name,
+                    username,
+                    rawPassword,
+                    'student',
+                    {
+                        routeName: sub.routeName,
+                        pickupStop: sub.pickupStop,
+                        courseName: sub.courseName,
+                        fatherName: sub.fatherName,
+                        phone: sub.phone
+                    }
+                ).then(async (eRes) => {
+                    sub.emailSent = eRes.success;
+                    sub.emailSentAt = eRes.success ? new Date() : null;
+                    sub.emailError = eRes.success ? null : eRes.error;
+                    await sub.save();
+                }).catch(e => console.error(`Failed to send background email for ${sub.name}:`, e));
             }
 
             io.emit('registrationApproved', { id: sub._id.toString(), name: sub.name, username });
@@ -4665,6 +4159,63 @@ app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res
         res.json(updated);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to reject registration' });
+    }
+});
+
+// ── MANAGER: Delete a single registration submission ───────────────────────
+app.delete('/api/manager/registrations/:id', authMiddleware, async (req, res) => {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
+    try {
+        const submission = await RegistrationSubmission.findById(req.params.id);
+        if (!submission) return res.status(404).json({ error: 'Submission not found' });
+
+        // If user was created, clean up the user account
+        if (submission.createdUserId && isValidId(submission.createdUserId)) {
+            await User.findByIdAndDelete(submission.createdUserId);
+        } else if (submission.generatedUsername) {
+            await User.findOneAndDelete({ username: submission.generatedUsername });
+        }
+
+        await RegistrationSubmission.findByIdAndDelete(req.params.id);
+        broadcastStats();
+
+        res.json({ success: true, message: 'Registration deleted successfully' });
+    } catch (err) {
+        console.error('Delete registration error:', err);
+        res.status(500).json({ error: 'Failed to delete registration' });
+    }
+});
+
+// ── MANAGER: Bulk delete multiple submissions ─────────────────────────────
+app.post('/api/manager/registrations/bulk-delete', authMiddleware, async (req, res) => {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'An array of submission IDs is required.' });
+    }
+
+    try {
+        const validIds = ids.filter(id => isValidId(id));
+        const submissions = await RegistrationSubmission.find({ _id: { $in: validIds } });
+
+        for (const sub of submissions) {
+            if (sub.createdUserId && isValidId(sub.createdUserId)) {
+                await User.findByIdAndDelete(sub.createdUserId);
+            } else if (sub.generatedUsername) {
+                await User.findOneAndDelete({ username: sub.generatedUsername });
+            }
+        }
+
+        const deleteResult = await RegistrationSubmission.deleteMany({ _id: { $in: validIds } });
+        broadcastStats();
+
+        res.json({
+            success: true,
+            deletedCount: deleteResult.deletedCount,
+            message: `Successfully deleted ${deleteResult.deletedCount} registrations.`
+        });
+    } catch (err) {
+        console.error('Bulk delete registrations error:', err);
+        res.status(500).json({ error: 'Failed to bulk delete registrations' });
     }
 });
 
@@ -4740,10 +4291,10 @@ app.get('/api/debug/smtp-test', async (req, res) => {
         });
 
         const mailOptions = {
-            from: `"SISTecChalo Test" <${user || 'no-reply@sistecchalo.edu'}>`,
+            from: `"SISTec Chalo" <${user || 'no-reply@sistecchalo.edu'}>`,
             to: testEmail,
-            subject: 'SISTecChalo Render SMTP Test',
-            html: '<h3>SISTecChalo SMTP Test</h3><p>Diagnostic test email from the Render server.</p>'
+            subject: 'SISTec Chalo SMTP Test',
+            html: '<h3>SISTec Chalo SMTP Test</h3><p>Diagnostic test email from the server.</p>'
         };
 
         const info = await transporter.sendMail(mailOptions);
@@ -4864,7 +4415,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =
             return res.status(400).json({ error: 'Username, password, and role are required.' });
         }
 
-        const hashedPassword = await argon2.hash(password);
+        const hashedPassword = await secureHashPassword(password);
         let newUser;
 
         const dupUser = await User.findOne({ username });
@@ -4955,7 +4506,7 @@ app.put('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, async (re
 
         let updatedPasswordHash;
         if (newPassword && newPassword.trim().length >= 6) {
-            updatedPasswordHash = await argon2.hash(newPassword.trim());
+            updatedPasswordHash = await secureHashPassword(newPassword.trim());
         }
 
         if (newRole && newRole.toLowerCase() !== currentRole) {
@@ -5429,6 +4980,8 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
 
     console.log(`⚡ [Render 100% Free Keep-Alive] Active every 8 min → ${SELF_URL}/api/health`);
 });
+
+
 
 
 

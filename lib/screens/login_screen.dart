@@ -9,6 +9,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
+import '../theme/app_theme.dart';
+import '../components/developer_info_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -174,12 +176,12 @@ class _LoginScreenState extends State<LoginScreen> {
               padding: const EdgeInsets.symmetric(horizontal: 32),
               child: Column(
                 children: [
-                  const SizedBox(height: 80),
-                  
+                  const SizedBox(height: 60),
+
                   Text(
                     'SISTecChalo',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 42,
+                      fontSize: 38,
                       fontWeight: FontWeight.w900,
                       color: Colors.white,
                       letterSpacing: -1,
@@ -187,120 +189,114 @@ class _LoginScreenState extends State<LoginScreen> {
                   ).animate().fadeIn(delay: 200.ms),
                   
                   Text(
-                    'Track Your Bus In Real Time',
+                    'TRACK YOUR BUS IN REAL TIME',
                     style: GoogleFonts.plusJakartaSans(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: const Color(0xFF2D5BFF),
-                      letterSpacing: 4,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.primaryLight,
+                      letterSpacing: 3,
                     ),
                   ).animate().fadeIn(delay: 400.ms),
                   
-                  const SizedBox(height: 60),
+                  const SizedBox(height: 48),
                   
                   // Login Card
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(36),
-                    child: BackdropFilter(
-                      filter: ColorFilter.mode(Colors.black.withOpacity(0.3), BlendMode.srcOver),
-                      child: Container(
-                        padding: const EdgeInsets.all(24),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF0F172A).withOpacity(0.85),
-                          borderRadius: BorderRadius.circular(36),
-                          border: Border.all(color: Colors.white.withOpacity(0.08)),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.5),
-                              blurRadius: 30,
-                              offset: const Offset(0, 10),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(32),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      boxShadow: AppShadows.card,
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(width: 4, height: 16, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2))),
+                            const SizedBox(width: 8),
+                            Text(
+                              'IDENTIFY AS',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.textSecondary,
+                                letterSpacing: 1.5,
+                              ),
                             ),
                           ],
                         ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(width: 4, height: 16, decoration: BoxDecoration(color: const Color(0xFF2D5BFF), borderRadius: BorderRadius.circular(2))),
-                                const SizedBox(width: 8),
-                                Text(
-                                  'IDENTIFY AS',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w900,
-                                    color: Colors.white70,
-                                    letterSpacing: 1.5,
+                        const SizedBox(height: 18),
+                        
+                        Row(
+                          children: _roles.map((role) {
+                            final isSelected = _selectedRole == role['id'];
+                            return Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  HapticFeedback.lightImpact();
+                                  setState(() => _selectedRole = role['id']);
+                                },
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 200),
+                                  margin: const EdgeInsets.symmetric(horizontal: 4),
+                                  height: 82,
+                                  decoration: BoxDecoration(
+                                    gradient: isSelected ? const LinearGradient(
+                                      colors: [AppColors.primary, Color(0xFF2563EB)],
+                                      begin: Alignment.topLeft,
+                                      end: Alignment.bottomRight,
+                                    ) : null,
+                                    color: isSelected ? null : Colors.white.withValues(alpha: 0.04),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(
+                                      color: isSelected ? Colors.white.withValues(alpha: 0.4) : Colors.white.withValues(alpha: 0.06),
+                                      width: 1.2,
+                                    ),
+                                    boxShadow: isSelected ? [
+                                      BoxShadow(
+                                        color: AppColors.primary.withValues(alpha: 0.45),
+                                        blurRadius: 18,
+                                        offset: const Offset(0, 6),
+                                      )
+                                    ] : [],
+                                  ),
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        role['icon'], 
+                                        color: isSelected ? Colors.white : AppColors.textMuted, 
+                                        size: 24
+                                      ).animate(target: isSelected ? 1 : 0).scale(begin: const Offset(1,1), end: const Offset(1.1,1.1)),
+                                      const SizedBox(height: 6),
+                                      FittedBox(
+                                        fit: BoxFit.scaleDown,
+                                        child: Text(
+                                          role['label'],
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w900,
+                                            color: isSelected ? Colors.white : AppColors.textMuted,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                              ],
-                            ),
-                            const SizedBox(height: 20),
-                            
-                            Row(
-                              children: _roles.map((role) {
-                                final isSelected = _selectedRole == role['id'];
-                                return Expanded(
-                                  child: GestureDetector(
-                                    onTap: () {
-                                      HapticFeedback.lightImpact();
-                                      setState(() => _selectedRole = role['id']);
-                                    },
-                                    child: AnimatedContainer(
-                                      duration: const Duration(milliseconds: 200),
-                                      margin: const EdgeInsets.symmetric(horizontal: 4),
-                                      height: 85,
-                                      decoration: BoxDecoration(
-                                        color: isSelected ? const Color(0xFF2D5BFF) : Colors.white.withOpacity(0.04),
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(
-                                          color: isSelected ? Colors.white.withOpacity(0.4) : Colors.white.withOpacity(0.06),
-                                          width: 1.2,
-                                        ),
-                                        boxShadow: isSelected ? [
-                                          BoxShadow(
-                                            color: const Color(0xFF2D5BFF).withOpacity(0.5),
-                                            blurRadius: 20,
-                                            offset: const Offset(0, 6),
-                                          )
-                                        ] : [],
-                                      ),
-                                      child: Column(
-                                        mainAxisAlignment: MainAxisAlignment.center,
-                                        children: [
-                                          Icon(
-                                            role['icon'], 
-                                            color: isSelected ? Colors.white : Colors.white38, 
-                                            size: 24
-                                          ).animate(target: isSelected ? 1 : 0).scale(begin: const Offset(1,1), end: const Offset(1.15,1.15)),
-                                          const SizedBox(height: 8),
-                                          FittedBox(
-                                            fit: BoxFit.scaleDown,
-                                            child: Text(
-                                              role['label'],
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 9,
-                                                fontWeight: FontWeight.w900,
-                                                color: isSelected ? Colors.white : Colors.white38,
-                                                letterSpacing: 0.5,
-                                              ),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                );
-                              }).toList(),
-                            ),
+                              ),
+                            );
+                          }).toList(),
+                        ),
                             
                             const SizedBox(height: 28),
                             const Divider(color: Colors.white10),
                             const SizedBox(height: 28),
-                            
-                            _buildInputField(
+                                                       _buildInputField(
                               controller: _usernameController,
-                              hint: 'Username',
+                              hint: 'Username / Enrollment No.',
                               icon: Icons.alternate_email_rounded,
                             ),
                             const SizedBox(height: 16),
@@ -311,20 +307,22 @@ class _LoginScreenState extends State<LoginScreen> {
                               isPassword: true,
                             ),
                             
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 28),
                             
                             Container(
                               width: double.infinity,
-                              height: 60,
+                              height: 56,
                               decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
+                                borderRadius: BorderRadius.circular(20),
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFF2D5BFF), Color(0xFF00F0FF)],
+                                  colors: [AppColors.primary, AppColors.accent],
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
                                 ),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFF2D5BFF).withOpacity(0.4),
-                                    blurRadius: 20,
+                                    color: AppColors.primary.withValues(alpha: 0.4),
+                                    blurRadius: 18,
                                     offset: const Offset(0, 6),
                                   ),
                                 ],
@@ -338,53 +336,106 @@ class _LoginScreenState extends State<LoginScreen> {
                                   backgroundColor: Colors.transparent,
                                   shadowColor: Colors.transparent,
                                   foregroundColor: Colors.white,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                                 ),
                                 child: _isLoginLoading
                                     ? const SizedBox(
-                                        width: 24, 
-                                        height: 24, 
-                                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 3)
+                                        width: 22, 
+                                        height: 22, 
+                                        child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5)
                                       )
-                                    : Text(
-                                        'SIGN IN',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: 2,
-                                          fontSize: 15,
-                                        ),
+                                    : Row(
+                                        mainAxisAlignment: MainAxisAlignment.center,
+                                        children: [
+                                          const Icon(Icons.login_rounded, color: Colors.white, size: 18),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            'SIGN IN',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontWeight: FontWeight.w900,
+                                              letterSpacing: 1.5,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                               ),
                             ),
                           ],
-                        ),
-                      ),
-                    ),
-                  ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.1),
+                        )
+                      ).animate().fadeIn(delay: 600.ms).slideY(begin: 0.08),
                   
                   const SizedBox(height: 24),
                   
-                  TextButton(
-                    onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
-                    child: _isGuestLoading 
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                      : RichText(
-                          text: TextSpan(
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 13),
-                            children: [
-                              const TextSpan(text: 'Or '),
-                              TextSpan(
-                                text: 'Continue as Guest',
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: const Color(0xFF00F0FF),
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ],
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                    ),
+                    child: TextButton.icon(
+                      onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
+                      icon: const Icon(Icons.explore_rounded, color: AppColors.accent, size: 18),
+                      label: _isGuestLoading 
+                        ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+                        : Text(
+                            'Continue as Guest (Live Tracker)',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.accent,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 13,
+                            ),
                           ),
-                        ),
+                    ),
                   ),
-                  const SizedBox(height: 40),
+                  const SizedBox(height: 28),
+
+                  // Developer Credits Footer Badge
+                  InkWell(
+                    onTap: () => showDeveloperCreditsModal(context),
+                    borderRadius: BorderRadius.circular(20),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.rocket_launch_rounded, color: Color(0xFF60A5FA), size: 14),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Engineered by ',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white38,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                          Text(
+                            'Team Rafftar',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF93C5FD),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '• Lead: Denim Hajare',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFFBBF24),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 32),
                 ],
               ),
             ),
@@ -402,34 +453,30 @@ class _LoginScreenState extends State<LoginScreen> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
-        borderRadius: BorderRadius.circular(22),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        color: Colors.white.withValues(alpha: 0.04),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: TextField(
         controller: controller,
         obscureText: isPassword ? _obscurePassword : false,
-        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600),
+        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontWeight: FontWeight.w500),
-          prefixIcon: Icon(icon, color: Colors.white54, size: 20),
+          hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white30, fontWeight: FontWeight.w500, fontSize: 13),
+          prefixIcon: Icon(icon, color: AppColors.primaryLight, size: 20),
           suffixIcon: isPassword
               ? IconButton(
                   icon: Icon(
                     _obscurePassword ? Icons.visibility_off_rounded : Icons.visibility_rounded,
-                    color: Colors.white54,
+                    color: Colors.white38,
                     size: 20,
                   ),
-                  onPressed: () {
-                    setState(() {
-                      _obscurePassword = !_obscurePassword;
-                    });
-                  },
+                  onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                 )
               : null,
           border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
       ),
     );

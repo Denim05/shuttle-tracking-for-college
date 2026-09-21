@@ -5,6 +5,7 @@ const adminSchema = new mongoose.Schema({
   password: { type: String, required: true }, // In production, hash this!
   email: { type: String, unique: true },
   permissions: { type: [String], default: ['all'] }, // Admins have all rights by default
+  mustChangePassword: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

@@ -1,3 +1,4 @@
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -5,6 +6,30 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../models/route_model.dart';
+import '../theme/app_theme.dart';
+
+String generateSecureRandomPassword({int length = 10}) {
+  const upper = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const lower = 'abcdefghijkmnopqrstuvwxyz';
+  const digits = '23456789';
+  const symbols = '!@#\$%&*?';
+  
+  final rand = Random.secure();
+  final chars = <String>[
+    upper[rand.nextInt(upper.length)],
+    lower[rand.nextInt(lower.length)],
+    digits[rand.nextInt(digits.length)],
+    symbols[rand.nextInt(symbols.length)],
+  ];
+  
+  const all = upper + lower + digits + symbols;
+  for (int i = chars.length; i < length; i++) {
+    chars.add(all[rand.nextInt(all.length)]);
+  }
+  
+  chars.shuffle(rand);
+  return chars.join();
+}
 
 class RegistrationManagerScreen extends StatefulWidget {
   final List<RouteModel> routes;
@@ -161,6 +186,92 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     }
   }
 
+  Future<void> _resendEmail(String id, String? currentEmail, String studentName) async {
+    final emailCtrl = TextEditingController(text: currentEmail ?? '');
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF0F1528),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            const Icon(Icons.mark_email_read_rounded, color: Color(0xFF38BDF8), size: 22),
+            const SizedBox(width: 10),
+            Text('Resend Credentials', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Send official welcome and bus tracking login details to $studentName:', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13)),
+            const SizedBox(height: 14),
+            Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF1E1E1E),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: TextField(
+                controller: emailCtrl,
+                keyboardType: TextInputType.emailAddress,
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
+                decoration: const InputDecoration(
+                  hintText: 'Enter student email address',
+                  hintStyle: TextStyle(color: Colors.white30),
+                  prefixIcon: Icon(Icons.email_outlined, color: Color(0xFF38BDF8), size: 18),
+                  border: InputBorder.none,
+                  contentPadding: EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white38))),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.pop(context, true),
+            icon: const Icon(Icons.send_rounded, size: 14),
+            label: Text('SEND EMAIL', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF38BDF8), foregroundColor: Colors.black),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final email = emailCtrl.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please provide a valid email address.'), backgroundColor: Colors.redAccent),
+      );
+      return;
+    }
+
+    try {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Dispatching credentials email to $email...'), backgroundColor: const Color(0xFF4F46E5), behavior: SnackBarBehavior.floating),
+      );
+      final res = await _api.post('manager/registrations/$id/resend-email', {
+        'email': email,
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(res['message'] ?? 'Email dispatched successfully!'),
+          backgroundColor: const Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      _loadSubmissions();
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to send email: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   Future<void> _bulkApproveSelected() async {
     if (_selectedSubmissionIds.isEmpty) return;
     
@@ -209,13 +320,124 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     }
   }
 
+  Future<void> _bulkDeleteSelected() async {
+    if (_selectedSubmissionIds.isEmpty) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF151D30),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 24),
+            const SizedBox(width: 10),
+            Text('Delete Selected?', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to permanently delete ${_selectedSubmissionIds.length} selected registration(s)? Any created student login accounts will also be removed.',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false), 
+            child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text('DELETE ALL', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 12)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _subsLoading = true);
+    try {
+      final response = await _api.post('manager/registrations/bulk-delete', {
+        'ids': _selectedSubmissionIds.toList(),
+      });
+      
+      final deletedCount = response['deletedCount'] ?? _selectedSubmissionIds.length;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Successfully deleted $deletedCount registrations!'),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      
+      setState(() {
+        _selectedSubmissionIds.clear();
+      });
+      _loadSubmissions();
+    } catch (e) {
+      setState(() => _subsLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
+  Future<void> _deleteSubmission(String id) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: const Color(0xFF151D30),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.08)),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 22),
+            const SizedBox(width: 8),
+            Text('Delete Registration?', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          ],
+        ),
+        content: Text('Permanently remove this registration submission and any associated account?', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white38))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+            child: Text('DELETE', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, color: Colors.white, fontSize: 11)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    try {
+      await _api.delete('manager/registrations/$id');
+      _loadSubmissions();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registration deleted'), backgroundColor: Colors.redAccent),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e'), backgroundColor: Colors.redAccent),
+      );
+    }
+  }
+
   Future<void> _approve(Map<String, dynamic> s) async {
     final String id = s['_id'];
     final String studentName = s['name'] ?? 'Student';
     final String studentId = s['studentId'] ?? '';
     final String? studentEmail = s['email'];
 
-    final passwordCtrl = TextEditingController(text: 'SGI@$studentId');
+    final passwordCtrl = TextEditingController(text: generateSecureRandomPassword());
     final emailCtrl = TextEditingController(text: studentEmail ?? '');
     bool sendEmail = emailCtrl.text.trim().isNotEmpty;
     bool isSubmitting = false;
@@ -227,15 +449,19 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
               backgroundColor: const Color(0xFF0F1528),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
               title: Row(
                 children: [
                   const Icon(Icons.verified_user_rounded, color: Color(0xFF38EF7D), size: 24),
                   const SizedBox(width: 12),
-                  Text(
-                    'Approve Student',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+                  Expanded(
+                    child: Text(
+                      'Approve Student',
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
                 ],
               ),
@@ -248,28 +474,96 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                       'Assign login details for $studentName.',
                       style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13, height: 1.4),
                     ),
-                    const SizedBox(height: 20),
-                    Text(
-                      'LOGIN PASSWORD (MIN 6 CHARS)',
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                    const SizedBox(height: 18),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'LOGIN PASSWORD',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold, letterSpacing: 1.2),
+                          ),
+                        ),
+                        GestureDetector(
+                          onTap: () {
+                            setDialogState(() {
+                              passwordCtrl.text = generateSecureRandomPassword();
+                            });
+                          },
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.shuffle_rounded, size: 12, color: AppColors.accent),
+                              const SizedBox(width: 4),
+                              Text(
+                                'RE-GENERATE',
+                                style: GoogleFonts.plusJakartaSans(color: AppColors.accent, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.8),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     Container(
                       decoration: BoxDecoration(
                         color: const Color(0xFF1E1E1E),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white.withOpacity(0.05)),
+                        border: Border.all(color: AppColors.accent.withValues(alpha: 0.35)),
                       ),
                       child: TextField(
                         controller: passwordCtrl,
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: 0.5),
                         decoration: InputDecoration(
-                          hintText: 'Enter custom password',
+                          hintText: 'Enter password',
                           hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white10, fontSize: 13),
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                          suffixIcon: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.shuffle_rounded, color: AppColors.accent, size: 17),
+                                tooltip: 'New Random Password',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                onPressed: () {
+                                  setDialogState(() {
+                                    passwordCtrl.text = generateSecureRandomPassword();
+                                  });
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.copy_rounded, color: Colors.white54, size: 17),
+                                tooltip: 'Copy Password',
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                                onPressed: () {
+                                  Clipboard.setData(ClipboardData(text: passwordCtrl.text));
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Password copied to clipboard!'), backgroundColor: AppColors.primary),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                          ),
                         ),
                       ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        const Icon(Icons.shield_rounded, color: Color(0xFF38EF7D), size: 12),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            'High-entropy (A-Z, a-z, 0-9 & symbols)',
+                            style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     Text(
@@ -386,7 +680,20 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
                               builder: (dialogCtx) => AlertDialog(
                                 backgroundColor: const Color(0xFF1E1E1E),
                                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                                title: Text('✅ Account Created', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900)),
+                                title: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(6),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF34D399).withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.check_circle_rounded, color: Color(0xFF34D399), size: 18),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Text('Account Created', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16)),
+                                  ],
+                                ),
                                 content: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -685,53 +992,95 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
         ]),
       ),
       // Bulk Actions Header (if there are any pending submissions)
-      if (filtered.any((s) => s['status'] == 'pending')) ...[
+      if (filtered.any((s) => s['status'] == 'pending') || _selectedSubmissionIds.isNotEmpty) ...[
         Padding(
-          padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextButton.icon(
-                icon: Icon(
-                  filtered.where((s) => s['status'] == 'pending').every((s) => _selectedSubmissionIds.contains(s['_id']))
-                      ? Icons.check_box_rounded
-                      : Icons.check_box_outline_blank_rounded,
-                  color: Colors.blueAccent,
-                  size: 18,
-                ),
-                label: Text(
-                  filtered.where((s) => s['status'] == 'pending').every((s) => _selectedSubmissionIds.contains(s['_id']))
-                      ? 'DESELECT ALL'
-                      : 'SELECT ALL PENDING',
-                  style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-                onPressed: () {
-                  final pendingIds = filtered
-                      .where((s) => s['status'] == 'pending')
-                      .map((s) => s['_id'] as String)
-                      .toList();
-                  
-                  setState(() {
-                    if (pendingIds.every((id) => _selectedSubmissionIds.contains(id))) {
-                      _selectedSubmissionIds.removeAll(pendingIds);
-                    } else {
-                      _selectedSubmissionIds.addAll(pendingIds);
-                    }
-                  });
-                },
-              ),
-              if (_selectedSubmissionIds.isNotEmpty)
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.verified_rounded, size: 14, color: Colors.black),
-                  label: Text('APPROVE SELECTED (${_selectedSubmissionIds.length})', 
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.black)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF38EF7D),
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  TextButton.icon(
+                    icon: Icon(
+                      filtered.where((s) => s['status'] == 'pending').isNotEmpty &&
+                              filtered.where((s) => s['status'] == 'pending').every((s) => _selectedSubmissionIds.contains(s['_id']))
+                          ? Icons.check_box_rounded
+                          : Icons.check_box_outline_blank_rounded,
+                      color: AppColors.primary,
+                      size: 18,
+                    ),
+                    label: Text(
+                      filtered.where((s) => s['status'] == 'pending').isNotEmpty &&
+                              filtered.where((s) => s['status'] == 'pending').every((s) => _selectedSubmissionIds.contains(s['_id']))
+                          ? 'DESELECT ALL'
+                          : 'SELECT ALL PENDING',
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () {
+                      final pendingIds = filtered
+                          .where((s) => s['status'] == 'pending')
+                          .map((s) => s['_id'] as String)
+                          .toList();
+                      
+                      setState(() {
+                        if (pendingIds.isNotEmpty && pendingIds.every((id) => _selectedSubmissionIds.contains(id))) {
+                          _selectedSubmissionIds.removeAll(pendingIds);
+                        } else {
+                          _selectedSubmissionIds.addAll(pendingIds);
+                        }
+                      });
+                    },
                   ),
-                  onPressed: _bulkApproveSelected,
-                ),
+                  if (_selectedSubmissionIds.isNotEmpty)
+                    Text(
+                      '${_selectedSubmissionIds.length} Selected',
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 11, fontWeight: FontWeight.w700),
+                    ),
+                ],
+              ),
+              if (_selectedSubmissionIds.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.verified_rounded, size: 15, color: Colors.white),
+                        label: Text(
+                          'APPROVE (${_selectedSubmissionIds.length})', 
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 11, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF10B981),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 4,
+                          shadowColor: const Color(0xFF10B981).withValues(alpha: 0.4),
+                        ),
+                        onPressed: _bulkApproveSelected,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: const Icon(Icons.delete_forever_rounded, size: 15, color: Colors.white),
+                        label: Text(
+                          'DELETE (${_selectedSubmissionIds.length})', 
+                          style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, fontSize: 11, color: Colors.white, letterSpacing: 0.5),
+                        ),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 4,
+                          shadowColor: Colors.redAccent.withValues(alpha: 0.4),
+                        ),
+                        onPressed: _bulkDeleteSelected,
+                      ),
+                    ),
+                  ],
+                ).animate().fadeIn(duration: 200.ms).slideY(begin: -0.1),
+              ],
             ],
           ),
         ),
@@ -804,13 +1153,53 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           const SizedBox(width: 12),
           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(s['name'] ?? '', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 15)),
-            Text('ID: ${s['studentId'] ?? ''}  •  📞 ${s['phone'] ?? ''}',
+            const SizedBox(height: 2),
+            Text('ID: ${s['studentId'] ?? ''}  •  ${s['phone'] ?? ''}',
               style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10)),
+            if (s['email'] != null && s['email'].toString().isNotEmpty) ...[
+              const SizedBox(height: 3),
+              Row(
+                children: [
+                  const Icon(Icons.email_outlined, color: Color(0xFF38BDF8), size: 11),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      s['email'],
+                      style: GoogleFonts.plusJakartaSans(color: const Color(0xFF38BDF8).withOpacity(0.9), fontSize: 10, fontWeight: FontWeight.w600),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ])),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.25))),
-            child: Text(status.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: color, fontSize: 8, fontWeight: FontWeight.w900)),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10), border: Border.all(color: color.withOpacity(0.25))),
+                child: Text(status.toUpperCase(), style: GoogleFonts.plusJakartaSans(color: color, fontSize: 8, fontWeight: FontWeight.w900)),
+              ),
+              if (s['emailSent'] == true) ...[
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.mark_email_read_rounded, color: Color(0xFF10B981), size: 10),
+                      const SizedBox(width: 3),
+                      Text('EMAILED', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF10B981), fontSize: 7, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ],
+            ],
           ),
         ]),
         const SizedBox(height: 12),
@@ -844,25 +1233,63 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
         ],
         if (status == 'approved') ...[
           const SizedBox(height: 10),
-          _btn('REVERT TO PENDING (UNAPPROVE)', Colors.orangeAccent, () => _unapprove(s['_id'])),
+          Row(
+            children: [
+              Expanded(
+                child: _btn('RESEND EMAIL', const Color(0xFF38BDF8), () => _resendEmail(s['_id'], s['email'], s['name'] ?? 'Student'), icon: Icons.mark_email_read_rounded),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _btn('REVERT', Colors.orangeAccent, () => _unapprove(s['_id']), icon: Icons.history_rounded),
+              ),
+              const SizedBox(width: 8),
+              _iconBtn(Icons.delete_outline_rounded, Colors.redAccent, () => _deleteSubmission(s['_id'])),
+            ],
+          ),
+        ],
+        if (status == 'rejected') ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _btn('APPROVE', const Color(0xFF10B981), () => _approve(s), icon: Icons.check_circle_outline_rounded),
+              ),
+              const SizedBox(width: 8),
+              _iconBtn(Icons.delete_outline_rounded, Colors.redAccent, () => _deleteSubmission(s['_id'])),
+            ],
+          ),
         ],
         if (isPending) ...[
           const SizedBox(height: 14),
           Row(children: [
-            Expanded(child: _btn('APPROVE', const Color(0xFF38EF7D), () => _approve(s))),
+            Expanded(child: _btn('APPROVE', const Color(0xFF10B981), () => _approve(s), icon: Icons.verified_rounded)),
             const SizedBox(width: 10),
-            Expanded(child: _btn('REJECT', Colors.redAccent, () => _reject(s['_id']))),
+            Expanded(child: _btn('DELETE', Colors.redAccent, () => _deleteSubmission(s['_id']), icon: Icons.delete_outline_rounded)),
           ]),
         ],
       ]),
     ).animate().fadeIn(delay: (i * 60).ms).slideY(begin: 0.05);
   }
 
+  Widget _iconBtn(IconData icon, Color color, VoidCallback onTap) => GestureDetector(
+    onTap: onTap,
+    child: Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Center(child: Icon(icon, color: color, size: 18)),
+    ),
+  );
+
   Color _statusColor(String s) => switch (s) {
-    'approved' => const Color(0xFF38EF7D),
+    'approved' => const Color(0xFF10B981),
     'rejected' => Colors.redAccent,
     'pending'  => const Color(0xFFFFB347),
-    _          => const Color(0xFF2D5BFF),
+    _          => AppColors.primary,
   };
 
   Widget _sectionLabel(String t) => Padding(
@@ -871,7 +1298,11 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   );
 
   Widget _inputField(String hint, TextEditingController ctrl, {int maxLines = 1}) => Container(
-    decoration: BoxDecoration(color: Color(0xFF1E1E1E), borderRadius: BorderRadius.circular(16), border: Border.all(color: Colors.white.withOpacity(0.05))),
+    decoration: BoxDecoration(
+      color: AppColors.surface,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+    ),
     child: TextField(
       controller: ctrl,
       maxLines: maxLines,
@@ -880,12 +1311,33 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
     ),
   );
 
-  Widget _btn(String label, Color color, VoidCallback onTap) => GestureDetector(
+  Widget _btn(String label, Color color, VoidCallback onTap, {IconData? icon}) => GestureDetector(
     onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(14), border: Border.all(color: color.withOpacity(0.3))),
-      child: Center(child: Text(label, style: GoogleFonts.plusJakartaSans(color: color, fontWeight: FontWeight.w900, fontSize: 11, letterSpacing: 0.8))),
+      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (icon != null) ...[
+            Icon(icon, color: color, size: 15),
+            const SizedBox(width: 6),
+          ],
+          Text(
+            label, 
+            style: GoogleFonts.plusJakartaSans(
+              color: color, 
+              fontWeight: FontWeight.w900, 
+              fontSize: 11, 
+              letterSpacing: 0.6,
+            ),
+          ),
+        ],
+      ),
     ),
   );
 }

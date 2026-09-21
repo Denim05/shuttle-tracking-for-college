@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
-import '../services/auth_service.dart';
-import 'package:provider/provider.dart';
+import 'commute_setup_screen.dart';
+import '../theme/app_theme.dart';
+import '../components/developer_info_dialog.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key});
@@ -378,75 +379,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
     );
   }
 
-  void _showAboutDialog() {
-    showDialog(
-      context: context,
-      builder: (dialogCtx) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF0F172A),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(24),
-            side: const BorderSide(color: Colors.white10),
-          ),
-          title: Row(
-            children: [
-              const Icon(Icons.info_outline_rounded, color: Colors.blueAccent, size: 24),
-              const SizedBox(width: 12),
-              Text(
-                'System Information',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildAboutRow('Application', 'SmartCampus Bus'),
-              _buildAboutRow('Platform Version', 'v2.4.0 (Stable)'),
-              _buildAboutRow('API Gateway', 'Secure Gateway Active'),
-              _buildAboutRow('WebSocket Client', 'WSS Connected'),
-              _buildAboutRow('System Mode', _role.toUpperCase()),
-              const Divider(color: Colors.white10, height: 20),
-              Text(
-                '© 2026 SmartTransit Systems. Designed for real-time fleet scheduling, driver telemetry, and safe campus logistics.',
-                style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, height: 1.4),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogCtx),
-              child: Text(
-                'CLOSE',
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.blueAccent,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
 
-  Widget _buildAboutRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
-          Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -576,6 +509,33 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       ),
                     ),
 
+                    if (_role == 'user')
+                      Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: AppColors.surface,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                        ),
+                        child: ListTile(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const CommuteSetupScreen(isInitialSetup: false)),
+                            ).then((_) => _fetchProfile());
+                          },
+                          leading: const Icon(Icons.pin_drop_rounded, color: AppColors.accent, size: 22),
+                          title: Text('DAILY COMMUTE & PICKUP STOP', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+                          subtitle: Text(
+                            _profile['pickupPoint'] != null 
+                              ? 'Stop: ${_profile['pickupPoint']}'
+                              : 'Tap to configure your daily Bhopal stop',
+                            style: GoogleFonts.plusJakartaSans(color: AppColors.accent, fontSize: 11),
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
+                        ),
+                      ),
+
                     // Privacy Policy & Data Usage action
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
@@ -592,19 +552,40 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                       ),
                     ),
 
-                    // About & System Info action
+                    // Developer Credits & Team Info
                     Container(
                       margin: const EdgeInsets.only(bottom: 12),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF1E1E1E).withOpacity(0.4),
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF2563EB).withValues(alpha: 0.12),
+                            const Color(0xFF0EA5E9).withValues(alpha: 0.05),
+                          ],
+                          begin: Alignment.centerLeft,
+                          end: Alignment.centerRight,
+                        ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.white.withOpacity(0.05)),
+                        border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.25)),
                       ),
                       child: ListTile(
-                        onTap: _showAboutDialog,
-                        leading: const Icon(Icons.info_outline_rounded, color: Colors.blueAccent, size: 20),
-                        title: Text('ABOUT & SYSTEM INFORMATION', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Colors.white24, size: 14),
+                        onTap: () => showDeveloperCreditsModal(context),
+                        leading: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.rocket_launch_rounded, color: Color(0xFF60A5FA), size: 18),
+                        ),
+                        title: Text(
+                          'DEVELOPER CREDITS (TEAM RAFFTAR)',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+                        ),
+                        subtitle: Text(
+                          'Lead: Denim Hajare • SISTec Bhopal',
+                          style: GoogleFonts.plusJakartaSans(color: const Color(0xFF93C5FD), fontSize: 11, fontWeight: FontWeight.w500),
+                        ),
+                        trailing: const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF60A5FA), size: 14),
                       ),
                     ),
 

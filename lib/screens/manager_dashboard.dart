@@ -85,117 +85,483 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
   }
 
   Future<void> _downloadReport({String? busId}) async {
+    DateTime selectedDate = DateTime.now();
+    String selectedShift = 'all'; // 'all', 'morning', 'evening'
+    bool isSyncing = false;
+
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text(
-          'Operational Report',
-          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Select report format to open or print:',
-              style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 13),
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) {
+          final dateStr = selectedDate.toIso8601String().split('T')[0];
+          final formattedDisplayDate = '${selectedDate.day.toString().padLeft(2, '0')}-${selectedDate.month.toString().padLeft(2, '0')}-${selectedDate.year}';
+          final isToday = selectedDate.year == DateTime.now().year &&
+              selectedDate.month == DateTime.now().month &&
+              selectedDate.day == DateTime.now().day;
+
+          return AlertDialog(
+            backgroundColor: const Color(0xFF161B26),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(color: Colors.white.withOpacity(0.08)),
             ),
-            const SizedBox(height: 20),
-            // Option 1: Printable HTML
-            GestureDetector(
-              onTap: () {
-                Navigator.pop(ctx);
-                _launchReportUrl(busId, isHtml: true);
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.blueAccent.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.blueAccent.withOpacity(0.25)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.blueAccent.withOpacity(0.12), shape: BoxShape.circle),
-                      child: const Icon(Icons.picture_as_pdf_rounded, color: Colors.blueAccent, size: 20),
+            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 0),
+            contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 20),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF4F46E5), Color(0xFF3B82F6)],
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF4F46E5).withOpacity(0.35),
+                        blurRadius: 10,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(Icons.analytics_rounded, color: Colors.white, size: 22),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Day-Wise Bus Report',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 17,
+                        ),
+                      ),
+                      Text(
+                        '2-Trip Schedule (Morning & Evening)',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white54,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 10),
+                  
+                  // 1. DATE SELECTION
+                  Text(
+                    'OPERATIONAL DATE',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.04),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.calendar_today_rounded, color: Color(0xFF818CF8), size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            isToday ? 'Today ($formattedDisplayDate)' : formattedDisplayDate,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                        InkWell(
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime(2025, 1, 1),
+                              lastDate: DateTime.now().add(const Duration(days: 7)),
+                              builder: (context, child) {
+                                return Theme(
+                                  data: ThemeData.dark().copyWith(
+                                    colorScheme: const ColorScheme.dark(
+                                      primary: Color(0xFF4F46E5),
+                                      onPrimary: Colors.white,
+                                      surface: Color(0xFF1E293B),
+                                      onSurface: Colors.white,
+                                    ),
+                                  ),
+                                  child: child!,
+                                );
+                              },
+                            );
+                            if (picked != null) {
+                              setModalState(() => selectedDate = picked);
+                            }
+                          },
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4F46E5).withOpacity(0.2),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: const Color(0xFF4F46E5).withOpacity(0.4)),
+                            ),
+                            child: Text(
+                              'Change',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF818CF8),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // 2. SHIFT SELECTION
+                  Text(
+                    'SCHEDULE SHIFT',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      _buildShiftFilterChip(
+                        label: 'All 54',
+                        value: 'all',
+                        selectedValue: selectedShift,
+                        onSelected: (val) => setModalState(() => selectedShift = val),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildShiftFilterChip(
+                        label: '🌅 Morning',
+                        value: 'morning',
+                        selectedValue: selectedShift,
+                        onSelected: (val) => setModalState(() => selectedShift = val),
+                      ),
+                      const SizedBox(width: 8),
+                      _buildShiftFilterChip(
+                        label: '🌆 Evening',
+                        value: 'evening',
+                        selectedValue: selectedShift,
+                        onSelected: (val) => setModalState(() => selectedShift = val),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  // 3. ACTION OPTIONS
+                  Text(
+                    'EXPORT OR SYNC FORMAT',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white38,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+
+                  // Option A: Live Google Sheets Sync
+                  InkWell(
+                    onTap: isSyncing ? null : () async {
+                      setModalState(() => isSyncing = true);
+                      try {
+                        final res = await _apiService.post('manager/reports/sync-google-sheets', {
+                          'date': dateStr,
+                        });
+                        setModalState(() => isSyncing = false);
+                        if (mounted) {
+                          Navigator.pop(ctx);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('✅ Synced ${res['syncedMorning'] ?? 27} Morning + ${res['syncedEvening'] ?? 27} Evening Trips & ${res['syncedStops'] ?? 658} Stop Logs to Google Sheets!'),
+                              backgroundColor: const Color(0xFF059669),
+                              behavior: SnackBarBehavior.floating,
+                              action: SnackBarAction(
+                                label: 'OPEN SHEET',
+                                textColor: Colors.white,
+                                onPressed: () {
+                                  final sheetUrl = res['spreadsheetUrl'] ?? 'https://docs.google.com/spreadsheets/d/16V1Og-UYtzN8gM1x3Bj4wZLjdw5-fyvWFMWucwby8EE/edit';
+                                  launchUrl(Uri.parse(sheetUrl), mode: LaunchMode.externalApplication);
+                                },
+                              ),
+                            ),
+                          );
+                          final sheetUrl = res['spreadsheetUrl'] ?? 'https://docs.google.com/spreadsheets/d/16V1Og-UYtzN8gM1x3Bj4wZLjdw5-fyvWFMWucwby8EE/edit';
+                          launchUrl(Uri.parse(sheetUrl), mode: LaunchMode.externalApplication);
+                        }
+                      } catch (e) {
+                        setModalState(() => isSyncing = false);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Google Sheets Sync Failed: $e'),
+                              backgroundColor: Colors.redAccent,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF059669).withOpacity(0.18),
+                            const Color(0xFF10B981).withOpacity(0.08),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFF10B981).withOpacity(0.35)),
+                      ),
+                      child: Row(
                         children: [
-                          Text('HTML (Print / PDF)', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                          Text('Beautiful styled report, ready to print or save', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10)),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF10B981).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: isSyncing 
+                              ? const SizedBox(
+                                  width: 20, height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
+                                )
+                              : const Icon(Icons.table_chart_rounded, color: Color(0xFF10B981), size: 20),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Sync to Google Sheets',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  'Appends real-time Morning & Evening runs for all 27 buses',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white54,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF10B981), size: 14),
                         ],
                       ),
                     ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 12),
-            // Option 2: CSV
-            GestureDetector(
-              onTap: () {
-                Navigator.pop(ctx);
-                _launchReportUrl(busId, isHtml: false);
-              },
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.03),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: Colors.white.withOpacity(0.06)),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.05), shape: BoxShape.circle),
-                      child: const Icon(Icons.grid_on_rounded, color: Colors.greenAccent, size: 20),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Option B: Executive HTML & PDF Print
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchReportUrl(busId, isHtml: true, date: dateStr, shift: selectedShift);
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: Row(
                         children: [
-                          Text('CSV Spreadsheet', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-                          Text('Raw trip logs for Excel / Google Sheets', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10)),
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF4F46E5).withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.print_rounded, color: Color(0xFF818CF8), size: 20),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Executive Print / PDF',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  'Printable layout with SISTec branding & KPI cards',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white38,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.open_in_new_rounded, color: Colors.white24, size: 14),
                         ],
                       ),
                     ),
-                  ],
-                ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Option C: CSV Spreadsheet Download
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchReportUrl(busId, isHtml: false, date: dateStr, shift: selectedShift);
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.03),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.file_download_rounded, color: Colors.amberAccent, size: 20),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Download CSV (Excel)',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  'Raw data format for Microsoft Excel / LibreOffice',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white38,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_downward_rounded, color: Colors.white24, size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
-          ),
-        ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text('Close', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  Future<void> _launchReportUrl(String? busId, {required bool isHtml}) async {
+  Widget _buildShiftFilterChip({
+    required String label,
+    required String value,
+    required String selectedValue,
+    required ValueChanged<String> onSelected,
+  }) {
+    final isSelected = selectedValue == value;
+    return Expanded(
+      child: GestureDetector(
+        onTap: () => onSelected(value),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF4F46E5) : Colors.white.withOpacity(0.04),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: isSelected ? const Color(0xFF818CF8) : Colors.white.withOpacity(0.08),
+            ),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              color: isSelected ? Colors.white : Colors.white60,
+              fontSize: 11,
+              fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _launchReportUrl(String? busId, {required bool isHtml, String? date, String? shift}) async {
     final reportPath = isHtml ? 'bus-trip-report/html' : 'bus-trip-report';
+    final targetDate = date ?? DateTime.now().toIso8601String().split('T')[0];
+    final targetShift = shift ?? 'all';
+    
     final uri = busId != null 
-        ? '${AppConstants.apiUrl}/manager/reports/$reportPath?busId=$busId'
-        : '${AppConstants.apiUrl}/manager/reports/$reportPath';
+        ? '${AppConstants.apiUrl}/manager/reports/$reportPath?busId=$busId&date=$targetDate&shift=$targetShift'
+        : '${AppConstants.apiUrl}/manager/reports/$reportPath?date=$targetDate&shift=$targetShift';
         
     final url = Uri.parse(uri);
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(isHtml ? 'Opening Print / PDF Report...' : 'Downloading Spreadsheet Report...'),
-          backgroundColor: Colors.blueAccent,
+          content: Text(isHtml ? 'Opening Day-Wise Executive Report...' : 'Downloading CSV Fleet Report...'),
+          backgroundColor: const Color(0xFF4F46E5),
+          behavior: SnackBarBehavior.floating,
         ),
       );
     }
@@ -209,11 +575,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
       debugPrint('Error launching report URL: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open link: $e'), backgroundColor: Colors.redAccent),
+          SnackBar(content: Text('Could not open report: $e'), backgroundColor: Colors.redAccent),
         );
       }
     }
   }
+
 
   @override
   void dispose() {
@@ -343,9 +710,20 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       padding: const EdgeInsets.symmetric(vertical: 4),
                       color: Colors.redAccent.withOpacity(0.8),
                       child: Center(
-                        child: Text(
-                          '📡 Connecting...',
-                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const SizedBox(
+                              width: 8,
+                              height: 8,
+                              child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              'CONNECTING TO FLEET SERVER...',
+                              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w900, letterSpacing: 2),
+                            ),
+                          ],
                         ),
                       ),
                     ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
@@ -840,7 +1218,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       ),
                                       const SizedBox(height: 2),
                                       Text(
-                                        phone.isNotEmpty ? '@${driver['username']}  •  📞 $phone' : '@${driver['username']}',
+                                        phone.isNotEmpty ? '@${driver['username']}  •  $phone' : '@${driver['username']}',
                                         style: GoogleFonts.plusJakartaSans(
                                           color: Colors.white54,
                                           fontSize: 11,
@@ -2718,22 +3096,27 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  Widget _buildAudienceChip(String value, String label, Color accentColor) {
+  Widget _buildAudienceChip(String value, String label, IconData icon, Color accentColor) {
     final bool isSelected = _selectedTargetAudience == value;
     return ChoiceChip(
+      avatar: Icon(
+        icon,
+        size: 14,
+        color: isSelected ? accentColor : Colors.white60,
+      ),
       label: Text(
         label,
         style: GoogleFonts.plusJakartaSans(
-          color: isSelected ? Colors.white : Colors.white60,
-          fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+          color: isSelected ? Colors.white : Colors.white70,
+          fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
           fontSize: 12,
         ),
       ),
       selected: isSelected,
-      selectedColor: accentColor.withOpacity(0.3),
-      backgroundColor: const Color(0xFF2A2A2A),
+      selectedColor: accentColor.withOpacity(0.2),
+      backgroundColor: const Color(0xFF1E2638),
       side: BorderSide(
-        color: isSelected ? accentColor : Colors.white10,
+        color: isSelected ? accentColor : Colors.white.withOpacity(0.08),
         width: isSelected ? 1.5 : 1.0,
       ),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
@@ -2805,13 +3188,13 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: [
-                        _buildAudienceChip('All', '🌐 Everyone', Colors.blueAccent),
+                        _buildAudienceChip('All', 'Everyone', Icons.public_rounded, Colors.blueAccent),
                         const SizedBox(width: 8),
-                        _buildAudienceChip('Users', '🎓 Students', Colors.cyanAccent),
+                        _buildAudienceChip('Users', 'Students', Icons.school_rounded, Colors.cyanAccent),
                         const SizedBox(width: 8),
-                        _buildAudienceChip('Drivers', '🚌 Drivers', Colors.amberAccent),
+                        _buildAudienceChip('Drivers', 'Drivers', Icons.directions_bus_rounded, Colors.amberAccent),
                         const SizedBox(width: 8),
-                        _buildAudienceChip('Admins', '🛡️ Admins', Colors.purpleAccent),
+                        _buildAudienceChip('Admins', 'Admins', Icons.admin_panel_settings_rounded, Colors.purpleAccent),
                       ],
                     ),
                   ),

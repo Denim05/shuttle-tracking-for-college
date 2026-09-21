@@ -39,6 +39,7 @@ export const routeAPI = {
   createRoute: (data) => api.post('/api/manager/routes', data),
   updateRoute: (id, data) => api.put(`/api/manager/routes/${id}`, data),
   deleteRoute: (id) => api.delete(`/api/manager/routes/${id}`),
+  geocodeStop: (name) => api.get(`/api/routes/geocode-stop?name=${encodeURIComponent(name)}`),
 };
 
 export const driverAPI = {
@@ -57,6 +58,8 @@ export const registrationAPI = {
   unapprove: (id) => api.put(`/api/manager/registrations/${id}/unapprove`),
   reject: (id, note) => api.put(`/api/manager/registrations/${id}/reject`, { note }),
   bulkApprove: (submissionIds) => api.post('/api/manager/registrations/bulk-approve', { submissionIds }),
+  bulkUpload: (submissions) => api.post('/api/manager/registrations/bulk', { submissions }),
+  createSingle: (data) => api.post('/api/users', data),
 };
 
 export const notificationAPI = {

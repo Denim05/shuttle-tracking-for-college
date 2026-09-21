@@ -1,4 +1,6 @@
-E# Miscellaneous
+# Miscellaneous
+node_modules/
+**/node_modules/
 *.class
 *.log
 *.pyc
@@ -44,3 +46,14 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 android/build/
+
+# Secrets & Service Accounts
+*.env
+*.env.*
+*credentials*.json
+*service-account*.json
+firebase-service-account*.json
+google_sheets_credentials*.json
+google_credentials*.json
+service_account*.json
+

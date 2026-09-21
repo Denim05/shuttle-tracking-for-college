@@ -91,13 +91,31 @@ export default function RouteManager() {
     }
   };
 
+  const handleAutoGeocode = async () => {
+    if (!newStopName || !newStopName.trim()) return;
+    setIsGeocoding(true);
+    try {
+      const res = await routeAPI.geocodeStop(newStopName.trim());
+      if (res.data && res.data.lat && res.data.lng) {
+        setNewStopLat(Number(res.data.lat).toFixed(5));
+        setNewStopLng(Number(res.data.lng).toFixed(5));
+      }
+    } catch (err) {
+      console.error('Auto geocode failed:', err);
+    } finally {
+      setIsGeocoding(false);
+    }
+  };
+
   const handleAddStopToRoute = async () => {
     if (!selectedRoute || !newStopName) return;
-    const updatedStops = [...(selectedRoute.stops || []), { name: newStopName, lat: Number(newStopLat), lng: Number(newStopLng) }];
+    const updatedStops = [...(selectedRoute.stops || []), { name: newStopName, lat: Number(newStopLat) || 0, lng: Number(newStopLng) || 0 }];
     
     try {
       await routeAPI.updateRoute(selectedRoute._id, { ...selectedRoute, stops: updatedStops });
       setNewStopName('');
+      setNewStopLat('');
+      setNewStopLng('');
       fetchRoutes();
     } catch (err) {
       console.error('Add stop error:', err);
@@ -148,15 +166,15 @@ export default function RouteManager() {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: route.color || '#4F46E5' }} />
                       <div>
                         <p className="text-xs font-bold text-white">{route.name}</p>
-                        <p className="text-[10px] text-gray-400">{route.stops?.length || 0} Bus Stops</p>
+                        <p className="text-[10px] text-gray-400">{route.stops?.length || 0} stops configured</p>
                       </div>
                     </div>
 
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleDeleteRoute(route._id); }}
-                      className="text-gray-500 hover:text-red-400 p-1"
+                      className="text-gray-500 hover:text-red-400 p-1 rounded-lg"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
                 );
@@ -164,9 +182,9 @@ export default function RouteManager() {
             </div>
           </div>
 
-          {/* Stop Editor Form for Selected Route */}
+          {/* Add Stop to Selected Route */}
           {selectedRoute && (
-            <div className="glass-panel p-4 rounded-2xl space-y-4">
+            <div className="glass-panel p-4 rounded-2xl space-y-3">
               <h3 className="text-xs font-bold text-white flex items-center space-x-2">
                 <MapPin className="w-4 h-4 text-cyan-400" />
                 <span>Add Stop to "{selectedRoute.name}"</span>
@@ -175,33 +193,42 @@ export default function RouteManager() {
               <div className="space-y-3 text-xs">
                 <div>
                   <label className="block text-gray-400 mb-1">Stop Name</label>
-                  <input 
-                    type="text" 
-                    value={newStopName}
-                    onChange={(e) => setNewStopName(e.target.value)}
-                    placeholder="e.g. Board Office Square"
-                    className="w-full glass-input px-3 py-2 rounded-xl"
-                  />
+                  <div className="flex space-x-2">
+                    <input 
+                      type="text" 
+                      value={newStopName}
+                      onChange={(e) => setNewStopName(e.target.value)}
+                      placeholder="e.g. Board Office Square"
+                      className="flex-1 glass-input px-3 py-2 rounded-xl"
+                    />
+                    <button
+                      onClick={handleAutoGeocode}
+                      disabled={isGeocoding || !newStopName.trim()}
+                      className="bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 text-white px-3 py-2 rounded-xl text-[11px] font-bold transition flex items-center space-x-1"
+                    >
+                      <span>{isGeocoding ? '...' : '🪄 Auto'}</span>
+                    </button>
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
                   <div>
-                    <label className="block text-gray-400 mb-1">Latitude (Optional)</label>
+                    <label className="block text-gray-400 mb-1">Latitude</label>
                     <input 
                       type="text" 
                       step="any"
-                      placeholder="Auto-resolved if empty"
+                      placeholder="Auto-resolved"
                       value={newStopLat || ''}
                       onChange={(e) => setNewStopLat(e.target.value)}
                       className="w-full glass-input px-3 py-2 rounded-xl"
                     />
                   </div>
                   <div>
-                    <label className="block text-gray-400 mb-1">Longitude (Optional)</label>
+                    <label className="block text-gray-400 mb-1">Longitude</label>
                     <input 
                       type="text" 
                       step="any"
-                      placeholder="Auto-resolved if empty"
+                      placeholder="Auto-resolved"
                       value={newStopLng || ''}
                       onChange={(e) => setNewStopLng(e.target.value)}
                       className="w-full glass-input px-3 py-2 rounded-xl"
@@ -209,7 +236,7 @@ export default function RouteManager() {
                   </div>
                 </div>
 
-                <p className="text-[10px] text-cyan-400 font-medium">✨ Auto-Geocoding Enabled: Type a stop name like "Indrapuri" or "MP Nagar" and coordinates will resolve automatically!</p>
+                <p className="text-[10px] text-cyan-400 font-medium">✨ Auto-Geocoding Enabled: Click '🪄 Auto' or tap anywhere on the map to pin coordinates automatically.</p>
 
                 <button
                   onClick={handleAddStopToRoute}

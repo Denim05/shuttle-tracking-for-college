@@ -33,8 +33,8 @@ async function testETA() {
         console.log(`\n🔍 Sample Verification for Route: "${sampleRoute.name}"`);
         console.log(`   Stop: "${stop.name}" -> Lat: ${stop.lat}, Lng: ${stop.lng}`);
         
-        // Simulating bus at Ratibad Campus (23.1270, 77.3494)
-        const busLat = 23.1270, busLng = 77.3494;
+        // Simulating bus at Ratibad Campus (23.180302, 77.302695)
+        const busLat = 23.180302, busLng = 77.302695;
         const R = 6371;
         const dLat = (stop.lat - busLat) * Math.PI / 180;
         const dLon = (stop.lng - busLng) * Math.PI / 180;

@@ -33,7 +33,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
           _isLoading = false;
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -43,19 +43,73 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
     }
   }
 
-  Future<void> _deleteRoute(String id) async {
+  Color _parseColor(String? hexString) {
+    if (hexString == null) return const Color(0xFF06B6D4);
+    try {
+      final clean = hexString.replaceAll('#', '').trim();
+      if (clean.length == 6) return Color(int.parse('0xFF$clean'));
+      if (clean.length == 8) return Color(int.parse('0x$clean'));
+    } catch (_) {}
+    return const Color(0xFF06B6D4);
+  }
+
+  Future<void> _deleteRoute(String id, String name) async {
+    final bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF131D33),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.redAccent.withOpacity(0.3)),
+        ),
+        title: Text(
+          'Delete Route',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18),
+        ),
+        content: Text(
+          'Are you sure you want to delete "$name"? Buses assigned to this route will become unassigned.',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('Delete', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
     try {
       await _apiService.delete('manager/routes/$id');
       _fetchRoutes();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Route deleted', style: GoogleFonts.plusJakartaSans())),
+          SnackBar(
+            content: Text('Route "$name" deleted', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+            backgroundColor: const Color(0xFF131D33),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to delete route', style: GoogleFonts.plusJakartaSans())),
+          SnackBar(
+            content: Text('Failed to delete route: $e', style: GoogleFonts.plusJakartaSans()),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
     }
@@ -63,35 +117,76 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
 
   void _showAddRouteDialog() {
     final nameController = TextEditingController();
-    final colorController = TextEditingController(text: '#2D5BFF');
+    final colorController = TextEditingController(text: '#06B6D4');
     
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text('Add New Route', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: const Color(0xFF131D33),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: const BorderSide(color: Color(0xFF00F0FF), width: 1.2),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.add_road_rounded, color: Color(0xFF00F0FF), size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'Add New Route',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 17),
+            ),
+          ],
+        ),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: nameController,
-                style: const TextStyle(color: Colors.white),
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
                 decoration: InputDecoration(
                   labelText: 'Route Name',
-                  labelStyle: const TextStyle(color: Colors.white38),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                  hintText: 'e.g. Ashoka Garden Route 18',
+                  hintStyle: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 12),
+                  labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12),
+                  filled: true,
+                  fillColor: const Color(0xFF0F172A),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Colors.white10),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF00F0FF), width: 1.5),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               TextField(
                 controller: colorController,
-                style: const TextStyle(color: Colors.white),
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 13),
                 decoration: InputDecoration(
-                  labelText: 'Color (Hex)',
-                  labelStyle: const TextStyle(color: Colors.white38),
-                  enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: Colors.white10)),
+                  labelText: 'Color Accent (Hex)',
+                  hintText: '#06B6D4',
+                  labelStyle: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12),
+                  filled: true,
+                  fillColor: const Color(0xFF0F172A),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Colors.white10),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: const BorderSide(color: Color(0xFF00F0FF), width: 1.5),
+                  ),
+                  prefixIcon: const Icon(Icons.palette_rounded, color: Colors.white38, size: 20),
                 ),
               ),
             ],
@@ -99,30 +194,32 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.of(dialogCtx).pop(),
             child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blueAccent,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              backgroundColor: const Color(0xFF00F0FF),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             onPressed: () async {
-              if (nameController.text.isNotEmpty) {
+              if (nameController.text.trim().isNotEmpty) {
                 try {
                   await _apiService.post('manager/routes', {
-                    'name': nameController.text,
-                    'color': colorController.text,
+                    'name': nameController.text.trim(),
+                    'color': colorController.text.trim(),
                     'stops': [],
                   });
-                  Navigator.pop(context);
+                  if (dialogCtx.mounted) {
+                    Navigator.of(dialogCtx).pop();
+                  }
                   _fetchRoutes();
-                } catch (e) {
-                  // error
-                }
+                } catch (_) {}
               }
             },
-            child: Text('Add', style: GoogleFonts.plusJakartaSans(color: Colors.white)),
+            child: Text('Create Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13)),
           ),
         ],
       ),
@@ -131,109 +228,207 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
 
   @override
   Widget build(BuildContext context) {
+    int totalStopsAcrossRoutes = 0;
+    for (final r in _routes) {
+      if (r['stops'] is List) totalStopsAcrossRoutes += (r['stops'] as List).length;
+    }
+
     return Scaffold(
-      backgroundColor: widget.nested ? Colors.transparent : const Color(0xFF121212),
+      backgroundColor: widget.nested ? Colors.transparent : const Color(0xFF090D16),
       appBar: widget.nested
           ? null
           : AppBar(
-              backgroundColor: Colors.transparent,
+              backgroundColor: const Color(0xFF0F172A),
               elevation: 0,
-              title: Text('Route Management', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 2, fontSize: 14)),
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white, size: 20),
+                onPressed: () => Navigator.pop(context),
+              ),
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Campus Bus Routes',
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 16, color: Colors.white),
+                  ),
+                  Text(
+                    '${_routes.length} Active Routes • $totalStopsAcrossRoutes Stops',
+                    style: GoogleFonts.plusJakartaSans(fontSize: 11, color: const Color(0xFF00F0FF), fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.blueAccent),
+                  tooltip: 'Add New Route',
+                  icon: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00F0FF).withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: const Color(0xFF00F0FF).withOpacity(0.3)),
+                    ),
+                    child: const Icon(Icons.add_rounded, color: Color(0xFF00F0FF), size: 18),
+                  ),
                   onPressed: _showAddRouteDialog,
                 ),
                 const SizedBox(width: 8),
               ],
             ),
-      floatingActionButton: widget.nested
-          ? FloatingActionButton.extended(
-              onPressed: _showAddRouteDialog,
-              backgroundColor: Colors.blueAccent,
-              icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.white),
-              label: Text('Add Route', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold)),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: _showAddRouteDialog,
+        backgroundColor: const Color(0xFF00F0FF),
+        foregroundColor: Colors.black,
+        elevation: 6,
+        icon: const Icon(Icons.add_road_rounded, size: 20),
+        label: Text('New Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13)),
+      ),
       body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Colors.blueAccent))
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFF00F0FF)))
         : _routes.isEmpty
-          ? Center(child: Text('No routes found', style: GoogleFonts.plusJakartaSans(color: Colors.white38)))
-          : ListView.builder(
-              padding: const EdgeInsets.all(20),
-              itemCount: _routes.length,
-              itemBuilder: (context, index) {
-                final route = _routes[index];
-                final color = Color(int.parse(route['color'].replaceAll('#', '0xFF')));
-                return GestureDetector(
-                  onTap: () async {
-                    final result = await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => RouteEditScreen(route: route),
-                      ),
-                    );
-                    if (result == true) {
-                      _fetchRoutes();
-                    }
-                  },
-                  child: Container(
-                    margin: const EdgeInsets.only(bottom: 16),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1E1E1E),
-                      borderRadius: BorderRadius.circular(24),
-                      border: Border.all(color: color.withOpacity(0.1)),
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.alt_route_rounded, color: Colors.white24, size: 50),
+                  const SizedBox(height: 14),
+                  Text('NO CAMPUS ROUTES FOUND', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF00F0FF),
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: color.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Icon(Icons.route_rounded, color: color, size: 28),
-                        ),
-                        const SizedBox(width: 20),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                    icon: const Icon(Icons.add, size: 18),
+                    label: Text('Create First Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+                    onPressed: _showAddRouteDialog,
+                  ),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              color: const Color(0xFF00F0FF),
+              backgroundColor: const Color(0xFF131D33),
+              onRefresh: _fetchRoutes,
+              child: ListView.builder(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 80),
+                itemCount: _routes.length,
+                itemBuilder: (context, index) {
+                  final route = _routes[index];
+                  final color = _parseColor(route['color']);
+                  final List stops = route['stops'] is List ? (route['stops'] as List) : [];
+                  final String name = route['name'] ?? 'Transit Route';
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF131D33),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: color.withOpacity(0.25)),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 12,
+                          offset: const Offset(0, 3),
+                        )
+                      ],
+                    ),
+                    child: Material(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(20),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(20),
+                        onTap: () async {
+                          final result = await Navigator.push(
+                            context,
+                            MaterialPageRoute(builder: (context) => RouteEditScreen(route: route)),
+                          );
+                          if (result == true) _fetchRoutes();
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Row(
                             children: [
-                              Text(
-                                route['name'] ?? 'Unknown Route',
-                                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 16),
+                              // Route Color Icon Badge
+                              Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: color.withOpacity(0.15),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(color: color.withOpacity(0.4)),
+                                ),
+                                child: Icon(Icons.directions_bus_filled_rounded, color: color, size: 24),
                               ),
-                              Text(
-                                '${(route['stops'] as List).length} Stops',
-                                style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold),
+                              const SizedBox(width: 14),
+                              
+                              // Route Info
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      name,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 15,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: color.withOpacity(0.15),
+                                            borderRadius: BorderRadius.circular(8),
+                                          ),
+                                          child: Text(
+                                            '${stops.length} Waypoint Stops',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: color,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              
+                              // Edit Action
+                              IconButton(
+                                icon: const Icon(Icons.edit_note_rounded, color: Color(0xFF00F0FF), size: 24),
+                                tooltip: 'Edit Waypoints',
+                                onPressed: () async {
+                                  final result = await Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => RouteEditScreen(route: route)),
+                                  );
+                                  if (result == true) _fetchRoutes();
+                                },
+                              ),
+
+                              // Delete Action
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
+                                tooltip: 'Delete Route',
+                                onPressed: () => _deleteRoute(route['_id'], name),
                               ),
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.mode_edit_outline_rounded, color: Colors.white38, size: 20),
-                          onPressed: () async {
-                            final result = await Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => RouteEditScreen(route: route),
-                              ),
-                            );
-                            if (result == true) {
-                              _fetchRoutes();
-                            }
-                          },
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent, size: 20),
-                          onPressed: () => _deleteRoute(route['_id']),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ).animate().fadeIn(delay: (index * 100).ms).slideX(begin: 0.1);
-              },
+                  ).animate().fadeIn(delay: (index * 40).ms).slideX(begin: 0.04);
+                },
+              ),
             ),
     );
   }
