@@ -378,7 +378,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       label: _isGuestLoading 
                         ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
                         : Text(
-                            'Continue as Guest (Live Tracker)',
+                            'Continue as Guest',
                             style: GoogleFonts.plusJakartaSans(
                               color: AppColors.accent,
                               fontWeight: FontWeight.w800,

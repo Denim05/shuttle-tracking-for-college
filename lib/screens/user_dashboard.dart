@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'dart:ui' as ui;
 import 'package:google_fonts/google_fonts.dart';
@@ -13,6 +14,7 @@ import '../components/bus_map.dart';
 import '../components/linear_tracking_view.dart';
 import '../models/route_model.dart';
 import '../models/bus_model.dart';
+import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -1165,144 +1167,146 @@ class _UserDashboardState extends State<UserDashboard> {
   }
 
   Widget _buildProfileTab(AuthService auth) {
-    final user = auth.currentUser;
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 80, 24, 100),
-      children: [
-        Center(
-          child: Column(
-            children: [
-              Container(
-                width: 100, height: 100,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(colors: [Color(0xFF2D5BFF), Colors.blueAccent]),
-                  borderRadius: BorderRadius.circular(35),
-                  boxShadow: [BoxShadow(color: const Color(0xFF2D5BFF).withOpacity(0.2), blurRadius: 30)],
-                ),
-                child: Center(
-                  child: Text(
-                    (user?.username ?? 'G')[0].toUpperCase(),
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900),
+    return Consumer<AuthService>(
+      builder: (context, authService, _) {
+        final user = authService.currentUser;
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(24, 80, 24, 100),
+          children: [
+            Center(
+              child: Column(
+                children: [
+                  Container(
+                    width: 100, height: 100,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(colors: [Color(0xFF2D5BFF), Colors.blueAccent]),
+                      borderRadius: BorderRadius.circular(35),
+                      boxShadow: [BoxShadow(color: const Color(0xFF2D5BFF).withOpacity(0.2), blurRadius: 30)],
+                    ),
+                    child: Center(
+                      child: Text(
+                        (user?.username ?? 'G')[0].toUpperCase(),
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 20),
+                  Text(user?.username ?? 'Guest User', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
+                  Text((user?.role ?? 'explorer').toUpperCase(), style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
+                  if (user?.userId != null) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+                      decoration: BoxDecoration(
+                        color: Colors.blueAccent.withOpacity(0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: Colors.blueAccent.withOpacity(0.15)),
+                      ),
+                      child: Text(
+                        'Enrollment: ${user!.userId}',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5),
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              const SizedBox(height: 20),
-              Text(user?.username ?? 'Guest User', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
-              Text((user?.role ?? 'explorer').toUpperCase(), style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
-              if (user?.userId != null) ...[
-                const SizedBox(height: 6),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.06),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.blueAccent.withOpacity(0.15)),
-                  ),
-                  child: Text(
-                    'Enrollment: ${user!.userId}',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-        const SizedBox(height: 50),
-        Consumer<BusStore>(
-          builder: (context, busStore, _) {
-            final latestNotifs = busStore.notifications.take(3).toList();
-            return _buildProfileSection('NOTIFICATION FEED', [
-              if (latestNotifs.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Center(child: Text('NO RECENT ACTIVITY', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 10, fontWeight: FontWeight.bold))),
-                )
-              else
-                ...latestNotifs.map((n) => ListTile(
-                  dense: true,
-                  leading: Icon(
-                    n.type == 'critical' ? Icons.warning_rounded : Icons.info_outline_rounded,
-                    color: n.type == 'critical' ? Colors.redAccent : Colors.blueAccent,
-                    size: 16,
-                  ),
-                  title: Text(n.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                  subtitle: Text(_formatAlertTime(n.timestamp.toIso8601String()), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9)),
-                  onTap: () => setState(() => _currentIndex = 1),
-                )),
-              if (latestNotifs.isNotEmpty)
-                Center(
-                  child: TextButton(
-                    onPressed: () => setState(() => _currentIndex = 1),
-                    child: Text('VIEW ALL HISTORY', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF2D5BFF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
-                  ),
-                ),
-            ]);
-          },
-        ),
-        const SizedBox(height: 24),
-        _buildProfileSection('PREFERENCES', [
-          _buildToggleTile('PROXIMITY ALERTS', 'Notify when bus is near', user?.proximityAlertsEnabled ?? true, (v) => auth.updateProximityAlerts(v)),
-          if (user?.proximityAlertsEnabled ?? true)
-            _buildRadiusSliderTile(user?.proximityRadiusKm ?? 1.0, (v) => auth.updateProximityRadius(v)),
-          _buildProfileTile('THEME', 'NEON DEPTH', Icons.dark_mode_outlined),
-        ]),
-        const SizedBox(height: 24),
-        _buildProfileSection('TRANSPORT', [
-          _buildProfileTile('PICKUP', user?.pickupPoint ?? 'NOT SET', Icons.location_on_outlined),
-          _buildProfileTile('ROUTE', _selectedRoute?.name ?? 'NOT ASSIGNED', Icons.alt_route_rounded),
-        ]),
-        if (!auth.isGuest) ...[
-          const SizedBox(height: 24),
-          // ── Account / Security ─────────────────────────────────────────────
-          _buildProfileSection('ACCOUNT', [
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.blueAccent.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent, size: 18),
-              ),
-              title: Text('Personal Profile', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-              subtitle: Text('Edit your name, email, and phone', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
-              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
+            ),
+            const SizedBox(height: 50),
+            Consumer<BusStore>(
+              builder: (context, busStore, _) {
+                final latestNotifs = busStore.notifications.take(3).toList();
+                return _buildProfileSection('NOTIFICATION FEED', [
+                  if (latestNotifs.isEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Center(child: Text('NO RECENT ACTIVITY', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 10, fontWeight: FontWeight.bold))),
+                    )
+                  else
+                    ...latestNotifs.map((n) => ListTile(
+                      dense: true,
+                      leading: Icon(
+                        n.type == 'critical' ? Icons.warning_rounded : Icons.info_outline_rounded,
+                        color: n.type == 'critical' ? Colors.redAccent : Colors.blueAccent,
+                        size: 16,
+                      ),
+                      title: Text(n.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
+                      subtitle: Text(_formatAlertTime(n.timestamp.toIso8601String()), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9)),
+                      onTap: () => setState(() => _currentIndex = 1),
+                    )),
+                  if (latestNotifs.isNotEmpty)
+                    Center(
+                      child: TextButton(
+                        onPressed: () => setState(() => _currentIndex = 1),
+                        child: Text('VIEW ALL HISTORY', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF2D5BFF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                      ),
+                    ),
+                ]);
               },
             ),
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-              leading: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurpleAccent.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(10),
+            const SizedBox(height: 24),
+            _buildProfileSection('PREFERENCES', [
+              _ProximityPreferencesSection(auth: authService, user: user),
+              _buildProfileTile('THEME', 'NEON DEPTH', Icons.dark_mode_outlined),
+            ]),
+            const SizedBox(height: 24),
+            _buildProfileSection('TRANSPORT', [
+              _buildProfileTile('PICKUP', user?.pickupPoint ?? 'NOT SET', Icons.location_on_outlined),
+              _buildProfileTile('ROUTE', _selectedRoute?.name ?? 'NOT ASSIGNED', Icons.alt_route_rounded),
+            ]),
+            if (!authService.isGuest) ...[
+              const SizedBox(height: 24),
+              // ── Account / Security ─────────────────────────────────────────────
+              _buildProfileSection('ACCOUNT', [
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blueAccent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent, size: 18),
+                  ),
+                  title: Text('Personal Profile', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                  subtitle: Text('Edit your name, email, and phone', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+                  onTap: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
+                  },
                 ),
-                child: const Icon(Icons.lock_outline_rounded, color: Colors.deepPurpleAccent, size: 18),
+                ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.deepPurpleAccent.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.lock_outline_rounded, color: Colors.deepPurpleAccent, size: 18),
+                  ),
+                  title: Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                  subtitle: Text('Update your login password', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+                  onTap: () => _showChangePasswordSheet(authService),
+                ),
+              ]),
+            ],
+            const SizedBox(height: 40),
+            ElevatedButton(
+              onPressed: () => authService.logout(),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent.withOpacity(0.1),
+                foregroundColor: Colors.redAccent,
+                padding: const EdgeInsets.all(20),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                elevation: 0,
               ),
-              title: Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-              subtitle: Text('Update your login password', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
-              trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
-              onTap: () => _showChangePasswordSheet(auth),
+              child: Text('TERMINATE SESSION', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
             ),
-          ]),
-        ],
-        const SizedBox(height: 40),
-        ElevatedButton(
-          onPressed: () => auth.logout(),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.redAccent.withOpacity(0.1),
-            foregroundColor: Colors.redAccent,
-            padding: const EdgeInsets.all(20),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            elevation: 0,
-          ),
-          child: Text('TERMINATE SESSION', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
-        ),
-      ],
-    ).animate().fadeIn();
+          ],
+        ).animate().fadeIn();
+      },
+    );
   }
 
   void _showChangePasswordSheet(AuthService auth) {
@@ -1485,86 +1489,7 @@ class _UserDashboardState extends State<UserDashboard> {
     );
   }
 
-  Widget _buildToggleTile(String title, String sub, bool val, Function(bool) onChanged) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
-      onTap: () {
-        HapticFeedback.lightImpact();
-        onChanged(!val);
-      },
-      title: Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-      subtitle: Text(sub, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
-      trailing: Switch.adaptive(
-        value: val,
-        onChanged: (newVal) {
-          HapticFeedback.lightImpact();
-          onChanged(newVal);
-        },
-        activeColor: const Color(0xFF2D5BFF),
-        activeTrackColor: const Color(0xFF2D5BFF).withValues(alpha: 0.5),
-        inactiveThumbColor: Colors.white60,
-        inactiveTrackColor: Colors.white12,
-      ),
-    );
-  }
 
-  Widget _buildRadiusSliderTile(double currentVal, Function(double) onChanged) {
-    final safeVal = currentVal.clamp(0.5, 3.0);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 6, 16, 14),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('ALERT RADIUS', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
-                ),
-                child: Text(
-                  '${safeVal.toStringAsFixed(1)} KM',
-                  style: GoogleFonts.plusJakartaSans(color: const Color(0xFF00F0FF), fontWeight: FontWeight.w900, fontSize: 12),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              trackHeight: 5,
-              activeTrackColor: const Color(0xFF00F0FF),
-              inactiveTrackColor: Colors.white12,
-              thumbColor: const Color(0xFF00F0FF),
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9, elevation: 3),
-              overlayColor: const Color(0xFF00F0FF).withValues(alpha: 0.25),
-              overlayShape: const RoundSliderOverlayShape(overlayRadius: 22),
-              valueIndicatorColor: const Color(0xFF2D5BFF),
-              valueIndicatorTextStyle: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
-              tickMarkShape: const RoundSliderTickMarkShape(tickMarkRadius: 2),
-              activeTickMarkColor: Colors.transparent,
-              inactiveTickMarkColor: Colors.white24,
-            ),
-            child: Slider(
-              value: safeVal,
-              min: 0.5,
-              max: 3.0,
-              divisions: 5,
-              label: '${safeVal.toStringAsFixed(1)} KM',
-              onChanged: (val) {
-                final rounded = ((val * 2).round() / 2).clamp(0.5, 3.0);
-                onChanged(rounded);
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 
   Widget _buildModernBottomNav() {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
@@ -1883,7 +1808,347 @@ class _UserDashboardState extends State<UserDashboard> {
       highlightColor: Colors.white.withOpacity(0.1),
       child: Column(children: List.generate(4, (i) => Container(height: 100, margin: const EdgeInsets.only(bottom: 16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))))),
     );
-  }}
+  }
+}
+
+class _ProximityPreferencesSection extends StatefulWidget {
+  final AuthService auth;
+  final User? user;
+
+  const _ProximityPreferencesSection({
+    required this.auth,
+    required this.user,
+  });
+
+  @override
+  State<_ProximityPreferencesSection> createState() => _ProximityPreferencesSectionState();
+}
+
+class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSection> {
+  late bool _enabled;
+  late double _radiusKm;
+  Timer? _debounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _enabled = widget.user?.proximityAlertsEnabled ?? true;
+    _radiusKm = (widget.user?.proximityRadiusKm ?? 1.0).clamp(0.5, 3.0);
+  }
+
+  @override
+  void didUpdateWidget(covariant _ProximityPreferencesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_debounceTimer == null || !_debounceTimer!.isActive) {
+      if (widget.user != null) {
+        _enabled = widget.user!.proximityAlertsEnabled;
+        _radiusKm = widget.user!.proximityRadiusKm.clamp(0.5, 3.0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  void _handleToggle(bool newVal) {
+    HapticFeedback.mediumImpact();
+    setState(() {
+      _enabled = newVal;
+    });
+    widget.auth.updateProximityAlerts(newVal);
+  }
+
+  void _handleRadiusChanged(double val) {
+    final rounded = ((val * 2).round() / 2).clamp(0.5, 3.0);
+    if (rounded != _radiusKm) {
+      HapticFeedback.selectionClick();
+    }
+    setState(() {
+      _radiusKm = rounded;
+    });
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 300), () {
+      widget.auth.updateProximityRadius(_radiusKm);
+    });
+  }
+
+  void _handleRadiusEnd(double val) {
+    _debounceTimer?.cancel();
+    final rounded = ((val * 2).round() / 2).clamp(0.5, 3.0);
+    widget.auth.updateProximityRadius(rounded);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // PROXIMITY ALERTS TOGGLE ROW
+        InkWell(
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          onTap: () => _handleToggle(!_enabled),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'PROXIMITY ALERTS',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 13,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        _enabled ? 'Notify when bus enters your zone' : 'Notifications disabled',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: _enabled ? const Color(0xFF00F0FF).withValues(alpha: 0.8) : Colors.white38,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                _SleekNeonSwitch(
+                  value: _enabled,
+                  onChanged: _handleToggle,
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // RADIUS CONTROLLER (Animated CrossFade)
+        AnimatedCrossFade(
+          duration: const Duration(milliseconds: 250),
+          crossFadeState: _enabled ? CrossFadeState.showFirst : CrossFadeState.showSecond,
+          firstChild: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Divider(color: Colors.white.withValues(alpha: 0.05), height: 1),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'ALERT RADIUS',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 12,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            const Color(0xFF2D5BFF).withValues(alpha: 0.2),
+                            const Color(0xFF00F0FF).withValues(alpha: 0.2),
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.4)),
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
+                            blurRadius: 8,
+                          ),
+                        ],
+                      ),
+                      child: Text(
+                        '${_radiusKm.toStringAsFixed(1)} KM',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF00F0FF),
+                          fontWeight: FontWeight.w900,
+                          fontSize: 12,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                SliderTheme(
+                  data: SliderTheme.of(context).copyWith(
+                    trackHeight: 6,
+                    activeTrackColor: const Color(0xFF00F0FF),
+                    inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
+                    thumbColor: Colors.white,
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10, elevation: 4),
+                    overlayColor: const Color(0xFF00F0FF).withValues(alpha: 0.2),
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+                    valueIndicatorColor: const Color(0xFF2D5BFF),
+                    valueIndicatorTextStyle: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  child: Slider(
+                    value: _radiusKm,
+                    min: 0.5,
+                    max: 3.0,
+                    divisions: 5,
+                    onChanged: _handleRadiusChanged,
+                    onChangeEnd: _handleRadiusEnd,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                // QUICK RADIUS PRESET PILLS
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [0.5, 1.0, 1.5, 2.0, 3.0].map((preset) {
+                    final isSelected = (_radiusKm - preset).abs() < 0.05;
+                    return GestureDetector(
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        _handleRadiusChanged(preset);
+                        _handleRadiusEnd(preset);
+                      },
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 180),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isSelected ? const Color(0xFF2D5BFF) : Colors.white.withValues(alpha: 0.04),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: isSelected ? const Color(0xFF00F0FF) : Colors.white.withValues(alpha: 0.06),
+                          ),
+                          boxShadow: isSelected
+                              ? [
+                                  BoxShadow(
+                                    color: const Color(0xFF2D5BFF).withValues(alpha: 0.4),
+                                    blurRadius: 6,
+                                  ),
+                                ]
+                              : null,
+                        ),
+                        child: Text(
+                          '${preset.toStringAsFixed(1)} KM',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: isSelected ? Colors.white : Colors.white38,
+                            fontSize: 10,
+                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ],
+            ),
+          ),
+          secondChild: const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+}
+
+class _SleekNeonSwitch extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+
+  const _SleekNeonSwitch({
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () {
+        HapticFeedback.lightImpact();
+        onChanged(!value);
+      },
+      onHorizontalDragEnd: (details) {
+        if (details.primaryVelocity != null) {
+          HapticFeedback.lightImpact();
+          if (details.primaryVelocity! > 30) {
+            onChanged(true);
+          } else if (details.primaryVelocity! < -30) {
+            onChanged(false);
+          } else {
+            onChanged(!value);
+          }
+        }
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeInOutCubic,
+        width: 52,
+        height: 30,
+        padding: const EdgeInsets.all(3),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: value
+              ? const LinearGradient(
+                  colors: [Color(0xFF2D5BFF), Color(0xFF00F0FF)],
+                  begin: Alignment.centerLeft,
+                  end: Alignment.centerRight,
+                )
+              : null,
+          color: value ? null : const Color(0xFF1E2536),
+          border: Border.all(
+            color: value ? const Color(0xFF00F0FF).withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.12),
+            width: 1.2,
+          ),
+          boxShadow: value
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFF2D5BFF).withValues(alpha: 0.45),
+                    blurRadius: 10,
+                    offset: const Offset(0, 2),
+                  ),
+                  BoxShadow(
+                    color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
+                    blurRadius: 6,
+                  ),
+                ]
+              : null,
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOutBack,
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.35),
+                  blurRadius: 4,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Icon(
+                value ? Icons.check_rounded : Icons.close_rounded,
+                size: 12,
+                color: value ? const Color(0xFF2D5BFF) : Colors.black38,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 
 
