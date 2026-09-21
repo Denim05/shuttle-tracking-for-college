@@ -1170,48 +1170,106 @@ class _UserDashboardState extends State<UserDashboard> {
     return Consumer<AuthService>(
       builder: (context, authService, _) {
         final user = authService.currentUser;
+        final displayName = _getUserDisplayName(user);
+        final enrollmentId = _getEnrollmentId(user);
+        final avatarInitials = _getAvatarInitials(user);
+        final roleName = (user?.role ?? 'User').toUpperCase();
+
         return ListView(
-          padding: const EdgeInsets.fromLTRB(24, 80, 24, 100),
+          padding: const EdgeInsets.fromLTRB(20, 70, 20, 100),
           children: [
             Center(
               child: Column(
                 children: [
                   Container(
-                    width: 100, height: 100,
+                    width: 86,
+                    height: 86,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFF2D5BFF), Colors.blueAccent]),
-                      borderRadius: BorderRadius.circular(35),
-                      boxShadow: [BoxShadow(color: const Color(0xFF2D5BFF).withOpacity(0.2), blurRadius: 30)],
+                      color: const Color(0xFF1E293B),
+                      borderRadius: BorderRadius.circular(24),
+                      border: Border.all(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.35),
+                        width: 1.5,
+                      ),
                     ),
                     child: Center(
                       child: Text(
-                        (user?.username ?? 'G')[0].toUpperCase(),
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 40, fontWeight: FontWeight.w900),
+                        avatarInitials,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF60A5FA),
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                        ),
                       ),
                     ),
                   ),
-                  const SizedBox(height: 20),
-                  Text(user?.username ?? 'Guest User', style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.white)),
-                  Text((user?.role ?? 'explorer').toUpperCase(), style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w800, color: const Color(0xFF2D5BFF), letterSpacing: 2)),
-                  if (user?.userId != null) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: Colors.blueAccent.withOpacity(0.06),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.blueAccent.withOpacity(0.15)),
-                      ),
-                      child: Text(
-                        'Enrollment: ${user!.userId}',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700, letterSpacing: 0.5),
-                      ),
+                  const SizedBox(height: 16),
+                  Text(
+                    displayName,
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      letterSpacing: -0.3,
                     ),
-                  ],
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (enrollmentId.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF131B2E),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF1E293B)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.badge_outlined, size: 14, color: Color(0xFF94A3B8)),
+                              const SizedBox(width: 6),
+                              Text(
+                                enrollmentId,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFFE2E8F0),
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2563EB).withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                        ),
+                        child: Text(
+                          roleName,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF60A5FA),
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
-            const SizedBox(height: 50),
+            const SizedBox(height: 36),
             Consumer<BusStore>(
               builder: (context, busStore, _) {
                 final latestNotifs = busStore.notifications.take(3).toList();
@@ -1219,57 +1277,97 @@ class _UserDashboardState extends State<UserDashboard> {
                   if (latestNotifs.isEmpty)
                     Padding(
                       padding: const EdgeInsets.all(20),
-                      child: Center(child: Text('NO RECENT ACTIVITY', style: GoogleFonts.plusJakartaSans(color: Colors.white12, fontSize: 10, fontWeight: FontWeight.bold))),
+                      child: Center(
+                        child: Text(
+                          'NO RECENT ACTIVITY',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF64748B),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1,
+                          ),
+                        ),
+                      ),
                     )
                   else
                     ...latestNotifs.map((n) => ListTile(
                       dense: true,
-                      leading: Icon(
-                        n.type == 'critical' ? Icons.warning_rounded : Icons.info_outline_rounded,
-                        color: n.type == 'critical' ? Colors.redAccent : Colors.blueAccent,
-                        size: 16,
+                      leading: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: n.type == 'critical'
+                              ? const Color(0xFFEF4444).withValues(alpha: 0.12)
+                              : const Color(0xFF3B82F6).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          n.type == 'critical' ? Icons.warning_rounded : Icons.info_outline_rounded,
+                          color: n.type == 'critical' ? const Color(0xFFEF4444) : const Color(0xFF60A5FA),
+                          size: 16,
+                        ),
                       ),
-                      title: Text(n.message, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600)),
-                      subtitle: Text(_formatAlertTime(n.timestamp.toIso8601String()), style: GoogleFonts.plusJakartaSans(color: Colors.white24, fontSize: 9)),
+                      title: Text(
+                        n.message,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600),
+                      ),
+                      subtitle: Text(
+                        _formatAlertTime(n.timestamp.toIso8601String()),
+                        style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B), fontSize: 10),
+                      ),
                       onTap: () => setState(() => _currentIndex = 1),
                     )),
                   if (latestNotifs.isNotEmpty)
                     Center(
                       child: TextButton(
                         onPressed: () => setState(() => _currentIndex = 1),
-                        child: Text('VIEW ALL HISTORY', style: GoogleFonts.plusJakartaSans(color: const Color(0xFF2D5BFF), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                        child: Text(
+                          'VIEW ALL HISTORY',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF3B82F6),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
                       ),
                     ),
                 ]);
               },
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             _buildProfileSection('PREFERENCES', [
               _ProximityPreferencesSection(auth: authService, user: user),
               _buildProfileTile('THEME', 'NEON DEPTH', Icons.dark_mode_outlined),
             ]),
-            const SizedBox(height: 24),
+            const SizedBox(height: 20),
             _buildProfileSection('TRANSPORT', [
               _buildProfileTile('PICKUP', user?.pickupPoint ?? 'NOT SET', Icons.location_on_outlined),
               _buildProfileTile('ROUTE', _selectedRoute?.name ?? 'NOT ASSIGNED', Icons.alt_route_rounded),
             ]),
             if (!authService.isGuest) ...[
-              const SizedBox(height: 24),
-              // ── Account / Security ─────────────────────────────────────────────
+              const SizedBox(height: 20),
               _buildProfileSection('ACCOUNT', [
                 ListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                   leading: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.blueAccent.withOpacity(0.1),
+                      color: const Color(0xFF2563EB).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.person_outline_rounded, color: Colors.blueAccent, size: 18),
+                    child: const Icon(Icons.person_outline_rounded, color: Color(0xFF60A5FA), size: 18),
                   ),
-                  title: Text('Personal Profile', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: Text('Edit your name, email, and phone', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+                  title: Text(
+                    'Personal Profile',
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    'Edit your name, email, and phone',
+                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B), fontSize: 11),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF475569)),
                   onTap: () {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
                   },
@@ -1279,34 +1377,80 @@ class _UserDashboardState extends State<UserDashboard> {
                   leading: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.deepPurpleAccent.withOpacity(0.1),
+                      color: const Color(0xFF8B5CF6).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(Icons.lock_outline_rounded, color: Colors.deepPurpleAccent, size: 18),
+                    child: const Icon(Icons.lock_outline_rounded, color: Color(0xFFA78BFA), size: 18),
                   ),
-                  title: Text('Change Password', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
-                  subtitle: Text('Update your login password', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11)),
-                  trailing: const Icon(Icons.chevron_right_rounded, color: Colors.white24),
+                  title: Text(
+                    'Change Password',
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    'Update your login password',
+                    style: GoogleFonts.plusJakartaSans(color: const Color(0xFF64748B), fontSize: 11),
+                  ),
+                  trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF475569)),
                   onTap: () => _showChangePasswordSheet(authService),
                 ),
               ]),
             ],
-            const SizedBox(height: 40),
-            ElevatedButton(
-              onPressed: () => authService.logout(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent.withOpacity(0.1),
-                foregroundColor: Colors.redAccent,
-                padding: const EdgeInsets.all(20),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                elevation: 0,
+            const SizedBox(height: 32),
+            Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.25)),
               ),
-              child: Text('TERMINATE SESSION', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w900, letterSpacing: 1.5)),
+              child: ElevatedButton(
+                onPressed: () => authService.logout(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF7F1D1D).withValues(alpha: 0.2),
+                  foregroundColor: const Color(0xFFF87171),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
+                  shadowColor: Colors.transparent,
+                ),
+                child: Text(
+                  'TERMINATE SESSION',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
             ),
           ],
         ).animate().fadeIn();
       },
     );
+  }
+
+  String _getUserDisplayName(User? user) {
+    if (user == null) return 'Guest User';
+    if (user.name != null && user.name!.trim().isNotEmpty && user.name!.trim().toLowerCase() != user.username.trim().toLowerCase()) {
+      return user.name!.trim();
+    }
+    return user.username;
+  }
+
+  String _getEnrollmentId(User? user) {
+    if (user == null) return '';
+    return user.userId ?? user.username;
+  }
+
+  String _getAvatarInitials(User? user) {
+    if (user == null) return 'G';
+    final name = (user.name != null && user.name!.trim().isNotEmpty) ? user.name!.trim() : user.username.trim();
+    final parts = name.split(RegExp(r'\s+'));
+    if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {
+      return '${parts[0][0]}${parts[1][0]}'.toUpperCase();
+    }
+    if (name.isNotEmpty) {
+      return name[0].toUpperCase();
+    }
+    return 'U';
   }
 
   void _showChangePasswordSheet(AuthService auth) {
@@ -1458,14 +1602,22 @@ class _UserDashboardState extends State<UserDashboard> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(left: 12, bottom: 12),
-          child: Text(title, style: GoogleFonts.plusJakartaSans(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.white24, letterSpacing: 1.5)),
+          padding: const EdgeInsets.only(left: 8, bottom: 8),
+          child: Text(
+            title,
+            style: GoogleFonts.plusJakartaSans(
+              fontSize: 11,
+              fontWeight: FontWeight.w800,
+              color: const Color(0xFF64748B),
+              letterSpacing: 1.2,
+            ),
+          ),
         ),
         Container(
           decoration: BoxDecoration(
-            color: Color(0xFF1E1E1E),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withOpacity(0.03)),
+            color: const Color(0xFF131B2E),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF1E293B)),
           ),
           child: Column(children: children),
         ),
@@ -1475,13 +1627,32 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildProfileTile(String label, String val, IconData icon) {
     return ListTile(
-      leading: Icon(icon, color: Colors.white24, size: 20),
-      title: Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11, fontWeight: FontWeight.bold)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(icon, color: const Color(0xFF60A5FA), size: 18),
+      ),
+      title: Text(
+        label,
+        style: GoogleFonts.plusJakartaSans(
+          color: const Color(0xFF94A3B8),
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
       trailing: Container(
-        constraints: const BoxConstraints(maxWidth: 150),
+        constraints: const BoxConstraints(maxWidth: 160),
         child: Text(
-          val, 
-          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 14),
+          val,
+          style: GoogleFonts.plusJakartaSans(
+            color: Colors.white,
+            fontWeight: FontWeight.w700,
+            fontSize: 13,
+          ),
           textAlign: TextAlign.right,
           overflow: TextOverflow.ellipsis,
         ),
@@ -1887,7 +2058,7 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
       children: [
         // PROXIMITY ALERTS TOGGLE ROW
         InkWell(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
           onTap: () => _handleToggle(!_enabled),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -1910,7 +2081,7 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
                       Text(
                         _enabled ? 'Notify when bus enters your zone' : 'Notifications disabled',
                         style: GoogleFonts.plusJakartaSans(
-                          color: _enabled ? const Color(0xFF00F0FF).withValues(alpha: 0.8) : Colors.white38,
+                          color: _enabled ? const Color(0xFF60A5FA) : const Color(0xFF64748B),
                           fontSize: 11,
                           fontWeight: FontWeight.w500,
                         ),
@@ -1919,7 +2090,7 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
                   ),
                 ),
                 const SizedBox(width: 12),
-                _SleekNeonSwitch(
+                _CleanToggleSwitch(
                   value: _enabled,
                   onChanged: _handleToggle,
                 ),
@@ -1930,7 +2101,7 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
 
         // RADIUS CONTROLLER (Animated CrossFade)
         AnimatedCrossFade(
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 220),
           crossFadeState: _enabled ? CrossFadeState.showFirst : CrossFadeState.showSecond,
           firstChild: Padding(
             padding: const EdgeInsets.fromLTRB(16, 4, 16, 14),
@@ -1954,26 +2125,15 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [
-                            const Color(0xFF2D5BFF).withValues(alpha: 0.2),
-                            const Color(0xFF00F0FF).withValues(alpha: 0.2),
-                          ],
-                        ),
+                        color: const Color(0xFF1E293B),
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.4)),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFF00F0FF).withValues(alpha: 0.15),
-                            blurRadius: 8,
-                          ),
-                        ],
+                        border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.4)),
                       ),
                       child: Text(
                         '${_radiusKm.toStringAsFixed(1)} KM',
                         style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF00F0FF),
-                          fontWeight: FontWeight.w900,
+                          color: const Color(0xFF60A5FA),
+                          fontWeight: FontWeight.w800,
                           fontSize: 12,
                           letterSpacing: 0.5,
                         ),
@@ -1984,14 +2144,14 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
                 const SizedBox(height: 8),
                 SliderTheme(
                   data: SliderTheme.of(context).copyWith(
-                    trackHeight: 6,
-                    activeTrackColor: const Color(0xFF00F0FF),
-                    inactiveTrackColor: Colors.white.withValues(alpha: 0.08),
+                    trackHeight: 4,
+                    activeTrackColor: const Color(0xFF2563EB),
+                    inactiveTrackColor: const Color(0xFF334155),
                     thumbColor: Colors.white,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10, elevation: 4),
-                    overlayColor: const Color(0xFF00F0FF).withValues(alpha: 0.2),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
-                    valueIndicatorColor: const Color(0xFF2D5BFF),
+                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9, elevation: 2),
+                    overlayColor: Colors.transparent,
+                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 16),
+                    valueIndicatorColor: const Color(0xFF2563EB),
                     valueIndicatorTextStyle: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
                   ),
                   child: Slider(
@@ -2004,41 +2164,39 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
                   ),
                 ),
                 const SizedBox(height: 6),
-                // QUICK RADIUS PRESET PILLS
+                // QUICK RADIUS PRESET PILLS (Expanded to prevent overflow)
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [0.5, 1.0, 1.5, 2.0, 3.0].map((preset) {
                     final isSelected = (_radiusKm - preset).abs() < 0.05;
-                    return GestureDetector(
-                      onTap: () {
-                        HapticFeedback.selectionClick();
-                        _handleRadiusChanged(preset);
-                        _handleRadiusEnd(preset);
-                      },
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                        decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF2D5BFF) : Colors.white.withValues(alpha: 0.04),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: isSelected ? const Color(0xFF00F0FF) : Colors.white.withValues(alpha: 0.06),
-                          ),
-                          boxShadow: isSelected
-                              ? [
-                                  BoxShadow(
-                                    color: const Color(0xFF2D5BFF).withValues(alpha: 0.4),
-                                    blurRadius: 6,
-                                  ),
-                                ]
-                              : null,
-                        ),
-                        child: Text(
-                          '${preset.toStringAsFixed(1)} KM',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: isSelected ? Colors.white : Colors.white38,
-                            fontSize: 10,
-                            fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 2.5),
+                        child: GestureDetector(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            _handleRadiusChanged(preset);
+                            _handleRadiusEnd(preset);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            padding: const EdgeInsets.symmetric(vertical: 7),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF1E293B),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: isSelected ? const Color(0xFF60A5FA) : const Color(0xFF334155),
+                                width: 1,
+                              ),
+                            ),
+                            child: Text(
+                              '${preset.toStringAsFixed(1)}k',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: isSelected ? Colors.white : const Color(0xFF94A3B8),
+                                fontSize: 11,
+                                fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                              ),
+                            ),
                           ),
                         ),
                       ),
@@ -2055,11 +2213,11 @@ class _ProximityPreferencesSectionState extends State<_ProximityPreferencesSecti
   }
 }
 
-class _SleekNeonSwitch extends StatelessWidget {
+class _CleanToggleSwitch extends StatelessWidget {
   final bool value;
   final ValueChanged<bool> onChanged;
 
-  const _SleekNeonSwitch({
+  const _CleanToggleSwitch({
     required this.value,
     required this.onChanged,
   });
@@ -2075,9 +2233,9 @@ class _SleekNeonSwitch extends StatelessWidget {
       onHorizontalDragEnd: (details) {
         if (details.primaryVelocity != null) {
           HapticFeedback.lightImpact();
-          if (details.primaryVelocity! > 30) {
+          if (details.primaryVelocity! > 25) {
             onChanged(true);
-          } else if (details.primaryVelocity! < -30) {
+          } else if (details.primaryVelocity! < -25) {
             onChanged(false);
           } else {
             onChanged(!value);
@@ -2085,63 +2243,36 @@ class _SleekNeonSwitch extends StatelessWidget {
         }
       },
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeInOutCubic,
-        width: 52,
-        height: 30,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeInOut,
+        width: 48,
+        height: 28,
         padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: value
-              ? const LinearGradient(
-                  colors: [Color(0xFF2D5BFF), Color(0xFF00F0FF)],
-                  begin: Alignment.centerLeft,
-                  end: Alignment.centerRight,
-                )
-              : null,
-          color: value ? null : const Color(0xFF1E2536),
+          borderRadius: BorderRadius.circular(14),
+          color: value ? const Color(0xFF2563EB) : const Color(0xFF334155),
           border: Border.all(
-            color: value ? const Color(0xFF00F0FF).withValues(alpha: 0.6) : Colors.white.withValues(alpha: 0.12),
+            color: value ? const Color(0xFF60A5FA).withValues(alpha: 0.5) : const Color(0xFF475569),
             width: 1.2,
           ),
-          boxShadow: value
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFF2D5BFF).withValues(alpha: 0.45),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                  BoxShadow(
-                    color: const Color(0xFF00F0FF).withValues(alpha: 0.25),
-                    blurRadius: 6,
-                  ),
-                ]
-              : null,
         ),
         child: AnimatedAlign(
-          duration: const Duration(milliseconds: 220),
-          curve: Curves.easeOutBack,
+          duration: const Duration(milliseconds: 180),
+          curve: Curves.easeInOut,
           alignment: value ? Alignment.centerRight : Alignment.centerLeft,
           child: Container(
-            width: 22,
-            height: 22,
-            decoration: BoxDecoration(
+            width: 20,
+            height: 20,
+            decoration: const BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white,
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 4,
-                  offset: const Offset(0, 1),
+                  color: Colors.black26,
+                  blurRadius: 2,
+                  offset: Offset(0, 1),
                 ),
               ],
-            ),
-            child: Center(
-              child: Icon(
-                value ? Icons.check_rounded : Icons.close_rounded,
-                size: 12,
-                color: value ? const Color(0xFF2D5BFF) : Colors.black38,
-              ),
             ),
           ),
         ),
