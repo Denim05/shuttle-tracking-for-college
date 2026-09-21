@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/bus_model.dart';
 import '../models/route_model.dart';
+import '../theme/app_theme.dart';
 import '../utils/map_math.dart';
 import 'package:latlong2/latlong.dart';
 
@@ -19,14 +20,12 @@ class LinearTrackingView extends StatelessWidget {
   Widget build(BuildContext context) {
     final routeColor = Color(int.parse(route.color.replaceAll('#', '0xFF')));
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E293B).withOpacity(0.5),
-        borderRadius: BorderRadius.circular(32),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.4), blurRadius: 24, offset: const Offset(0, 10)),
-        ],
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        boxShadow: AppShadows.card,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -35,56 +34,75 @@ class LinearTrackingView extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.all(12),
+                width: 40,
+                height: 40,
                 decoration: BoxDecoration(
-                  color: routeColor.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: routeColor.withOpacity(0.2)),
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                 ),
-                child: Icon(Icons.directions_bus_filled_rounded, color: routeColor, size: 24),
+                child: const Icon(Icons.alt_route_rounded, color: AppColors.primary, size: 20),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'ROUTE STOPS & TIMELINE',
+                      'ROUTE PROGRESS',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
                         color: Colors.white,
-                        letterSpacing: 0.5,
+                        letterSpacing: -0.2,
                       ),
                     ),
+                    const SizedBox(height: 2),
                     Text(
-                      'BUS TERMINAL ID: #${bus.id.substring(bus.id.length - 4).toUpperCase()}',
+                      'TERMINAL BUS #${bus.id.substring(bus.id.length - 4).toUpperCase()}',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white38,
-                        letterSpacing: 1,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textMuted,
+                        letterSpacing: 0.8,
                       ),
                     ),
                   ],
                 ),
               ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '${bus.speed.toInt()}',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w900),
-                  ),
-                  Text(
-                    'KM/H',
-                    style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900),
-                  ),
-                ],
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceLight,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${bus.speed.toInt()}',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      'KM/H',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.accent,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 40),
+          const SizedBox(height: 32),
           
           // Linear Progress Line
           LayoutBuilder(
@@ -108,7 +126,7 @@ class LinearTrackingView extends StatelessWidget {
                     child: Container(
                       height: 4,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
+                        color: const Color(0xFF1E293B),
                         borderRadius: BorderRadius.circular(2),
                       ),
                     ),
@@ -123,9 +141,8 @@ class LinearTrackingView extends StatelessWidget {
                       width: stopWidth * (route.stops.length - 1) * progress,
                       height: 4,
                       decoration: BoxDecoration(
-                        gradient: LinearGradient(colors: [routeColor, routeColor.withOpacity(0.5)]),
+                        color: AppColors.primary,
                         borderRadius: BorderRadius.circular(2),
-                        boxShadow: [BoxShadow(color: routeColor.withOpacity(0.3), blurRadius: 10)],
                       ),
                     ),
                   ),
@@ -145,23 +162,23 @@ class LinearTrackingView extends StatelessWidget {
                               margin: const EdgeInsets.only(top: 19),
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
-                                color: isVisited ? routeColor : const Color(0xFF0F1219),
+                                color: isVisited ? AppColors.primary : AppColors.surface,
                                 border: Border.all(
-                                  color: isVisited ? routeColor.withOpacity(0.5) : Colors.white.withOpacity(0.1), 
-                                  width: 3
+                                  color: isVisited ? AppColors.primary : const Color(0xFF334155), 
+                                  width: 2.5,
                                 ),
                               ),
                             ),
-                            const SizedBox(height: 16),
+                            const SizedBox(height: 12),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                              padding: const EdgeInsets.symmetric(horizontal: 6.0),
                               child: Text(
                                 entry.value['name'] ?? '',
                                 textAlign: TextAlign.center,
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 11,
-                                  fontWeight: isVisited ? FontWeight.bold : FontWeight.normal,
-                                  color: isVisited ? Colors.white : Colors.white38,
+                                  fontSize: 10.5,
+                                  fontWeight: isVisited ? FontWeight.w700 : FontWeight.w500,
+                                  color: isVisited ? Colors.white : AppColors.textMuted,
                                 ),
                                 maxLines: 2,
                                 overflow: TextOverflow.ellipsis,
@@ -176,26 +193,24 @@ class LinearTrackingView extends StatelessWidget {
                   // Bus Position Marker
                   AnimatedPositioned(
                     duration: const Duration(milliseconds: 800),
-                    left: paddingX + (stopWidth * (route.stops.length - 1) * progress) - 15,
-                    top: 0,
+                    left: paddingX + (stopWidth * (route.stops.length - 1) * progress) - 14,
+                    top: 2,
                     child: Column(
                       children: [
                         Container(
-                          padding: const EdgeInsets.all(6),
+                          padding: const EdgeInsets.all(5),
                           decoration: BoxDecoration(
-                            color: Colors.blueAccent,
+                            color: AppColors.primary,
                             shape: BoxShape.circle,
                             border: Border.all(color: Colors.white, width: 2),
-                            boxShadow: [BoxShadow(color: Colors.blueAccent.withOpacity(0.5), blurRadius: 15)],
                           ),
-                          child: const Icon(Icons.directions_bus_filled_rounded, color: Colors.black, size: 14),
+                          child: const Icon(Icons.directions_bus_rounded, color: Colors.white, size: 12),
                         ),
                       ],
                     ),
                   ),
                 ],
               );
-
 
               if (needsScroll) {
                 return SingleChildScrollView(
@@ -215,7 +230,7 @@ class LinearTrackingView extends StatelessWidget {
               );
             },
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 12),
         ],
       ),
     );

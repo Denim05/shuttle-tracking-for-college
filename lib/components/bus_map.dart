@@ -1989,26 +1989,31 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         child: ClipRRect(
           borderRadius: BorderRadius.circular(14),
           child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 220),
-              width: 46, height: 46,
+              duration: const Duration(milliseconds: 200),
+              width: 44,
+              height: 44,
               decoration: BoxDecoration(
                 color: isActive
-                    ? color.withOpacity(0.90)
-                    : Colors.black.withOpacity(0.55),
+                    ? color.withValues(alpha: 0.90)
+                    : const Color(0xFF0F172A).withValues(alpha: 0.85),
                 borderRadius: BorderRadius.circular(14),
                 border: Border.all(
                   color: isActive
-                      ? color.withOpacity(0.55)
-                      : Colors.white.withOpacity(0.10),
-                  width: 1.2,
+                      ? color.withValues(alpha: 0.50)
+                      : Colors.white.withValues(alpha: 0.08),
+                  width: 1.0,
                 ),
-                boxShadow: isActive
-                    ? [BoxShadow(color: color.withOpacity(0.45), blurRadius: 16, spreadRadius: 1)]
-                    : [],
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.30),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
               ),
-              child: Icon(icon, color: Colors.white, size: 22),
+              child: Icon(icon, color: Colors.white, size: 20),
             ),
           ),
         ),
