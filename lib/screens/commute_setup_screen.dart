@@ -905,6 +905,8 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
                                     fontWeight: FontWeight.w700,
                                     fontSize: 13,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                                 Text(
                                   '${route.name} • $distText away',
@@ -913,6 +915,8 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
                                     fontSize: 11,
                                     fontWeight: FontWeight.w500,
                                   ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ],
                             ),
@@ -1114,12 +1118,16 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
                   children: [
                     const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
                     const SizedBox(width: 10),
-                    Text(
-                      'CONFIRM & START TRACKING',
-                      style: GoogleFonts.plusJakartaSans(
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.1,
-                        fontSize: 13,
+                    Flexible(
+                      child: Text(
+                        'CONFIRM & START TRACKING',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 1.1,
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ),
                   ],

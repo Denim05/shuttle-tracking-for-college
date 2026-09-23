@@ -198,7 +198,13 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           children: [
             const Icon(Icons.mark_email_read_rounded, color: Color(0xFF38BDF8), size: 22),
             const SizedBox(width: 10),
-            Text('Resend Credentials', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            Expanded(
+              child: Text(
+                'Resend Credentials', 
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Column(
@@ -335,7 +341,13 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           children: [
             const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 24),
             const SizedBox(width: 10),
-            Text('Delete Selected?', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+            Expanded(
+              child: Text(
+                'Delete Selected?', 
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Text(
@@ -401,7 +413,13 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           children: [
             const Icon(Icons.delete_forever_rounded, color: Colors.redAccent, size: 22),
             const SizedBox(width: 8),
-            Text('Delete Registration?', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            Expanded(
+              child: Text(
+                'Delete Registration?', 
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
           ],
         ),
         content: Text('Permanently remove this registration submission and any associated account?', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13)),
@@ -1221,9 +1239,14 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
             child: Row(children: [
               const Icon(Icons.key_rounded, color: Colors.blueAccent, size: 14),
               const SizedBox(width: 8),
-              Text('${s['generatedUsername']} / ${s['generatedPassword']}',
-                style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700)),
-              const Spacer(),
+              Expanded(
+                child: Text(
+                  '${s['generatedUsername']} / ${s['generatedPassword']}',
+                  style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 11, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               GestureDetector(
                 onTap: () => Clipboard.setData(ClipboardData(text: 'Username: ${s['generatedUsername']}\nPassword: ${s['generatedPassword']}')),
                 child: const Icon(Icons.copy_rounded, color: Colors.blueAccent, size: 16),
@@ -1236,13 +1259,15 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           Row(
             children: [
               Expanded(
+                flex: 5,
                 child: _btn('RESEND EMAIL', const Color(0xFF38BDF8), () => _resendEmail(s['_id'], s['email'], s['name'] ?? 'Student'), icon: Icons.mark_email_read_rounded),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               Expanded(
+                flex: 4,
                 child: _btn('REVERT', Colors.orangeAccent, () => _unapprove(s['_id']), icon: Icons.history_rounded),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               _iconBtn(Icons.delete_outline_rounded, Colors.redAccent, () => _deleteSubmission(s['_id'])),
             ],
           ),
@@ -1254,7 +1279,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
               Expanded(
                 child: _btn('APPROVE', const Color(0xFF10B981), () => _approve(s), icon: Icons.check_circle_outline_rounded),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
               _iconBtn(Icons.delete_outline_rounded, Colors.redAccent, () => _deleteSubmission(s['_id'])),
             ],
           ),
@@ -1263,7 +1288,7 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
           const SizedBox(height: 14),
           Row(children: [
             Expanded(child: _btn('APPROVE', const Color(0xFF10B981), () => _approve(s), icon: Icons.verified_rounded)),
-            const SizedBox(width: 10),
+            const SizedBox(width: 8),
             Expanded(child: _btn('DELETE', Colors.redAccent, () => _deleteSubmission(s['_id']), icon: Icons.delete_outline_rounded)),
           ]),
         ],
@@ -1274,14 +1299,14 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   Widget _iconBtn(IconData icon, Color color, VoidCallback onTap) => GestureDetector(
     onTap: onTap,
     child: Container(
-      width: 44,
-      height: 44,
+      width: 38,
+      height: 38,
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
-      child: Center(child: Icon(icon, color: color, size: 18)),
+      child: Center(child: Icon(icon, color: color, size: 17)),
     ),
   );
 
@@ -1314,26 +1339,31 @@ class _RegistrationManagerScreenState extends State<RegistrationManagerScreen>
   Widget _btn(String label, Color color, VoidCallback onTap, {IconData? icon}) => GestureDetector(
     onTap: onTap,
     child: Container(
-      padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
           if (icon != null) ...[
-            Icon(icon, color: color, size: 15),
-            const SizedBox(width: 6),
+            Icon(icon, color: color, size: 14),
+            const SizedBox(width: 4),
           ],
-          Text(
-            label, 
-            style: GoogleFonts.plusJakartaSans(
-              color: color, 
-              fontWeight: FontWeight.w900, 
-              fontSize: 11, 
-              letterSpacing: 0.6,
+          Flexible(
+            child: Text(
+              label, 
+              style: GoogleFonts.plusJakartaSans(
+                color: color, 
+                fontWeight: FontWeight.w800, 
+                fontSize: 10.5, 
+                letterSpacing: 0.3,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

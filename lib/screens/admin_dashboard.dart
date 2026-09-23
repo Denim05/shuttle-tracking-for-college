@@ -38,17 +38,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
     super.initState();
     _socketService = Provider.of<SocketService>(context, listen: false);
     _loadStats();
-    _checkApiHealth();
     _initRealtimeStats();
-  }
-
-  Future<void> _checkApiHealth() async {
-    try {
-      await _apiService.get('buses'); // Assumes a /health endpoint
-      if (mounted) setState(() => _isApiHealthy = true);
-    } catch (_) {
-      if (mounted) setState(() => _isApiHealthy = false);
-    }
   }
 
   void _initRealtimeStats() {
@@ -84,20 +74,32 @@ class _AdminDashboardState extends State<AdminDashboard> {
   Future<void> _loadStats() async {
     setState(() => _isRefreshing = true);
     try {
-      final buses = await _apiService.get('buses');
-      final routes = await _apiService.get('routes');
-      final users = await _apiService.get('users');
-      
+      final results = await Future.wait([
+        _apiService.get('buses'),
+        _apiService.get('routes', useCache: true),
+        _apiService.get('users'),
+      ]);
+
       if (!mounted) return;
+      final buses = results[0] is List ? results[0] : <dynamic>[];
+      final routes = results[1] is List ? results[1] : <dynamic>[];
+      final users = results[2] is List ? results[2] : <dynamic>[];
+
       setState(() {
         _busCount = (buses as List).length;
         _routeCount = (routes as List).length;
         _userCount = (users as List).length;
+        _isApiHealthy = true;
         _isRefreshing = false;
       });
     } catch (e) {
       debugPrint('Admin stats error: $e');
-      if (mounted) setState(() => _isRefreshing = false);
+      if (mounted) {
+        setState(() {
+          _isApiHealthy = false;
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
@@ -232,39 +234,45 @@ class _AdminDashboardState extends State<AdminDashboard> {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'SISTEC CAMPUS RADAR',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppColors.textMuted,
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 2.0,
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'SISTEC CAMPUS RADAR',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textMuted,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 2.0,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      width: 7, height: 7,
-                      decoration: const BoxDecoration(color: AppColors.accentGreen, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'SYSTEM OPERATIONAL', 
-                      style: GoogleFonts.plusJakartaSans(
-                        color: Colors.white, 
-                        fontSize: 12, 
-                        fontWeight: FontWeight.w800, 
-                        letterSpacing: 0.5,
+                  const SizedBox(height: 4),
+                  Row(
+                    children: [
+                      Container(
+                        width: 7, height: 7,
+                        decoration: const BoxDecoration(color: AppColors.accentGreen, shape: BoxShape.circle),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'SYSTEM OPERATIONAL', 
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white, 
+                            fontSize: 12, 
+                            fontWeight: FontWeight.w800, 
+                            letterSpacing: 0.5,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
+            const SizedBox(width: 12),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
@@ -409,6 +417,7 @@ class _AdminDashboardState extends State<AdminDashboard> {
                       fontWeight: FontWeight.w700, 
                       fontSize: 13.5,
                     ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
@@ -433,27 +442,33 @@ class _AdminDashboardState extends State<AdminDashboard> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  color: color, 
-                  shape: BoxShape.circle,
+          Expanded(
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    color: color, 
+                    shape: BoxShape.circle,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 14),
-              Text(
-                service, 
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white, 
-                  fontWeight: FontWeight.w700, 
-                  fontSize: 13,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    service, 
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white, 
+                      fontWeight: FontWeight.w700, 
+                      fontSize: 13,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
+          const SizedBox(width: 10),
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
             decoration: BoxDecoration(

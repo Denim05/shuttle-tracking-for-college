@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
@@ -25,6 +24,7 @@ import 'complaint_screen.dart';
 import 'profile_settings_screen.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
+import '../utils/timetable_resolver.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -40,6 +40,8 @@ class _UserDashboardState extends State<UserDashboard> {
   bool _isLoading = true;
   RouteModel? _selectedRoute;
   Bus? _activeBus;
+  String? _selectedShiftFilter;
+  String _shiftTimelineDirection = (DateTime.now().hour < 12) ? 'pickup' : 'dropoff';
   int _currentIndex = 0;
   bool _showDebugOverlay = false;
   int _tapCounter = 0;
@@ -60,18 +62,35 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Future<void> _fetchData() async {
     final auth = Provider.of<AuthService>(context, listen: false);
-    final endpoint = auth.isGuest ? 'guest/routes' : 'routes';
+    final busStore = Provider.of<BusStore>(context, listen: false);
+    final routeEndpoint = auth.isGuest ? 'guest/routes' : 'routes';
+    final busEndpoint = auth.isGuest ? 'guest/buses' : 'buses';
+
     try {
-      final List<dynamic> data = await _apiService.get(endpoint, requiresAuth: !auth.isGuest);
+      // Parallel concurrent API requests instead of sequential blocking
+      final List<dynamic> results = await Future.wait([
+        _apiService.get(routeEndpoint, requiresAuth: !auth.isGuest, useCache: true),
+        _apiService.get(busEndpoint, requiresAuth: !auth.isGuest),
+        if (!auth.isGuest) _apiService.get('notifications') else Future.value([]),
+      ]);
+
       if (!mounted) return;
-      _routes = data.map((r) => RouteModel.fromJson(r)).toList();
-      
-      final busEndpoint = auth.isGuest ? 'guest/buses' : 'buses';
-      final List<dynamic> busData = await _apiService.get(busEndpoint, requiresAuth: !auth.isGuest);
-      if (!mounted) return;
-      
-      final busStore = Provider.of<BusStore>(context, listen: false);
-      busStore.seedBuses(busData);
+
+      final dynamic routeData = results[0];
+      final dynamic busData = results[1];
+      final dynamic notifData = results.length > 2 ? results[2] : [];
+
+      if (routeData is List) {
+        _routes = routeData.map((r) => RouteModel.fromJson(r)).toList();
+      }
+
+      if (busData is List) {
+        busStore.seedBuses(busData);
+      }
+
+      if (notifData is List && notifData.isNotEmpty) {
+        busStore.seedNotifications(notifData);
+      }
 
       // Read saved route preference from local storage
       String? savedRouteId;
@@ -111,16 +130,8 @@ class _UserDashboardState extends State<UserDashboard> {
         _isLoading = false;
         _updateActiveBus(busStore);
       });
-
-      // Load notification history (only for logged-in users)
-      if (!auth.isGuest) {
-        try {
-          final notifData = await _apiService.get('notifications');
-          busStore.seedNotifications(notifData as List);
-        } catch (_) {}
-      }
     } catch (e) {
-      debugPrint('Error fetching data: $e');
+      debugPrint('Error fetching user dashboard data: $e');
       if (mounted) setState(() => _isLoading = false);
     }
   }
@@ -397,55 +408,39 @@ class _UserDashboardState extends State<UserDashboard> {
       top: topPadding + 8,
       left: 16,
       right: 16,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-          child: Container(
-            constraints: const BoxConstraints(minHeight: 58),
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-            decoration: BoxDecoration(
-              color: AppColors.bgSecondary.withValues(alpha: 0.90),
-              borderRadius: BorderRadius.circular(22),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  blurRadius: 18,
-                  offset: const Offset(0, 6),
-                ),
-              ],
-            ),
+      child: RepaintBoundary(
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 58),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.35),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                GestureDetector(
-                  onTap: () {
-                    _tapCounter++;
-                    if (_tapCounter >= 3) {
-                      setState(() => _showDebugOverlay = !_showDebugOverlay);
-                      _tapCounter = 0;
-                    }
-                    Future.delayed(1.seconds, () => _tapCounter = 0);
-                  },
-                  child: Container(
-                    width: 40,
-                    height: 40,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.14),
-                      borderRadius: BorderRadius.circular(13),
-                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                    ),
-                    child: const Icon(
-                      Icons.directions_bus_rounded,
-                      color: AppColors.primary,
-                      size: 20,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 4),
                 Expanded(
-                  child: Column(
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _tapCounter++;
+                      if (_tapCounter >= 3) {
+                        setState(() => _showDebugOverlay = !_showDebugOverlay);
+                        _tapCounter = 0;
+                      }
+                      Future.delayed(1.seconds, () => _tapCounter = 0);
+                    },
+                    child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     mainAxisAlignment: MainAxisAlignment.center,
                     mainAxisSize: MainAxisSize.min,
@@ -497,7 +492,8 @@ class _UserDashboardState extends State<UserDashboard> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 8),
+              ),
+              const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _showRouteSelection,
                   child: Container(
@@ -549,13 +545,36 @@ class _UserDashboardState extends State<UserDashboard> {
                     child: const Icon(Icons.emergency_rounded, color: AppColors.danger, size: 19),
                   ),
                 ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () => _handleLogout(context, auth),
+                  child: Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: auth.isGuest
+                          ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
+                          : const Color(0xFFEF4444).withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: auth.isGuest
+                            ? const Color(0xFF3B82F6).withValues(alpha: 0.35)
+                            : const Color(0xFFEF4444).withValues(alpha: 0.25),
+                      ),
+                    ),
+                    child: Icon(
+                      auth.isGuest ? Icons.login_rounded : Icons.logout_rounded,
+                      color: auth.isGuest ? const Color(0xFF60A5FA) : const Color(0xFFF87171),
+                      size: 18,
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
-        ),
-      ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.1),
-    );
-  }
+        ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.1),
+      );
+    }
 
   Widget _getViewForIndex(AuthService auth, int index, BusStore busStore) {
     switch (index) {
@@ -744,25 +763,49 @@ class _UserDashboardState extends State<UserDashboard> {
                                       ),
                                     ),
                                   ],
-                                  if (_activeBus != null) ...[
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceLight,
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                                      ),
-                                      child: Text(
-                                        'BUS #${_activeBus!.id.substring(math.max(0, _activeBus!.id.length - 4)).toUpperCase()}',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppColors.primaryLight,
-                                          letterSpacing: 0.8,
-                                        ),
+                                  // Manager Assigned Bus Number Pill
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceLight,
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                                    ),
+                                    child: Text(
+                                      _getAssignedBusLabel(busStore),
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.primaryLight,
+                                        letterSpacing: 0.8,
                                       ),
                                     ),
-                                  ],
+                                  ),
+                                  // Current Day & Shift Tag
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.surfaceLight,
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.schedule_rounded, color: AppColors.textMuted, size: 11),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          '${_getCurrentDayLabel()} • ${_getAssignedShiftLabel()}',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.textSecondary,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ],
                               ),
                             ],
@@ -811,12 +854,20 @@ class _UserDashboardState extends State<UserDashboard> {
                       ],
                     ),
 
+                    const SizedBox(height: 20),
+                    _buildHeroTransitCard(busStore),
+                    const SizedBox(height: 14),
+                    _buildQuickActionsRow(),
                     const SizedBox(height: 24),
-                    _buildStatGrid(),
-                    const SizedBox(height: 28),
-                    if (_activeBus != null && _activeBus!.status != 'Offline')
-                      LinearTrackingView(bus: _activeBus!, route: _selectedRoute!)
-                    else
+                    if (_activeBus != null && _activeBus!.status != 'Offline') ...[
+                      LinearTrackingView(
+                        bus: _activeBus!, 
+                        route: _selectedRoute!,
+                        shiftDirection: _shiftTimelineDirection,
+                      ),
+                      const SizedBox(height: 24),
+                      _buildStopsList(),
+                    ] else
                       _buildStopsList(),
                   ],
                 ],
@@ -827,157 +878,660 @@ class _UserDashboardState extends State<UserDashboard> {
       );
     }
 
-  Widget _buildStatGrid() {
+  String _getAssignedBusLabel(BusStore busStore) {
+    if (_selectedShiftFilter != null) {
+      return TimetableResolver.resolveAssignedBusNumber(
+        routeName: _selectedRoute?.name,
+        shift: _selectedShiftFilter,
+      );
+    }
+    if (_activeBus != null) {
+      return _activeBus!.displayBusNumber;
+    }
+    if (_selectedRoute != null) {
+      final busesOnRoute = busStore.allBuses.where((b) => b.routeId == _selectedRoute!.id).toList();
+      if (busesOnRoute.isNotEmpty) {
+        return busesOnRoute.first.displayBusNumber;
+      }
+      return TimetableResolver.resolveAssignedBusNumber(
+        routeName: _selectedRoute!.name,
+      );
+    }
+    return 'BUS ASSIGNED';
+  }
+
+  String _getAssignedShiftLabel() {
+    if (_selectedShiftFilter != null) {
+      return TimetableResolver.resolveShiftLabel(
+        explicitShift: _selectedShiftFilter,
+        routeName: _selectedRoute?.name,
+      );
+    }
+    if (_activeBus != null) {
+      return _activeBus!.shiftLabel;
+    }
+    if (_selectedRoute != null) {
+      return TimetableResolver.resolveShiftLabel(
+        routeName: _selectedRoute!.name,
+        currentHour: DateTime.now().hour,
+      );
+    }
+    return TimetableResolver.resolveShiftLabel();
+  }
+
+  String _getCurrentDayLabel() {
+    return TimetableResolver.getCurrentDayLabel();
+  }
+
+  void _showShiftAllocationModal(BusStore busStore) {
+    HapticFeedback.mediumImpact();
+    final routeName = _selectedRoute?.name ?? 'SISTec Transit Route';
+    final availableShifts = TimetableResolver.getShiftsForRoute(routeName);
+    final currentDay = TimetableResolver.getCurrentDayLabel();
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (context, setModalState) {
+            return Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 28),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                boxShadow: AppShadows.card,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 36,
+                      height: 4,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'MANAGER BUS ALLOCATION',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: AppColors.primaryLight,
+                                letterSpacing: 1.2,
+                              ),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              'Day & Shift Schedule',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: -0.3,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.surfaceLight,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                        ),
+                        child: Text(
+                          '$currentDay • ACTIVE',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.accentGreen,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    'Official manager-assigned fleet vehicles and departure times for this corridor:',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontSize: 11.5,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Flexible(
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      physics: const BouncingScrollPhysics(),
+                      itemCount: availableShifts.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 10),
+                      itemBuilder: (context, idx) {
+                        final entry = availableShifts[idx];
+                        final isSelected = (_selectedShiftFilter == null && idx == 0) ||
+                            (_selectedShiftFilter == entry.shift);
+
+                        return GestureDetector(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            final bool isEveningOrDropoff = entry.period.toLowerCase().contains('afternoon') ||
+                                entry.period.toLowerCase().contains('evening') ||
+                                entry.shift.toLowerCase().contains('shift 2') ||
+                                entry.shift.toLowerCase().contains('shift 3') ||
+                                entry.shift.toLowerCase().contains('shift 4');
+                            setState(() {
+                              _selectedShiftFilter = entry.shift;
+                              _shiftTimelineDirection = isEveningOrDropoff ? 'dropoff' : 'pickup';
+                            });
+                            Navigator.pop(ctx);
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? AppColors.primary.withValues(alpha: 0.12)
+                                  : AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: isSelected
+                                    ? AppColors.primary.withValues(alpha: 0.5)
+                                    : Colors.white.withValues(alpha: 0.06),
+                                width: isSelected ? 1.5 : 1.0,
+                              ),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
+                                    color: isSelected ? AppColors.primary : AppColors.surfaceLight,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      entry.busNumber,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w900,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            entry.displayBusLabel,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              fontSize: 13,
+                                              fontWeight: FontWeight.w800,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.surfaceLight,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              entry.shiftTag,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w700,
+                                                color: AppColors.primaryLight,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        'Departs: ${entry.morningDeparture} • Reg: ${entry.vehicleNo}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          color: AppColors.textMuted,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Driver: ${entry.driverName}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 10.5,
+                                          color: AppColors.textSecondary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Icon(
+                                  isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                  color: isSelected ? AppColors.primaryLight : AppColors.textMuted,
+                                  size: 20,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  if (_selectedShiftFilter != null)
+                    Center(
+                      child: TextButton.icon(
+                        onPressed: () {
+                          HapticFeedback.lightImpact();
+                          setState(() {
+                            _selectedShiftFilter = null;
+                            _shiftTimelineDirection = (DateTime.now().hour < 12) ? 'pickup' : 'dropoff';
+                          });
+                          Navigator.pop(ctx);
+                        },
+                        icon: const Icon(Icons.restart_alt_rounded, size: 14, color: AppColors.textMuted),
+                        label: Text(
+                          'Reset to Auto/Current Shift',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildHeroTransitCard(BusStore busStore) {
     final isLive = _activeBus != null && _activeBus!.status != 'Offline';
     final auth = Provider.of<AuthService>(context, listen: false);
     final hasPickup = (auth.currentUser?.pickupPoint ?? '').isNotEmpty;
+    final pickupName = auth.currentUser?.pickupPoint ?? '';
 
     String etaDisplay = '--';
+    String etaUnit = 'MIN';
     if (_etaLoading) {
       etaDisplay = '...';
+      etaUnit = '';
     } else if (_etaMinutes != null) {
-      etaDisplay = '$_etaMinutes MIN';
+      etaDisplay = '$_etaMinutes';
+      etaUnit = 'MIN';
     } else if (isLive) {
       if (_activeBus!.etas.isNotEmpty) {
-        etaDisplay = '${_activeBus!.etas.first.minutes} MIN';
+        etaDisplay = '${_activeBus!.etas.first.minutes}';
+        etaUnit = 'MIN';
       }
     }
 
-    return Column(
-      children: [
-        Row(
-          children: [
-            Expanded(
-              child: _buildStatItem(
-                label: hasPickup ? 'ETA TO STOP' : 'ESTIMATED ARRIVAL',
-                val: etaDisplay,
-                icon: Icons.schedule_rounded,
-                iconColor: AppColors.primary,
-                onTapAction: (hasPickup && isLive) ? _fetchETA : null,
-                actionIcon: (hasPickup && isLive) ? Icons.refresh_rounded : null,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: _buildStatItem(
-                label: 'BUS VELOCITY',
-                val: isLive ? '${_activeBus!.speed.toInt()} KM/H' : '--',
-                icon: Icons.speed_rounded,
-                iconColor: AppColors.accent,
-              ),
-            ),
-          ],
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isLive ? AppColors.primary.withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.08),
+          width: isLive ? 1.5 : 1.0,
         ),
-        if (hasPickup && _selectedRoute != null) ...[
-          const SizedBox(height: 12),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.primary.withValues(alpha: 0.20)),
-            ),
+        boxShadow: AppShadows.card,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header: Status chip + Manager Bus Pill + Shift + Refresh action
+          Padding(
+            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.12),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 16),
-                ),
-                const SizedBox(width: 10),
                 Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
+                  child: Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
-                      Text(
-                        'ASSIGNED PICKUP STOP',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.textMuted,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.0,
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        decoration: BoxDecoration(
+                          color: isLive 
+                              ? AppColors.accentGreen.withValues(alpha: 0.12)
+                              : Colors.white.withValues(alpha: 0.05),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isLive ? AppColors.accentGreen.withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.08),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 6,
+                              height: 6,
+                              decoration: BoxDecoration(
+                                color: isLive ? AppColors.accentGreen : AppColors.textMuted,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              isLive ? 'LIVE' : 'SCHEDULED',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: isLive ? AppColors.accentGreen : AppColors.textMuted,
+                                letterSpacing: 0.8,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 1),
-                      Text(
-                        auth.currentUser!.pickupPoint!.toUpperCase(),
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
+                      GestureDetector(
+                        onTap: () => _showShiftAllocationModal(busStore),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.surfaceLight,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.directions_bus_rounded, size: 11, color: AppColors.primaryLight),
+                              const SizedBox(width: 4),
+                              Text(
+                                _getAssignedBusLabel(busStore),
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primaryLight,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
+                      ),
+                      GestureDetector(
+                        onTap: () => _showShiftAllocationModal(busStore),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.bgSecondary,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.schedule_rounded, size: 10, color: AppColors.textMuted),
+                              const SizedBox(width: 3),
+                              Text(
+                                '${_getCurrentDayLabel()} • ${_getAssignedShiftLabel()}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.textSecondary,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(8),
+                if (hasPickup && isLive)
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _fetchETA();
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.05),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.refresh_rounded, color: AppColors.primaryLight, size: 16),
+                    ),
                   ),
-                  child: Text(
-                    'MY STOP',
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 14),
+
+          // Main Hero Metrics: ETA Big Bold Typography + Speed Chip
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(
+                  etaDisplay,
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 42,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -1.5,
+                    height: 1.0,
+                  ),
+                ),
+                if (etaUnit.isNotEmpty) ...[
+                  const SizedBox(width: 6),
+                  Text(
+                    etaUnit,
                     style: GoogleFonts.plusJakartaSans(
-                      color: AppColors.primaryLight,
-                      fontSize: 8.5,
+                      fontSize: 15,
                       fontWeight: FontWeight.w800,
+                      color: AppColors.primaryLight,
                       letterSpacing: 0.5,
                     ),
+                  ),
+                ],
+                const Spacer(),
+                // Velocity Chip
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: AppColors.bgSecondary,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.speed_rounded, color: AppColors.accent, size: 15),
+                      const SizedBox(width: 6),
+                      Text(
+                        isLive ? '${_activeBus!.speed.toInt()}' : '--',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white,
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        'KM/H',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
           ),
+
+          const SizedBox(height: 12),
+
+          // Assigned Stop Sub-Card inside Hero
+          Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppColors.bgSecondary,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: hasPickup 
+                          ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))
+                          : AppColors.accentGreen.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      hasPickup 
+                          ? (_shiftTimelineDirection == 'dropoff' ? Icons.departure_board_rounded : Icons.my_location_rounded) 
+                          : Icons.location_on_rounded,
+                      color: hasPickup 
+                          ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primary) 
+                          : AppColors.accentGreen,
+                      size: 15,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          hasPickup 
+                              ? (_shiftTimelineDirection == 'dropoff' ? 'ESTIMATED DROP-OFF AT YOUR STOP' : 'ESTIMATED ARRIVAL AT YOUR STOP')
+                              : (_shiftTimelineDirection == 'dropoff' ? 'CAMPUS DEPARTURE ➔ CITY DROP-OFF' : 'ORIGIN & ROUTE TERMINAL'),
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.textMuted,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                        const SizedBox(height: 1),
+                        Text(
+                          hasPickup 
+                              ? pickupName.toUpperCase() 
+                              : (_shiftTimelineDirection == 'dropoff'
+                                  ? 'SISTEC CAMPUS ➔ ${_selectedRoute?.stops.isNotEmpty == true ? (_selectedRoute!.stops.first['name'] ?? "CITY TERMINAL").toString().toUpperCase() : "CITY TERMINAL"}'
+                                  : (_selectedRoute?.stops.isNotEmpty == true 
+                                      ? (_selectedRoute!.stops.first['name'] ?? 'TERMINAL STOP').toString().toUpperCase()
+                                      : 'SISTEC CAMPUS')),
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (hasPickup)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primary).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        _shiftTimelineDirection == 'dropoff' ? 'MY DROP-OFF' : 'MY STOP',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: _shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primaryLight,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ],
-        const SizedBox(height: 16),
-        // Quick Actions Row (Equal width expanded items)
-        Row(
-          children: [
-            Expanded(
-              child: _buildQuickAction(
-                icon: Icons.calendar_month_rounded,
-                label: 'SCHEDULE',
-                color: AppColors.primary,
-                onTap: _selectedRoute != null
-                    ? () => Navigator.push(context, MaterialPageRoute(
-                          builder: (_) => ScheduleScreen(route: _selectedRoute!)))
-                    : null,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildQuickAction(
-                icon: _delaySubscribed
-                    ? Icons.notifications_active_rounded
-                    : Icons.notifications_none_rounded,
-                label: _delaySubscribed ? 'SUBSCRIBED' : 'DELAY ALERT',
-                color: _delaySubscribed ? AppColors.accentGreen : AppColors.warning,
-                onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: _buildQuickAction(
-                icon: Icons.report_problem_rounded,
-                label: 'REPORT',
-                color: AppColors.danger,
-                onTap: () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => ComplaintScreen(
-                        selectedRoute: _selectedRoute,
-                        activeBus: _activeBus,
-                      ))),
-              ),
-            ),
-          ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsRow() {
+    return Row(
+      children: [
+        Expanded(
+          child: _buildQuickAction(
+            icon: Icons.calendar_month_rounded,
+            label: 'SCHEDULE',
+            color: AppColors.primary,
+            onTap: _selectedRoute != null
+                ? () => Navigator.push(context, MaterialPageRoute(
+                      builder: (_) => ScheduleScreen(route: _selectedRoute!)))
+                : null,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildQuickAction(
+            icon: _delaySubscribed
+                ? Icons.notifications_active_rounded
+                : Icons.notifications_none_rounded,
+            label: _delaySubscribed ? 'SUBSCRIBED' : 'DELAY ALERT',
+            color: _delaySubscribed ? AppColors.accentGreen : AppColors.warning,
+            onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildQuickAction(
+            icon: Icons.report_problem_rounded,
+            label: 'REPORT',
+            color: AppColors.danger,
+            onTap: () => Navigator.push(context, MaterialPageRoute(
+                  builder: (_) => ComplaintScreen(
+                    selectedRoute: _selectedRoute,
+                    activeBus: _activeBus,
+                  ))),
+          ),
         ),
       ],
     );
@@ -991,7 +1545,12 @@ class _UserDashboardState extends State<UserDashboard> {
   }) {
     final disabled = onTap == null;
     return GestureDetector(
-      onTap: onTap,
+      onTap: () {
+        if (!disabled) {
+          HapticFeedback.lightImpact();
+          onTap();
+        }
+      },
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
         decoration: BoxDecoration(
@@ -1035,82 +1594,6 @@ class _UserDashboardState extends State<UserDashboard> {
                 ),
                 maxLines: 1,
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem({
-    required String label,
-    required String val,
-    required IconData icon,
-    Color iconColor = AppColors.primary,
-    VoidCallback? onTapAction,
-    IconData? actionIcon,
-  }) {
-    return GestureDetector(
-      onTap: onTapAction,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          boxShadow: AppShadows.card,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Container(
-                  width: 34,
-                  height: 34,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Icon(icon, color: iconColor, size: 17),
-                ),
-                if (actionIcon != null)
-                  Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.05),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(actionIcon, color: iconColor, size: 13),
-                  ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                val,
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: -0.5,
-                ),
-              ),
-            ),
-            const SizedBox(height: 3),
-            Text(
-              label,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textMuted,
-                fontSize: 9,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.8,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -1186,6 +1669,17 @@ class _UserDashboardState extends State<UserDashboard> {
               expandedHeight: 110,
               backgroundColor: AppColors.bgSecondary,
               pinned: true,
+              actions: [
+                if (allAlerts.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: IconButton(
+                      icon: const Icon(Icons.delete_sweep_rounded, color: Colors.white70, size: 22),
+                      tooltip: 'Clear All Notifications',
+                      onPressed: () => _confirmClearAllNotifications(context, busStore),
+                    ),
+                  ),
+              ],
               flexibleSpace: FlexibleSpaceBar(
                 titlePadding: const EdgeInsets.fromLTRB(20, 0, 20, 14),
                 title: Row(
@@ -1263,12 +1757,9 @@ class _UserDashboardState extends State<UserDashboard> {
                 : SliverList(
                     delegate: SliverChildBuilderDelegate(
                       (context, index) => _buildNotificationCard(
-                        {
-                          'message' : allAlerts[index].message,
-                          'timestamp': allAlerts[index].timestamp.toIso8601String(),
-                          'priority' : allAlerts[index].type == 'critical' ? 'critical' : 'important',
-                        },
+                        allAlerts[index],
                         index,
+                        busStore,
                       ),
                       childCount: allAlerts.length,
                     ),
@@ -1280,6 +1771,81 @@ class _UserDashboardState extends State<UserDashboard> {
     );
   }
 
+  Future<void> _confirmClearAllNotifications(BuildContext context, BusStore busStore) async {
+    HapticFeedback.lightImpact();
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.delete_sweep_rounded, color: Color(0xFFEF4444), size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'CLEAR ALL',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to clear all ${busStore.notifications.length} notifications?',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('CANCEL', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text('CLEAR ALL', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      busStore.clearAllNotifications();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.delete_sweep_rounded, color: Color(0xFFEF4444), size: 18),
+                const SizedBox(width: 8),
+                Text('All notifications cleared', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600)),
+              ],
+            ),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    }
+  }
+
   String _formatAlertTime(String? timestamp) {
     if (timestamp == null) return 'JUST NOW';
     final date = DateTime.parse(timestamp).toLocal();
@@ -1289,75 +1855,124 @@ class _UserDashboardState extends State<UserDashboard> {
     return '${diff.inHours}H AGO';
   }
 
-  Widget _buildNotificationCard(Map<String, dynamic> alert, int index) {
-    final isCritical = alert['priority'] == 'critical';
+  Widget _buildNotificationCard(LiveNotification alert, int index, BusStore busStore) {
+    final isCritical = alert.type == 'critical';
     final accentColor = isCritical ? AppColors.danger : AppColors.primary;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: accentColor.withValues(alpha: 0.2)),
-        boxShadow: AppShadows.card,
+    return Dismissible(
+      key: Key('notif_${alert.id}_$index'),
+      direction: DismissDirection.endToStart,
+      onDismissed: (_) {
+        busStore.removeNotification(alert.id);
+        ScaffoldMessenger.of(context).clearSnackBars();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Notification removed', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13)),
+            backgroundColor: const Color(0xFF1E293B),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      },
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        decoration: BoxDecoration(
+          color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.4)),
+        ),
+        alignment: Alignment.centerRight,
+        child: const Row(
+          mainAxisAlignment: MainAxisAlignment.end,
+          children: [
+            Text('DELETE', style: TextStyle(color: Color(0xFFF87171), fontWeight: FontWeight.bold, fontSize: 12)),
+            SizedBox(width: 8),
+            Icon(Icons.delete_outline_rounded, color: Color(0xFFF87171), size: 22),
+          ],
+        ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(12),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: accentColor.withValues(alpha: 0.2)),
+          boxShadow: AppShadows.card,
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: accentColor.withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(
+                isCritical ? Icons.warning_rounded : Icons.info_outline_rounded,
+                color: isCritical ? AppColors.danger : AppColors.primaryLight,
+                size: 18,
+              ),
             ),
-            child: Icon(
-              isCritical ? Icons.warning_rounded : Icons.info_outline_rounded,
-              color: isCritical ? AppColors.danger : AppColors.primaryLight,
-              size: 18,
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      isCritical ? 'CRITICAL ALERT' : 'TRANSIT DIRECTIVE', 
-                      style: GoogleFonts.plusJakartaSans(
-                        color: isCritical ? AppColors.danger : AppColors.primaryLight,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 1.2,
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          isCritical ? 'CRITICAL ALERT' : 'TRANSIT DIRECTIVE', 
+                          style: GoogleFonts.plusJakartaSans(
+                            color: isCritical ? AppColors.danger : AppColors.primaryLight,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: 1.2,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                    Text(
-                      _formatAlertTime(alert['timestamp']),
-                      style: GoogleFonts.plusJakartaSans(
-                        color: AppColors.textMuted,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
+                      const SizedBox(width: 8),
+                      Text(
+                        _formatAlertTime(alert.timestamp.toIso8601String()),
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  alert['message'] ?? '',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13.5,
-                    height: 1.35,
+                    ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 6),
+                  Text(
+                    alert.message,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13.5,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.close_rounded, color: Colors.white38, size: 18),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 28, minHeight: 28),
+              tooltip: 'Delete notification',
+              onPressed: () {
+                busStore.removeNotification(alert.id);
+              },
+            ),
+          ],
+        ),
       ),
     ).animate().fadeIn(delay: (index * 40).ms).slideY(begin: 0.05);
   }
@@ -1591,36 +2206,197 @@ class _UserDashboardState extends State<UserDashboard> {
                 ),
               ]),
             ],
-            const SizedBox(height: 32),
-            Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFEF4444).withValues(alpha: 0.25)),
-              ),
-              child: ElevatedButton(
-                onPressed: () => authService.logout(),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF7F1D1D).withValues(alpha: 0.2),
-                  foregroundColor: const Color(0xFFF87171),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                  elevation: 0,
-                  shadowColor: Colors.transparent,
+            const SizedBox(height: 28),
+            if (authService.isGuest) ...[
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(18),
+                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.25)),
                 ),
-                child: Text(
-                  'TERMINATE SESSION',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                    fontSize: 13,
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(Icons.info_outline_rounded, color: Color(0xFF60A5FA), size: 18),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'BROWSING IN GUEST MODE',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF60A5FA),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.8,
+                                ),
+                              ),
+                              Text(
+                                'Sign in to access personalized alerts, route customization & emergency services.',
+                                style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () => _handleLogout(context, authService),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                          elevation: 0,
+                        ),
+                        icon: const Icon(Icons.login_rounded, size: 18),
+                        label: Text(
+                          'SIGN IN WITH ACCOUNT',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _handleLogout(context, authService),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFF87171),
+                    side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.4), width: 1.2),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: Text(
+                    'EXIT GUEST MODE',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ),
-            ),
+            ] else ...[
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _handleLogout(context, authService),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF7F1D1D).withValues(alpha: 0.25),
+                    foregroundColor: const Color(0xFFF87171),
+                    side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.35)),
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    elevation: 0,
+                  ),
+                  icon: const Icon(Icons.logout_rounded, size: 18),
+                  label: Text(
+                    'LOG OUT OF SESSION',
+                    style: GoogleFonts.plusJakartaSans(
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.0,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ).animate().fadeIn();
       },
     );
+  }
+
+  Future<void> _handleLogout(BuildContext context, AuthService authService) async {
+    HapticFeedback.mediumImpact();
+    final bool isGuest = authService.isGuest;
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEF4444).withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.logout_rounded, color: Color(0xFFEF4444), size: 20),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              isGuest ? 'EXIT GUEST MODE' : 'LOG OUT',
+              style: GoogleFonts.plusJakartaSans(
+                color: Colors.white,
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          isGuest
+              ? 'Are you sure you want to exit guest mode and return to the login screen?'
+              : 'Are you sure you want to end your active session and log out?',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'CANCEL',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontWeight: FontWeight.bold),
+            ),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(
+              isGuest ? 'EXIT GUEST' : 'LOG OUT',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await authService.logout();
+      if (context.mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    }
   }
 
   String _getUserDisplayName(User? user) {
@@ -1726,57 +2502,59 @@ class _UserDashboardState extends State<UserDashboard> {
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
               padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 36, height: 4,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(4),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36, height: 4,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Text(
-                    'Change Password',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Enter your current password, then set a new one.',
-                    style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
-                  ),
-                  const SizedBox(height: 20),
-                  _pwField(ctx, 'Current Password', currentCtrl, showCurrent, () => setSheetState(() => showCurrent = !showCurrent)),
-                  const SizedBox(height: 12),
-                  _pwField(ctx, 'New Password (min 6 chars)', newCtrl, showNew, () => setSheetState(() => showNew = !showNew)),
-                  const SizedBox(height: 12),
-                  _pwField(ctx, 'Confirm New Password', confirmCtrl, showNew, null),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: saving ? null : submit,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.primary,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 0,
+                    const SizedBox(height: 18),
+                    Text(
+                      'Change Password',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w900,
                       ),
-                      child: saving
-                          ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                          : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 4),
+                    Text(
+                      'Enter your current password, then set a new one.',
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 20),
+                    _pwField(ctx, 'Current Password', currentCtrl, showCurrent, () => setSheetState(() => showCurrent = !showCurrent)),
+                    const SizedBox(height: 12),
+                    _pwField(ctx, 'New Password (min 6 chars)', newCtrl, showNew, () => setSheetState(() => showNew = !showNew)),
+                    const SizedBox(height: 12),
+                    _pwField(ctx, 'Confirm New Password', confirmCtrl, showNew, null),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: saving ? null : submit,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primary,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          elevation: 0,
+                        ),
+                        child: saving
+                            ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                            : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -2018,27 +2796,29 @@ class _UserDashboardState extends State<UserDashboard> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Available Shuttle Routes',
-                          style: GoogleFonts.plusJakartaSans(
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            fontSize: 17,
-                            letterSpacing: -0.2,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Available Shuttle Routes',
+                            style: GoogleFonts.plusJakartaSans(
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              fontSize: 17,
+                              letterSpacing: -0.2,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'Select your route to synchronize GPS',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textSecondary,
-                            fontSize: 12,
+                          const SizedBox(height: 2),
+                          Text(
+                            'Select your route to synchronize GPS',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.textSecondary,
+                              fontSize: 12,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
                     if (_selectedRoute != null)
                       TextButton(
@@ -2170,35 +2950,69 @@ class _UserDashboardState extends State<UserDashboard> {
   }
 
   Widget _buildStopsList() {
+    if (_selectedRoute == null || _selectedRoute!.stops.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
     final auth = Provider.of<AuthService>(context, listen: false);
     final userPickup = auth.currentUser?.pickupPoint?.toLowerCase().trim() ?? '';
+    final isDropoff = _shiftTimelineDirection == 'dropoff';
+    
+    // In morning (Shift 1 / Pickup): Stops -> Campus (regular order)
+    // In 2nd shift (Shift 2+ / Dropoff): Campus -> Stops (reversed order)
+    final List<Map<String, dynamic>> displayedStops = isDropoff 
+        ? _selectedRoute!.stops.reversed.toList() 
+        : _selectedRoute!.stops;
+    final int totalStops = displayedStops.length;
+
+    final String firstStopName = displayedStops.first['name']?.toString() ?? 'Origin';
+    final String lastStopName = displayedStops.last['name']?.toString() ?? 'Destination';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Header & Shift Switcher
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              'ROUTE TIMELINE',
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.2,
-              ),
+            Row(
+              children: [
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    isDropoff ? Icons.departure_board_rounded : Icons.route_rounded,
+                    color: isDropoff ? AppColors.accent : AppColors.primaryLight,
+                    size: 14,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'ROUTE TIMELINE',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textMuted,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
             ),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
               decoration: BoxDecoration(
                 color: AppColors.surfaceLight,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
               ),
               child: Text(
-                '${_selectedRoute!.stops.length} STOPS',
+                '$totalStops STOPS',
                 style: GoogleFonts.plusJakartaSans(
-                  color: AppColors.primaryLight,
+                  color: isDropoff ? AppColors.accent : AppColors.primaryLight,
                   fontSize: 9.5,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.5,
@@ -2207,32 +3021,206 @@ class _UserDashboardState extends State<UserDashboard> {
             ),
           ],
         ),
+        
+        const SizedBox(height: 14),
+
+        // Interactive Shift Direction Segmented Toggle Bar
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: AppColors.bgSecondary,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+          child: Row(
+            children: [
+              // Morning Shift Tab
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _shiftTimelineDirection = 'pickup');
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: !isDropoff ? AppColors.primary.withValues(alpha: 0.20) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: !isDropoff 
+                          ? Border.all(color: AppColors.primary.withValues(alpha: 0.40))
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.wb_sunny_rounded,
+                          size: 13,
+                          color: !isDropoff ? AppColors.primaryLight : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 6),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              'MORNING SHIFT',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: !isDropoff ? Colors.white : AppColors.textMuted,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            Text(
+                              'Stops ➔ Campus',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: !isDropoff ? AppColors.primaryLight : AppColors.textDisabled,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              // 2nd Shift Tab (Campus -> Stops)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    setState(() => _shiftTimelineDirection = 'dropoff');
+                  },
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 250),
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    decoration: BoxDecoration(
+                      color: isDropoff ? AppColors.accent.withValues(alpha: 0.20) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(12),
+                      border: isDropoff 
+                          ? Border.all(color: AppColors.accent.withValues(alpha: 0.45))
+                          : null,
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.nights_stay_rounded,
+                          size: 13,
+                          color: isDropoff ? AppColors.accent : AppColors.textMuted,
+                        ),
+                        const SizedBox(width: 6),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              '2ND SHIFT / RETURN',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: isDropoff ? Colors.white : AppColors.textMuted,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                            Text(
+                              'Campus ➔ Stops',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: isDropoff ? AppColors.accent : AppColors.textDisabled,
+                                fontSize: 8,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 12),
+
+        // Direction Context Banner
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.08),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.2),
+            ),
+          ),
+          child: Row(
+            children: [
+              Icon(
+                isDropoff ? Icons.south_west_rounded : Icons.north_east_rounded,
+                size: 14,
+                color: isDropoff ? AppColors.accent : AppColors.primaryLight,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  isDropoff 
+                      ? 'Drop-off Trip: SISTec Campus ➔ $lastStopName'
+                      : 'Pickup Trip: $firstStopName ➔ SISTec Campus',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+        ),
+
         const SizedBox(height: 20),
-        ...List.generate(_selectedRoute!.stops.length, (index) {
-          final stop = _selectedRoute!.stops[index];
+
+        // Stops Timeline Nodes
+        ...List.generate(totalStops, (index) {
+          final stop = displayedStops[index];
           final stopName = stop['name']?.toString() ?? 'Stop ${index + 1}';
           final isFirst = index == 0;
-          final isLast = index == _selectedRoute!.stops.length - 1;
+          final isLast = index == totalStops - 1;
           final isUserStop = userPickup.isNotEmpty &&
               (stopName.toLowerCase().trim() == userPickup ||
                stopName.toLowerCase().contains(userPickup) ||
                userPickup.contains(stopName.toLowerCase().trim()));
 
-          Color nodeColor = isUserStop
-              ? AppColors.primary
-              : isFirst
-                  ? AppColors.primaryLight
-                  : isLast
-                      ? AppColors.accentGreen
-                      : const Color(0xFF475569);
+          Color nodeColor;
+          String subtitle;
+          IconData? nodeIcon;
 
-          String subtitle = isUserStop
-              ? 'Your Assigned Pickup Stop'
-              : isFirst
-                  ? 'Departure Origin • Stop 1'
-                  : isLast
-                      ? 'Destination • SISTec Campus'
-                      : 'Transit Stop ${index + 1}';
+          if (isUserStop) {
+            nodeColor = isDropoff ? AppColors.accent : AppColors.primary;
+            subtitle = isDropoff ? 'Your Assigned Drop-off Stop' : 'Your Assigned Pickup Stop';
+            nodeIcon = isDropoff ? Icons.location_on_rounded : Icons.my_location_rounded;
+          } else if (isFirst) {
+            nodeColor = isDropoff ? AppColors.accentGreen : AppColors.primaryLight;
+            subtitle = isDropoff ? 'Campus Departure • SISTec Ratibad' : 'Departure Origin • Stop 1';
+            nodeIcon = isDropoff ? Icons.school_rounded : Icons.play_arrow_rounded;
+          } else if (isLast) {
+            nodeColor = isDropoff ? AppColors.accent : AppColors.accentGreen;
+            subtitle = isDropoff ? 'Final Terminal Drop-off' : 'Destination • SISTec Campus';
+            nodeIcon = isDropoff ? Icons.flag_rounded : Icons.school_rounded;
+          } else {
+            nodeColor = const Color(0xFF475569);
+            subtitle = isDropoff ? 'Transit Drop-off Stop ${index + 1}' : 'Transit Stop ${index + 1}';
+            nodeIcon = null;
+          }
 
           return IntrinsicHeight(
             child: Row(
@@ -2243,18 +3231,29 @@ class _UserDashboardState extends State<UserDashboard> {
                   child: Column(
                     children: [
                       Container(
-                        width: isUserStop ? 16 : 12,
-                        height: isUserStop ? 16 : 12,
+                        width: (isUserStop || isFirst || isLast) ? 18 : 12,
+                        height: (isUserStop || isFirst || isLast) ? 18 : 12,
                         decoration: BoxDecoration(
                           color: (isFirst || isLast || isUserStop) ? nodeColor : AppColors.surface,
                           border: Border.all(color: nodeColor, width: isUserStop ? 3 : 2),
                           shape: BoxShape.circle,
+                          boxShadow: (isUserStop || isFirst || isLast) ? [
+                            BoxShadow(
+                              color: nodeColor.withValues(alpha: 0.35),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ] : null,
                         ),
-                        child: isUserStop
-                            ? const Center(
-                                child: Icon(Icons.circle, size: 4, color: Colors.white),
+                        child: nodeIcon != null
+                            ? Center(
+                                child: Icon(nodeIcon, size: 9, color: Colors.white),
                               )
-                            : null,
+                            : (isUserStop
+                                ? const Center(
+                                    child: Icon(Icons.circle, size: 4, color: Colors.white),
+                                  )
+                                : null),
                       ),
                       if (!isLast)
                         Expanded(
@@ -2271,36 +3270,67 @@ class _UserDashboardState extends State<UserDashboard> {
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: isUserStop
-                        ? const EdgeInsets.symmetric(horizontal: 12, vertical: 8)
+                        ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
                         : EdgeInsets.zero,
                     decoration: isUserStop
                         ? BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.08),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.20)),
+                            color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.08),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.35),
+                              width: 1.2,
+                            ),
                           )
                         : null,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Text(
-                          stopName,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: isUserStop ? Colors.white : AppColors.text,
-                            fontSize: 13.5,
-                            fontWeight: isUserStop ? FontWeight.w800 : FontWeight.w600,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                stopName,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: isUserStop ? Colors.white : AppColors.text,
+                                  fontSize: 13.5,
+                                  fontWeight: isUserStop ? FontWeight.w800 : FontWeight.w600,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                subtitle,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: isUserStop 
+                                      ? (isDropoff ? AppColors.accent : AppColors.primaryLight) 
+                                      : AppColors.textMuted,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
-                          overflow: TextOverflow.ellipsis,
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          subtitle,
-                          style: GoogleFonts.plusJakartaSans(
-                            color: isUserStop ? AppColors.primaryLight : AppColors.textMuted,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
+                        if (isUserStop)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.3),
+                              ),
+                            ),
+                            child: Text(
+                              isDropoff ? 'MY DROP-OFF' : 'MY PICKUP',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: isDropoff ? AppColors.accent : AppColors.primaryLight,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
                           ),
-                        ),
                       ],
                     ),
                   ),

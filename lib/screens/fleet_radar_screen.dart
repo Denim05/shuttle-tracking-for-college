@@ -41,6 +41,10 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
   @override
   void initState() {
     super.initState();
+    final busStore = context.read<BusStore>();
+    if (busStore.allBuses.isNotEmpty) {
+      _isLoading = false;
+    }
     _loadAndSeedBuses();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _setupListeners();
@@ -285,11 +289,15 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
               children: [
                 const Icon(Icons.wifi_off_rounded, color: Colors.white, size: 16),
                 const SizedBox(width: 8),
-                Text(
-                  'RECONNECTING TO LIVE TELEMETRY...',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white, fontSize: 10,
-                    fontWeight: FontWeight.w900, letterSpacing: 1.2,
+                Flexible(
+                  child: Text(
+                    'RECONNECTING TO LIVE TELEMETRY...',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: Colors.white, fontSize: 10,
+                      fontWeight: FontWeight.w900, letterSpacing: 1.2,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],

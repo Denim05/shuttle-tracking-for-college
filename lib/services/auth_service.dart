@@ -6,6 +6,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../constants/constants.dart';
 import '../models/user_model.dart';
 import 'notification_service.dart';
+import 'api_service.dart';
 
 class AuthService with ChangeNotifier {
   final _storage = const FlutterSecureStorage(
@@ -53,6 +54,7 @@ class AuthService with ChangeNotifier {
         _token = data['token'];
         _currentUser = User.fromJson(data['user']);
         _isAuthenticated = true;
+        ApiService.cachedToken = _token;
         
         await _storage.write(key: 'auth_token', value: _token);
         await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
@@ -98,6 +100,7 @@ class AuthService with ChangeNotifier {
     );
     _isAuthenticated = true;
     _token = null; // No token for guest
+    ApiService.cachedToken = null;
     
     await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
     await _storage.delete(key: 'auth_token');
@@ -111,6 +114,8 @@ class AuthService with ChangeNotifier {
     _currentUser = null;
     _isAuthenticated = false;
     _isAuthenticating = false;
+    ApiService.cachedToken = null;
+    ApiService.clearCache();
     await _storage.deleteAll();
     notifyListeners();
   }
@@ -124,6 +129,7 @@ class AuthService with ChangeNotifier {
         _token = token;
         _currentUser = User.fromJson(jsonDecode(userDataStr));
         _isAuthenticated = true;
+        ApiService.cachedToken = token;
         
         // Background FCM Token Upload
         _uploadFcmToken();

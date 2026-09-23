@@ -76,13 +76,14 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   Timer? _cameraDebounce;
   bool   _mapReady = false;
   DateTime? _lastCameraMoveTime;
+  DateTime? _lastMarkerRebuildTime;
 
-  // ── Icon caches ───────────────────────────────────────────────────────────
-  final Map<String, BitmapDescriptor> _busIcons        = {};
-  final Map<String, BitmapDescriptor> _focusedBusIcons = {};
-  BitmapDescriptor? _firstStopIcon;
-  BitmapDescriptor? _stopIcon;
-  BitmapDescriptor? _lastStopIcon;
+  // ── Global Static Icon caches (persists across tab switches / screen reopens) ───
+  static final Map<String, BitmapDescriptor> _busIcons        = {};
+  static final Map<String, BitmapDescriptor> _focusedBusIcons = {};
+  static BitmapDescriptor? _firstStopIcon;
+  static BitmapDescriptor? _stopIcon;
+  static BitmapDescriptor? _lastStopIcon;
 
   final List<LatLng> _selectedRoutePoints = [];
   final List<Marker> _cachedStopMarkers = [];
@@ -297,7 +298,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         if (s == AnimationStatus.completed) {
           _animatedPos[busId]     = _targetPos[busId] ?? end;
           _animatedHeading[busId] = _targetHeading[busId] ?? endBearing;
-          _rebuildMarkersOnly();
+          _rebuildMarkersOnly(force: true);
         }
       });
     } else {
@@ -382,8 +383,15 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     _circlesNotifier.value = newCircles;
   }
 
-  void _rebuildMarkersOnly() {
+  void _rebuildMarkersOnly({bool force = false}) {
     if (!mounted) return;
+
+    final now = DateTime.now();
+    if (!force && _lastMarkerRebuildTime != null &&
+        now.difference(_lastMarkerRebuildTime!).inMilliseconds < 33) {
+      return; // Cap marker updates to max ~30fps to avoid saturating platform channel
+    }
+    _lastMarkerRebuildTime = now;
 
     final newMarkers = _buildMarkers();
     final newCircles = _buildCircles();
@@ -571,22 +579,35 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       busId.substring(busId.length.clamp(4, busId.length) - 4).toUpperCase();
 
   Future<void> _precacheIcons() async {
+    final List<Future<void>> futures = [];
+
     for (final bus in widget.buses) {
       final label = _busLabel(bus.id);
-      await _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: false);
-      await _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: true);
+      futures.add(_ensureBusIcon(bus.id, label, bus.routeColor, isFocused: false));
+      futures.add(_ensureBusIcon(bus.id, label, bus.routeColor, isFocused: true));
     }
-    _firstStopIcon = await _drawStopMarker(0);
-    _stopIcon      = await _drawStopMarker(1);
-    _lastStopIcon  = await _drawStopMarker(2);
+
+    if (_firstStopIcon == null) {
+      futures.add(_drawStopMarker(0).then((icon) => _firstStopIcon = icon));
+    }
+    if (_stopIcon == null) {
+      futures.add(_drawStopMarker(1).then((icon) => _stopIcon = icon));
+    }
+    if (_lastStopIcon == null) {
+      futures.add(_drawStopMarker(2).then((icon) => _lastStopIcon = icon));
+    }
+
+    if (futures.isNotEmpty) {
+      await Future.wait(futures);
+    }
   }
 
   Future<void> _ensureBusIcon(String busId, String label, String routeColorHex, {required bool isFocused}) async {
     final map = isFocused ? _focusedBusIcons : _busIcons;
     if (map.containsKey(busId)) return;
     final icon = await _drawBusMarker(label, routeColorHex, isFocused: isFocused);
+    map[busId] = icon;
     if (mounted) {
-      map[busId] = icon;
       _rebuildMapObjects();
     }
   }
@@ -1027,25 +1048,21 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   Widget _buildTurnByTurnCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(24),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.88),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: const Color(0xFF38EF7D).withValues(alpha: 0.3), width: 1.5),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.4),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              )
-            ],
-          ),
-          child: Row(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFF38EF7D).withValues(alpha: 0.3), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          )
+        ],
+      ),
+      child: Row(
             children: [
               // Direction Icon
               Container(
@@ -1109,44 +1126,36 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
               ),
             ],
           ),
-        ),
-      ),
-    );
+        );
   }
 
   Widget _buildSidebarCompassBtn() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-        child: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A).withValues(alpha: 0.8),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-          ),
-          child: Transform.rotate(
-            angle: -((_animatedHeading[_focusedBus?.id] ?? 0.0) * (3.14159 / 180.0)),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Icon(Icons.explore_outlined, color: Colors.white60, size: 26),
-                Positioned(
-                  top: 8,
-                  child: Container(
-                    width: 3,
-                    height: 10,
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+    return Container(
+      width: 44,
+      height: 44,
+      decoration: BoxDecoration(
+        color: const Color(0xFF0F172A),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+      ),
+      child: Transform.rotate(
+        angle: -((_animatedHeading[_focusedBus?.id] ?? 0.0) * (3.14159 / 180.0)),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            const Icon(Icons.explore_outlined, color: Colors.white60, size: 26),
+            Positioned(
+              top: 8,
+              child: Container(
+                width: 3,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: Colors.redAccent,
+                  borderRadius: BorderRadius.circular(2),
                 ),
-              ],
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1168,21 +1177,15 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           ),
         );
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            ),
-            child: const Icon(Icons.search_rounded, color: Colors.white, size: 20),
-          ),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
         ),
+        child: const Icon(Icons.search_rounded, color: Colors.white, size: 20),
       ),
     );
   }
@@ -1195,24 +1198,18 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           _isMuted = !_isMuted;
         });
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: BackdropFilter(
-          filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
-          child: Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFF0F172A).withValues(alpha: 0.8),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-            ),
-            child: Icon(
-              _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
-              color: _isMuted ? Colors.redAccent : Colors.white,
-              size: 20,
-            ),
-          ),
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: const Color(0xFF0F172A),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+        ),
+        child: Icon(
+          _isMuted ? Icons.volume_off_rounded : Icons.volume_up_rounded,
+          color: _isMuted ? Colors.redAccent : Colors.white,
+          size: 20,
         ),
       ),
     );
@@ -1334,17 +1331,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       }
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(28),
-      child: BackdropFilter(
-        filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0D0B14).withValues(alpha: 0.82),
-            borderRadius: BorderRadius.circular(28),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-          ),
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: const Color(0xFF0D0B14),
+        borderRadius: BorderRadius.circular(28),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+      ),
           child: Row(
             children: [
               GestureDetector(
@@ -1364,7 +1357,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Row(
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 6,
+                      runSpacing: 4,
                       children: [
                         Text(
                           timeStr,
@@ -1374,7 +1370,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                             fontWeight: FontWeight.w900,
                           ),
                         ),
-                        const SizedBox(width: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                           decoration: BoxDecoration(
@@ -1433,9 +1428,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
               ),
             ],
           ),
-        ),
-      ),
-    );
+        );
   }
 
   // UI CONTROLS
@@ -1682,23 +1675,20 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             left:   16,
             right:  16,
             bottom: 32,
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(28),
-              child: BackdropFilter(
-                filter: ui.ImageFilter.blur(sigmaX: 15, sigmaY: 15),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0D0B14).withValues(alpha: 0.82),
-                    borderRadius: BorderRadius.circular(28),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                    boxShadow: [
-                      BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.4),
-                          blurRadius: 30,
-                          offset: const Offset(0, 10))
-                    ],
-                  ),
+            child: RepaintBoundary(
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0B14),
+                  borderRadius: BorderRadius.circular(28),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  boxShadow: [
+                    BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 30,
+                        offset: const Offset(0, 10))
+                  ],
+                ),
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1752,13 +1742,17 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                                       ),
                                     ),
                                     const SizedBox(width: 6),
-                                    Text(
-                                      'ONLINE  •  ROUTE ${_focusedBus!.routeId}',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: Colors.white38,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 0.8,
+                                    Flexible(
+                                      child: Text(
+                                        'ONLINE  •  ${_focusedBus!.routeName.isNotEmpty ? _focusedBus!.routeName : "ROUTE ${_busLabel(_focusedBus!.routeId)}"}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: Colors.white38,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          letterSpacing: 0.8,
+                                        ),
+                                        overflow: TextOverflow.ellipsis,
+                                        maxLines: 1,
                                       ),
                                     ),
                                   ],
@@ -1837,9 +1831,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                     ],
                   ),
                 ),
-              ),
+              ).animate().slideY(begin: 1, end: 0, duration: 500.ms, curve: Curves.easeOutQuart).fadeIn(),
             ),
-          ).animate().slideY(begin: 1, end: 0, duration: 500.ms, curve: Curves.easeOutQuart).fadeIn(),
       ],
     );
   }
@@ -1986,36 +1979,30 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       preferBelow: false,
       child: GestureDetector(
         onTap: onTap,
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: BackdropFilter(
-            filter: ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: isActive
-                    ? color.withValues(alpha: 0.90)
-                    : const Color(0xFF0F172A).withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(14),
-                border: Border.all(
-                  color: isActive
-                      ? color.withValues(alpha: 0.50)
-                      : Colors.white.withValues(alpha: 0.08),
-                  width: 1.0,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.30),
-                    blurRadius: 10,
-                    offset: const Offset(0, 3),
-                  ),
-                ],
-              ),
-              child: Icon(icon, color: Colors.white, size: 20),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          width: 44,
+          height: 44,
+          decoration: BoxDecoration(
+            color: isActive
+                ? color.withValues(alpha: 0.90)
+                : const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isActive
+                  ? color.withValues(alpha: 0.50)
+                  : Colors.white.withValues(alpha: 0.08),
+              width: 1.0,
             ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.30),
+                blurRadius: 10,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
+          child: Icon(icon, color: Colors.white, size: 20),
         ),
       ),
     );

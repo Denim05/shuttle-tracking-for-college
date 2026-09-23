@@ -335,21 +335,28 @@ class DeveloperCreditsContent extends StatelessWidget {
       children: [
         Icon(icon, color: iconColor, size: 15),
         const SizedBox(width: 10),
-        Text(
-          label,
-          style: GoogleFonts.plusJakartaSans(
-            color: AppColors.textMuted,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
+        Flexible(
+          child: Text(
+            label,
+            style: GoogleFonts.plusJakartaSans(
+              color: AppColors.textMuted,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
-        const Spacer(),
-        Text(
-          value,
-          style: GoogleFonts.plusJakartaSans(
-            color: Colors.white,
-            fontSize: 11,
-            fontWeight: FontWeight.w700,
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: GoogleFonts.plusJakartaSans(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ],

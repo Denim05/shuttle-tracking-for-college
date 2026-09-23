@@ -6,32 +6,32 @@ import 'package:google_fonts/google_fonts.dart';
 class AppColors {
   AppColors._();
 
-  // Brand Accents
-  static const Color primary        = Color(0xFF3B82F6); // Electric Sapphire Blue
-  static const Color primaryLight   = Color(0xFF60A5FA);
+  // Brand Accents - Modern High-Contrast Palette
+  static const Color primary        = Color(0xFF2563EB); // Electric Royal Blue
+  static const Color primaryLight   = Color(0xFF38BDF8); // Sky / Ice Blue Accent
   static const Color primaryDark    = Color(0xFF1D4ED8);
   static const Color accent         = Color(0xFF06B6D4); // Vivid Cyan
-  static const Color accentPurple   = Color(0xFF6366F1); // Modern Indigo
-  static const Color accentGreen    = Color(0xFF10B981); // Crisp Emerald
+  static const Color accentPurple   = Color(0xFF6366F1); // Ultra Indigo
+  static const Color accentGreen    = Color(0xFF10B981); // Crisp Emerald Live
 
   // Background / Surface
-  static const Color bg             = Color(0xFF090D16); // Deep Obsidian
-  static const Color bgSecondary    = Color(0xFF0F172A); // Midnight Slate
-  static const Color surface        = Color(0xFF151D30); // Card Surface
-  static const Color surfaceLight   = Color(0xFF1E293B); // Raised Surface
-  static const Color card           = Color(0xFF131B2E); // Deep Card Glass
+  static const Color bg             = Color(0xFF070A10); // Deep Obsidian Velvet
+  static const Color bgSecondary    = Color(0xFF0C121D); // Midnight Navy Slate
+  static const Color surface        = Color(0xFF121927); // Obsidian Card Surface
+  static const Color surfaceLight   = Color(0xFF1A2336); // Raised Module Surface
+  static const Color card           = Color(0xFF121927); // Deep Card Glass
 
-  // Text Hierarchy
-  static const Color text           = Color(0xFFF8FAFC); // High Contrast Crisp White
+  // Text Hierarchy (WCAG AAA High Contrast)
+  static const Color text           = Color(0xFFFFFFFF); // Pure Crisp White
   static const Color textSecondary  = Color(0xFF94A3B8); // Soft Slate Gray
   static const Color textMuted      = Color(0xFF64748B); // Muted Label Slate
   static const Color textDisabled   = Color(0xFF334155);
 
   // Semantic
-  static const Color success        = Color(0xFF10B981);
-  static const Color warning        = Color(0xFFF59E0B);
-  static const Color danger         = Color(0xFFEF4444);
-  static const Color info           = Color(0xFF3B82F6);
+  static const Color success        = Color(0xFF10B981); // Emerald
+  static const Color warning        = Color(0xFFF59E0B); // Amber
+  static const Color danger         = Color(0xFFF43F5E); // Crimson Rose
+  static const Color info           = Color(0xFF2563EB); // Blue
 
   // Operational Status
   static const Color statusOnline   = Color(0xFF10B981);
@@ -41,7 +41,7 @@ class AppColors {
 
   // Borders / Dividers
   static Color get border      => Colors.white.withValues(alpha: 0.08);
-  static Color get borderFocus => primary.withValues(alpha: 0.6);
+  static Color get borderFocus => primaryLight.withValues(alpha: 0.6);
   static Color get divider     => Colors.white.withValues(alpha: 0.06);
 }
 

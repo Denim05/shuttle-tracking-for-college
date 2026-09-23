@@ -131,13 +131,26 @@ class _SmoothScrollBehavior extends ScrollBehavior {
 
 // ─── Auth Wrapper ─────────────────────────────────────────────────────────────
 
-class AuthWrapper extends StatelessWidget {
+class AuthWrapper extends StatefulWidget {
   const AuthWrapper({super.key});
 
   @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  late Future<void> _autoLoginFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _autoLoginFuture = Provider.of<AuthService>(context, listen: false).tryAutoLogin();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return FutureBuilder(
-      future: Provider.of<AuthService>(context, listen: false).tryAutoLogin(),
+    return FutureBuilder<void>(
+      future: _autoLoginFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const _SplashScreen();

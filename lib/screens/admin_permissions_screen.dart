@@ -29,9 +29,14 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
   Future<void> _loadData() async {
     setState(() => _isLoading = true);
     try {
-      final userData = await _apiService.get('admin/users');
-      final routeData = await _apiService.get('routes');
+      final results = await Future.wait([
+        _apiService.get('admin/users'),
+        _apiService.get('routes', useCache: true),
+      ]);
       
+      final userData = results[0] is List ? results[0] : <dynamic>[];
+      final routeData = results[1] is List ? results[1] : <dynamic>[];
+
       setState(() {
         _allUsers = userData as List;
         _routes = (routeData as List).map((r) => RouteModel.fromJson(r)).toList();
@@ -377,7 +382,13 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
                 children: [
                   const Icon(Icons.person_add_rounded, color: Colors.purpleAccent, size: 24),
                   const SizedBox(width: 12),
-                  Text('Create New User', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18)),
+                  Expanded(
+                    child: Text(
+                      'Create New User', 
+                      style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 18),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
                 ],
               ),
               content: SingleChildScrollView(
@@ -433,7 +444,10 @@ class _AdminPermissionsScreenState extends State<AdminPermissionsScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('ASSIGN ROLE:', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                        Expanded(
+                          child: Text('ASSIGN ROLE:', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10, fontWeight: FontWeight.bold)),
+                        ),
+                        const SizedBox(width: 8),
                         DropdownButton<String>(
                           value: role,
                           dropdownColor: const Color(0xFF0F1528),

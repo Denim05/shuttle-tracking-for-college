@@ -199,40 +199,22 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const SizedBox(height: 12),
-
-                    // App Logo / Bus Badge
-                    Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                      ),
-                      child: const Icon(
-                        Icons.directions_bus_rounded,
-                        color: AppColors.primary,
-                        size: 28,
-                      ),
-                    ).animate().fadeIn(duration: 300.ms).scale(),
-
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 24),
 
                     Text(
                       'SISTecChalo',
                       style: GoogleFonts.plusJakartaSans(
-                        fontSize: 30,
+                        fontSize: 32,
                         fontWeight: FontWeight.w900,
                         color: Colors.white,
                         letterSpacing: -0.8,
                       ),
-                    ).animate().fadeIn(delay: 150.ms),
+                    ).animate().fadeIn(duration: 300.ms),
                     
                     const SizedBox(height: 4),
 
                     Text(
-                      'COLLEGE SHUTTLE NETWORK',
+                      'Track Your Bus In Real-Time',
                       style: GoogleFonts.plusJakartaSans(
                         fontSize: 10,
                         fontWeight: FontWeight.w800,
@@ -400,34 +382,36 @@ class _LoginScreenState extends State<LoginScreen> {
                     // Guest Access Button
                     Container(
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.03),
-                        borderRadius: BorderRadius.circular(14),
+                        color: AppColors.surfaceLight,
+                        borderRadius: BorderRadius.circular(16),
                         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                       ),
-                      child: TextButton.icon(
-                        onPressed: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
-                        icon: const Icon(Icons.explore_rounded, color: AppColors.accent, size: 17),
-                        label: _isGuestLoading 
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
-                          : Text(
-                              'Continue as Guest',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: AppColors.accent,
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
-                              ),
+                      child: Material(
+                        color: Colors.transparent,
+                        borderRadius: BorderRadius.circular(16),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: (_isLoginLoading || _isGuestLoading) ? null : _handleGuestLogin,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.explore_rounded, color: AppColors.accent, size: 18),
+                                const SizedBox(width: 8),
+                                _isGuestLoading 
+                                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent))
+                                  : Text(
+                                      'Continue as Guest',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: AppColors.accent,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                              ],
                             ),
-                      ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextButton(
-                      onPressed: _handleRegister,
-                      child: Text(
-                        'New student? Register for bus service →',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.textMuted,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ),

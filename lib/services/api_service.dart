@@ -26,16 +26,31 @@ class ApiException implements Exception {
   bool get isServerError  => statusCode >= 500;
 }
 
+// ─── Cache Entry ────────────────────────────────────────────────────────────
+
+class _CacheEntry {
+  final dynamic data;
+  final DateTime expiry;
+  _CacheEntry(this.data, this.expiry);
+  bool get isExpired => DateTime.now().isAfter(expiry);
+}
+
 // ─── API Service ──────────────────────────────────────────────────────────────
 
-/// Robust HTTP client with:
-/// - Auto-injected bearer token
-/// - Retry logic (3 attempts, exponential backoff: 1s, 2s, 4s)
+/// High-performance HTTP client with:
+/// - In-memory token caching to eliminate platform-channel storage reads on every request
+/// - Short-lived in-memory response cache for read endpoints (routes, buses, etc.)
+/// - Retry logic with exponential backoff
 /// - Typed [ApiException] on all failure paths
-/// - Standard CRUD + PATCH methods
 class ApiService {
   static const int _maxRetries  = 3;
-  static const int _timeoutSecs = 20;
+  static const int _timeoutSecs = 15;
+
+  /// Global in-memory cached bearer token to avoid repeated platform-channel IPC reads
+  static String? cachedToken;
+
+  /// In-memory response cache for read queries
+  static final Map<String, _CacheEntry> _cache = {};
 
   final _storage = const FlutterSecureStorage(
     aOptions: AndroidOptions(encryptedSharedPreferences: false),
@@ -45,6 +60,15 @@ class ApiService {
     ),
   );
 
+  /// Clears in-memory API response cache
+  static void clearCache([String? endpointPrefix]) {
+    if (endpointPrefix == null) {
+      _cache.clear();
+    } else {
+      _cache.removeWhere((key, _) => key.startsWith(endpointPrefix));
+    }
+  }
+
   // ─── Headers ──────────────────────────────────────────────────────────────
 
   Future<Map<String, String>> _headers({bool requiresAuth = true}) async {
@@ -53,7 +77,11 @@ class ApiService {
       'Accept'      : 'application/json',
     };
     if (requiresAuth) {
-      final token = await _storage.read(key: 'auth_token');
+      String? token = cachedToken;
+      if (token == null || token.isEmpty) {
+        token = await _storage.read(key: 'auth_token');
+        cachedToken = token;
+      }
       if (token != null && token.isNotEmpty) {
         headers['Authorization'] = 'Bearer $token';
       }
@@ -139,39 +167,69 @@ class ApiService {
 
   // ─── Public Methods ───────────────────────────────────────────────────────
 
-  Future<dynamic> get(String endpoint, {bool requiresAuth = true}) =>
-      _withRetry(() async => http.get(
-            _uri(endpoint),
-            headers: await _headers(requiresAuth: requiresAuth),
-          ), canRetry: true);
+  Future<dynamic> get(
+    String endpoint, {
+    bool requiresAuth = true,
+    bool useCache = false,
+    Duration cacheDuration = const Duration(seconds: 30),
+  }) async {
+    if (useCache) {
+      final cached = _cache[endpoint];
+      if (cached != null && !cached.isExpired) {
+        return cached.data;
+      }
+    }
+
+    final data = await _withRetry(
+      () async => http.get(
+        _uri(endpoint),
+        headers: await _headers(requiresAuth: requiresAuth),
+      ),
+      canRetry: true,
+    );
+
+    if (useCache && data != null) {
+      _cache[endpoint] = _CacheEntry(data, DateTime.now().add(cacheDuration));
+    }
+
+    return data;
+  }
 
   Future<dynamic> post(String endpoint, Map<String, dynamic> body,
-          {bool requiresAuth = true}) =>
-      _withRetry(() async => http.post(
-            _uri(endpoint),
-            headers: await _headers(requiresAuth: requiresAuth),
-            body   : jsonEncode(body),
-          ), canRetry: false);
+      {bool requiresAuth = true}) async {
+    _cache.clear(); // Invalidate cache on mutations
+    return _withRetry(() async => http.post(
+          _uri(endpoint),
+          headers: await _headers(requiresAuth: requiresAuth),
+          body   : jsonEncode(body),
+        ), canRetry: false);
+  }
 
-  Future<dynamic> put(String endpoint, Map<String, dynamic> body) =>
-      _withRetry(() async => http.put(
-            _uri(endpoint),
-            headers: await _headers(),
-            body   : jsonEncode(body),
-          ), canRetry: false);
+  Future<dynamic> put(String endpoint, Map<String, dynamic> body) async {
+    _cache.clear(); // Invalidate cache on mutations
+    return _withRetry(() async => http.put(
+          _uri(endpoint),
+          headers: await _headers(),
+          body   : jsonEncode(body),
+        ), canRetry: false);
+  }
 
-  Future<dynamic> patch(String endpoint, Map<String, dynamic> body) =>
-      _withRetry(() async => http.patch(
-            _uri(endpoint),
-            headers: await _headers(),
-            body   : jsonEncode(body),
-          ), canRetry: false);
+  Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
+    _cache.clear(); // Invalidate cache on mutations
+    return _withRetry(() async => http.patch(
+          _uri(endpoint),
+          headers: await _headers(),
+          body   : jsonEncode(body),
+        ), canRetry: false);
+  }
 
-  Future<dynamic> delete(String endpoint) =>
-      _withRetry(() async => http.delete(
-            _uri(endpoint),
-            headers: await _headers(),
-          ), canRetry: false);
+  Future<dynamic> delete(String endpoint) async {
+    _cache.clear(); // Invalidate cache on mutations
+    return _withRetry(() async => http.delete(
+          _uri(endpoint),
+          headers: await _headers(),
+        ), canRetry: false);
+  }
 }
 
 

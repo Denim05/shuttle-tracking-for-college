@@ -753,8 +753,10 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                           const SizedBox(height: 10),
 
                           // ── Bottom Action Row: Auto-Geocode & Map Picker ───
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 6,
+                            alignment: WrapAlignment.end,
                             children: [
                               // 1-Tap Auto-Geocode Action
                               InkWell(
@@ -787,7 +789,6 @@ class _RouteEditScreenState extends State<RouteEditScreen> {
                                   ),
                                 ),
                               ),
-                              const SizedBox(width: 8),
 
                               // Pick on Map Action
                               InkWell(

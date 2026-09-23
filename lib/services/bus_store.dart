@@ -175,6 +175,12 @@ class BusStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Clear all notifications.
+  void clearAllNotifications() {
+    _notifications.clear();
+    notifyListeners();
+  }
+
   // ─── Seeding ────────────────────────────────────────────────────────────
 
   void seedBuses(List<dynamic> json) {
@@ -234,8 +240,36 @@ class BusStore extends ChangeNotifier {
           ? data
           : Map<String, dynamic>.from(data as Map);
 
-      final bus = Bus.fromJson(json);
-      _buses[bus.id] = bus;
+      final incoming = Bus.fromJson(json);
+      final existing = _buses[incoming.id];
+      if (existing != null) {
+        _buses[incoming.id] = existing.copyWith(
+          busNumber: (incoming.busNumber != null && incoming.busNumber!.isNotEmpty && incoming.busNumber != 'N/A')
+              ? incoming.busNumber
+              : existing.busNumber,
+          name: (incoming.name != null && incoming.name!.isNotEmpty) ? incoming.name : existing.name,
+          shift: (incoming.shift != null && incoming.shift!.isNotEmpty) ? incoming.shift : existing.shift,
+          routeId: incoming.routeId.isNotEmpty ? incoming.routeId : existing.routeId,
+          routeName: (incoming.routeName.isNotEmpty && incoming.routeName != 'Unknown Route') ? incoming.routeName : existing.routeName,
+          routeColor: (incoming.routeColor.isNotEmpty && incoming.routeColor != '#2D5BFF') ? incoming.routeColor : existing.routeColor,
+          currentLat: incoming.currentLat != 0.0 ? incoming.currentLat : existing.currentLat,
+          currentLng: incoming.currentLng != 0.0 ? incoming.currentLng : existing.currentLng,
+          heading: incoming.heading != 0.0 ? incoming.heading : existing.heading,
+          speed: incoming.speed,
+          status: incoming.status,
+          driverId: incoming.driverId ?? existing.driverId,
+          occupancy: incoming.occupancy,
+          tripType: incoming.tripType,
+          reachedStops: incoming.reachedStops.isNotEmpty ? incoming.reachedStops : existing.reachedStops,
+          completedStops: incoming.completedStops > 0 ? incoming.completedStops : existing.completedStops,
+          nextStop: incoming.nextStop ?? existing.nextStop,
+          distanceToNextStopMeters: incoming.distanceToNextStopMeters ?? existing.distanceToNextStopMeters,
+          etas: incoming.etas.isNotEmpty ? incoming.etas : existing.etas,
+          lastUpdated: incoming.lastUpdated,
+        );
+      } else {
+        _buses[incoming.id] = incoming;
+      }
       _lastUpdateTime = DateTime.now();
       notifyListeners();
     } catch (e) {

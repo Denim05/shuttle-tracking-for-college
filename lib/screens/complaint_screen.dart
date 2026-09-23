@@ -8,6 +8,7 @@ import '../services/auth_service.dart';
 import '../models/route_model.dart';
 import '../models/bus_model.dart';
 import '../theme/app_theme.dart';
+import '../utils/timetable_resolver.dart';
 
 class ComplaintScreen extends StatefulWidget {
   final RouteModel? selectedRoute;
@@ -77,6 +78,9 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
     setState(() => _isSubmitting = true);
 
     final auth = Provider.of<AuthService>(context, listen: false);
+    final resolvedBusNumber = TimetableResolver.resolveAssignedBusNumber(
+      routeName: widget.selectedRoute?.name ?? widget.activeBus?.routeName,
+    );
     try {
       await _api.post('complaints', {
         'userId': auth.currentUser?.id ?? 'guest',
@@ -84,7 +88,7 @@ class _ComplaintScreenState extends State<ComplaintScreen> {
         'routeId': widget.selectedRoute?.id,
         'routeName': widget.selectedRoute?.name,
         'driverName': 'Driver',
-        'busNumber': widget.activeBus?.routeName,
+        'busNumber': resolvedBusNumber,
         'category': _selectedCategory,
         'description': _descController.text.trim(),
       });

@@ -27,7 +27,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
   Future<void> _fetchRoutes() async {
     setState(() => _isLoading = true);
     try {
-      final response = await _apiService.get('routes');
+      final response = await _apiService.get('routes', useCache: true);
       if (mounted) {
         setState(() {
           _routes = response is List ? response : [];
@@ -140,9 +140,12 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
               child: const Icon(Icons.add_road_rounded, color: AppColors.primaryLight, size: 18),
             ),
             const SizedBox(width: 12),
-            Text(
-              'Add New Route',
-              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+            Expanded(
+              child: Text(
+                'Add New Route',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ],
         ),

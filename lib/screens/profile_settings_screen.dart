@@ -180,171 +180,176 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                   borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
                 ),
                 padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 36, height: 4,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Center(
+                        child: Container(
+                          width: 36, height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 18),
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.14),
-                            borderRadius: BorderRadius.circular(12),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.vpn_key_rounded, color: AppColors.primaryLight, size: 20),
                           ),
-                          child: const Icon(Icons.vpn_key_rounded, color: AppColors.primaryLight, size: 20),
-                        ),
-                        const SizedBox(width: 12),
-                        Text(
-                          'CHANGE PASSWORD',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w900,
-                            fontSize: 15,
-                            letterSpacing: 1,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'CHANGE PASSWORD',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15,
+                                letterSpacing: 1,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Ensure your new password contains at least 6 characters.',
-                      style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
-                    ),
-                    const SizedBox(height: 20),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Ensure your new password contains at least 6 characters.',
+                        style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                      const SizedBox(height: 20),
 
-                    // Current Password
-                    _buildModalTextField(
-                      controller: _currPasswordCtrl,
-                      hint: 'Current Password',
-                      obscure: !showCurr,
-                      onToggle: () => setDialogState(() => showCurr = !showCurr),
-                    ),
-                    const SizedBox(height: 12),
+                      // Current Password
+                      _buildModalTextField(
+                        controller: _currPasswordCtrl,
+                        hint: 'Current Password',
+                        obscure: !showCurr,
+                        onToggle: () => setDialogState(() => showCurr = !showCurr),
+                      ),
+                      const SizedBox(height: 12),
 
-                    // New Password
-                    _buildModalTextField(
-                      controller: _newPasswordCtrl,
-                      hint: 'New Password (min 6 chars)',
-                      obscure: !showNew,
-                      onToggle: () => setDialogState(() => showNew = !showNew),
-                    ),
-                    const SizedBox(height: 12),
+                      // New Password
+                      _buildModalTextField(
+                        controller: _newPasswordCtrl,
+                        hint: 'New Password (min 6 chars)',
+                        obscure: !showNew,
+                        onToggle: () => setDialogState(() => showNew = !showNew),
+                      ),
+                      const SizedBox(height: 12),
 
-                    // Confirm Password
-                    _buildModalTextField(
-                      controller: _confirmPasswordCtrl,
-                      hint: 'Confirm New Password',
-                      obscure: !showNew,
-                    ),
-                    const SizedBox(height: 24),
+                      // Confirm Password
+                      _buildModalTextField(
+                        controller: _confirmPasswordCtrl,
+                        hint: 'Confirm New Password',
+                        obscure: !showNew,
+                      ),
+                      const SizedBox(height: 24),
 
-                    SizedBox(
-                      width: double.infinity,
-                      height: 50,
-                      child: ElevatedButton(
-                        onPressed: resetting ? null : () async {
-                          final curr = _currPasswordCtrl.text.trim();
-                          final next = _newPasswordCtrl.text.trim();
-                          final conf = _confirmPasswordCtrl.text.trim();
+                      SizedBox(
+                        width: double.infinity,
+                        height: 50,
+                        child: ElevatedButton(
+                          onPressed: resetting ? null : () async {
+                            final curr = _currPasswordCtrl.text.trim();
+                            final next = _newPasswordCtrl.text.trim();
+                            final conf = _confirmPasswordCtrl.text.trim();
 
-                          if (curr.isEmpty || next.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('All fields are required.'),
-                                backgroundColor: AppColors.danger,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              ),
-                            );
-                            return;
-                          }
-                          if (next.length < 6) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('New password must be at least 6 characters.'),
-                                backgroundColor: AppColors.danger,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              ),
-                            );
-                            return;
-                          }
-                          if (next != conf) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: const Text('Passwords do not match.'),
-                                backgroundColor: AppColors.danger,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              ),
-                            );
-                            return;
-                          }
+                            if (curr.isEmpty || next.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text('All fields are required.'),
+                                  backgroundColor: AppColors.danger,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              );
+                              return;
+                            }
+                            if (next.length < 6) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text('New password must be at least 6 characters.'),
+                                  backgroundColor: AppColors.danger,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              );
+                              return;
+                            }
+                            if (next != conf) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: const Text('Passwords do not match.'),
+                                  backgroundColor: AppColors.danger,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                ),
+                              );
+                              return;
+                            }
 
-                          final messenger = ScaffoldMessenger.of(context);
-                          final nav = Navigator.of(dialogCtx);
-                          setDialogState(() => resetting = true);
-                          try {
-                            await _apiService.put('users/change-password', {
-                              'currentPassword': curr,
-                              'newPassword': next,
-                            });
-                            
-                            if (mounted) {
-                              nav.pop();
+                            final messenger = ScaffoldMessenger.of(context);
+                            final nav = Navigator.of(dialogCtx);
+                            setDialogState(() => resetting = true);
+                            try {
+                              await _apiService.put('users/change-password', {
+                                'currentPassword': curr,
+                                'newPassword': next,
+                              });
+                              
+                              if (mounted) {
+                                nav.pop();
+                                messenger.showSnackBar(
+                                  SnackBar(
+                                    content: Row(
+                                      children: [
+                                        const Icon(Icons.check_circle_rounded, color: AppColors.accentGreen, size: 18),
+                                        const SizedBox(width: 8),
+                                        Text('Password updated successfully!', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+                                      ],
+                                    ),
+                                    backgroundColor: const Color(0xFF13222A),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(16),
+                                      side: BorderSide(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                                    ),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setDialogState(() => resetting = false);
                               messenger.showSnackBar(
                                 SnackBar(
-                                  content: Row(
-                                    children: [
-                                      const Icon(Icons.check_circle_rounded, color: AppColors.accentGreen, size: 18),
-                                      const SizedBox(width: 8),
-                                      Text('Password updated successfully!', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
-                                    ],
-                                  ),
-                                  backgroundColor: const Color(0xFF13222A),
+                                  content: Text('Failed: $e'),
+                                  backgroundColor: AppColors.danger,
                                   behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(16),
-                                    side: BorderSide(color: AppColors.accentGreen.withValues(alpha: 0.3)),
-                                  ),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                                 ),
                               );
                             }
-                          } catch (e) {
-                            setDialogState(() => resetting = false);
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text('Failed: $e'),
-                                backgroundColor: AppColors.danger,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              ),
-                            );
-                          }
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.primary,
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                          elevation: 0,
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            elevation: 0,
+                          ),
+                          child: resetting
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
                         ),
-                        child: resetting
-                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                            : Text('UPDATE PASSWORD', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1)),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             );
@@ -430,12 +435,15 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         child: const Icon(Icons.security_rounded, color: AppColors.accent, size: 22),
                       ),
                       const SizedBox(width: 12),
-                      Text(
-                        'Privacy & Location Policy',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w900,
+                      Expanded(
+                        child: Text(
+                          'Privacy & Location Policy',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w900,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

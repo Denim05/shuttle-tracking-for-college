@@ -20,6 +20,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math' as math;
 import '../constants/constants.dart';
 
 class ManagerDashboard extends StatefulWidget {
@@ -251,7 +252,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Row(
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
                     children: [
                       _buildShiftFilterChip(
                         label: 'All 54',
@@ -259,14 +262,12 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         selectedValue: selectedShift,
                         onSelected: (val) => setModalState(() => selectedShift = val),
                       ),
-                      const SizedBox(width: 8),
                       _buildShiftFilterChip(
                         label: '🌅 Morning',
                         value: 'morning',
                         selectedValue: selectedShift,
                         onSelected: (val) => setModalState(() => selectedShift = val),
                       ),
-                      const SizedBox(width: 8),
                       _buildShiftFilterChip(
                         label: '🌆 Evening',
                         value: 'evening',
@@ -593,20 +594,27 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     if (!mounted) return;
     setState(() => _isLoading = true);
     try {
-      final busData = await _apiService.get('buses');
-      final routeData = await _apiService.get('routes');
-      
-      // We use try-catch for these as they might be protected or fail if no users exist
-      dynamic userData = [];
-      dynamic driverData = [];
-      try {
-        userData = await _apiService.get('manager/users');
-        driverData = await _apiService.get('manager/drivers');
-      } catch (e) {
-        debugPrint('Optional data failed to load: $e');
-      }
-      
+      // Fetch all data sources concurrently in parallel
+      final results = await Future.wait([
+        _apiService.get('buses'),
+        _apiService.get('routes', useCache: true),
+        _apiService.get('manager/users').catchError((e) {
+          debugPrint('Optional users failed to load: $e');
+          return <dynamic>[];
+        }),
+        _apiService.get('manager/drivers').catchError((e) {
+          debugPrint('Optional drivers failed to load: $e');
+          return <dynamic>[];
+        }),
+      ]);
+
       if (!mounted) return;
+
+      final busData = results[0] is List ? results[0] : <dynamic>[];
+      final routeData = results[1] is List ? results[1] : <dynamic>[];
+      final userData = results[2] is List ? results[2] : <dynamic>[];
+      final driverData = results[3] is List ? results[3] : <dynamic>[];
+
       setState(() {
         _routes = (routeData as List).map((r) => RouteModel.fromJson(r)).toList();
         _users = userData as List;
@@ -1042,7 +1050,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           ),
                         ],
                       ),
-                    ).animate().fadeIn(delay: (index * 100).ms).slideY(begin: 0.2);
+                    ).animate().fadeIn(delay: (math.min(index, 6) * 30).ms).slideY(begin: 0.1);
                   },
                 ),
               ),
@@ -1385,7 +1393,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                             ),
                           ],
                         ),
-                      ).animate().fadeIn(delay: (index * 100).ms).slideY(begin: 0.2);
+                      ).animate().fadeIn(delay: (math.min(index, 6) * 30).ms).slideY(begin: 0.1);
                     },
                   ),
                 ),
@@ -1640,19 +1648,26 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'IMPORTANT DOCUMENTS (${documents.length})',
-                                style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2),
-                              ),
-                              Text(
-                                'License copy, ID proof, medical certs',
-                                style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
-                              ),
-                            ],
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'IMPORTANT DOCUMENTS (${documents.length})',
+                                  style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.2),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                Text(
+                                  'License copy, ID proof, medical certs',
+                                  style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
                           ),
+                          const SizedBox(width: 8),
                           ElevatedButton.icon(
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.blueAccent.withValues(alpha: 0.15),
@@ -2202,27 +2217,33 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                       children: [
                                         // Route Badge
                                         if (matchedRoute != null)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                            decoration: BoxDecoration(
-                                              color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.12),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.3)),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.route_rounded, size: 8, color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF')))),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  matchedRoute.name.toUpperCase(),
-                                                  style: GoogleFonts.plusJakartaSans(
-                                                    color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))),
-                                                    fontSize: 7,
-                                                    fontWeight: FontWeight.bold,
+                                          Flexible(
+                                            child: Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              decoration: BoxDecoration(
+                                                color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.12),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))).withValues(alpha: 0.3)),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(Icons.route_rounded, size: 8, color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF')))),
+                                                  const SizedBox(width: 4),
+                                                  Flexible(
+                                                    child: Text(
+                                                      matchedRoute.name.toUpperCase(),
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        color: Color(int.parse(matchedRoute.color.replaceAll('#', '0xFF'))),
+                                                        fontSize: 7,
+                                                        fontWeight: FontWeight.bold,
+                                                      ),
+                                                    ),
                                                   ),
-                                                ),
-                                              ],
+                                                ],
+                                              ),
                                             ),
                                           )
                                         else
@@ -2610,12 +2631,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       children: [
                         const Icon(Icons.cloud_upload_rounded, color: Colors.blueAccent, size: 24),
                         const SizedBox(width: 12),
-                        Text(
-                          'Bulk Import Students',
-                          style: GoogleFonts.plusJakartaSans(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w900,
+                        Expanded(
+                          child: Text(
+                            'Bulk Import Students',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ],
@@ -3270,7 +3294,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text('Recent Notifications', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1)),
+                Expanded(
+                  child: Text(
+                    'Recent Notifications',
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 1),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
@@ -4183,7 +4214,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 _buildActionButton(Icons.edit_rounded, () => _showRouteEditSheet(route)),
               ],
             ),
-          ).animate().fadeIn(delay: (index * 80).ms).slideY(begin: 0.2);
+          ).animate().fadeIn(delay: (math.min(index, 6) * 30).ms).slideY(begin: 0.1);
         },
       ),
     );
@@ -4224,8 +4255,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('EDIT ROUTE', style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                      Expanded(
+                        child: Text('EDIT ROUTE', style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2)),
+                      ),
+                      const SizedBox(width: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                         decoration: BoxDecoration(
@@ -4820,11 +4854,14 @@ class _BusReportSheetState extends State<_BusReportSheet> {
           const SizedBox(height: 10),
           Row(
             children: [
-              Text(
-                '${trip['departureTime']} ➔ ${trip['arrivalTime']}',
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800),
+              Flexible(
+                child: Text(
+                  '${trip['departureTime']} ➔ ${trip['arrivalTime']}',
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w800),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Text(
                 '${trip['tripDurationMins']} MINS',
                 style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 11, fontWeight: FontWeight.bold),
@@ -4835,6 +4872,8 @@ class _BusReportSheetState extends State<_BusReportSheet> {
           Text(
             '${trip['originStop']} ➔ ${trip['destinationStop']}',
             style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 8),
           Wrap(
@@ -4862,16 +4901,23 @@ class _BusReportSheetState extends State<_BusReportSheet> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
-                        const SizedBox(width: 8),
-                        Text(
-                          stop['stopName']?.toString() ?? '',
-                          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
-                        ),
-                      ],
+                    Expanded(
+                      child: Row(
+                        children: [
+                          Container(width: 6, height: 6, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              stop['stopName']?.toString() ?? '',
+                              style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w600),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       stop['time']?.toString() ?? '',
                       style: GoogleFonts.plusJakartaSans(color: color, fontSize: 10, fontWeight: FontWeight.w800),

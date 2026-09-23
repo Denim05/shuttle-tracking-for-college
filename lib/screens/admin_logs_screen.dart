@@ -153,13 +153,16 @@ class _AdminLogsScreenState extends State<AdminLogsScreen> {
                         children: [
                           const Icon(Icons.terminal_rounded, size: 13, color: AppColors.textMuted),
                           const SizedBox(width: 6),
-                          Text(
-                            'SOURCE: ${log['source'] ?? 'UNKNOWN'}',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: AppColors.textMuted, 
-                              fontSize: 9.5, 
-                              fontWeight: FontWeight.w700, 
-                              letterSpacing: 1,
+                          Expanded(
+                            child: Text(
+                              'SOURCE: ${log['source'] ?? 'UNKNOWN'}',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: AppColors.textMuted, 
+                                fontSize: 9.5, 
+                                fontWeight: FontWeight.w700, 
+                                letterSpacing: 1,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],

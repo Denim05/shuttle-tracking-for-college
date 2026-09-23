@@ -5,7 +5,7 @@ class AppConstants {
 
   // Local Machine IP for testing with physical devices
   // Run `ipconfig` and use the WiFi IPv4 address
-  static const String _localUrl = 'http://192.168.1.6:5000';
+  static const String _localUrl = 'http://10.184.95.86:5000';
 
   // Production Cloud Server URL (Render)
   static const String _productionUrl = 'https://smart-shuttle-backend-2h13.onrender.com';

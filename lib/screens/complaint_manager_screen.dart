@@ -248,9 +248,9 @@ class _ComplaintManagerScreenState extends State<ComplaintManagerScreen> {
           const SizedBox(height: 14),
           Row(
             children: [
-              _buildInfoChip(Icons.person_rounded, c['userName'] ?? 'User'),
+              Flexible(child: _buildInfoChip(Icons.person_rounded, c['userName'] ?? 'User')),
               const SizedBox(width: 10),
-              _buildInfoChip(Icons.directions_bus_rounded, c['busNumber'] ?? 'Bus'),
+              Flexible(child: _buildInfoChip(Icons.directions_bus_rounded, c['busNumber'] ?? 'Bus')),
             ],
           ),
           if (status == 'pending') ...[
@@ -284,9 +284,13 @@ class _ComplaintManagerScreenState extends State<ComplaintManagerScreen> {
         children: [
           Icon(icon, color: AppColors.primaryLight, size: 13),
           const SizedBox(width: 6),
-          Text(
-            label,
-            style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w700),
+          Flexible(
+            child: Text(
+              label,
+              style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 10, fontWeight: FontWeight.w700),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

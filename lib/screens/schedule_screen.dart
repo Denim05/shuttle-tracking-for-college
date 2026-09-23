@@ -4,6 +4,8 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../services/api_service.dart';
 import '../models/route_model.dart';
 import '../theme/app_theme.dart';
+import '../utils/timetable_resolver.dart';
+import '../components/stop_feedback_sheet.dart';
 
 class ScheduleScreen extends StatefulWidget {
   final RouteModel route;
@@ -33,7 +35,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   Future<void> _fetchSchedule() async {
     setState(() { _isLoading = true; _error = null; });
     try {
-      final data = await _api.get('schedule?routeId=${widget.route.id}');
+      final data = await _api.get('schedule?routeId=${widget.route.id}', useCache: true);
       if (mounted) {
         setState(() {
           _schedules = List<Map<String, dynamic>>.from(data as List);
@@ -175,15 +177,127 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               sliver: SliverList(
                 delegate: SliverChildBuilderDelegate(
                   (context, i) {
-                    final stop = widget.route.stops[i];
-                    final stopName = stop['name'] as String? ?? 'Stop ${i + 1}';
+                    if (i == 0) {
+                      final shifts = TimetableResolver.getShiftsForRoute(widget.route.name);
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ...shifts.map((entry) => Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: AppColors.bgSecondary,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 44, height: 44,
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      entry.busNumber,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: AppColors.primaryLight,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w900,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              entry.displayBusLabel,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                color: Colors.white,
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                            decoration: BoxDecoration(
+                                              color: AppColors.surfaceLight,
+                                              borderRadius: BorderRadius.circular(6),
+                                            ),
+                                            child: Text(
+                                              entry.shiftTag,
+                                              style: GoogleFonts.plusJakartaSans(
+                                                color: AppColors.primaryLight,
+                                                fontSize: 8.5,
+                                                fontWeight: FontWeight.w800,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        'Morning: ${entry.morningDeparture} ➔ ${entry.campusArrival} • Return: ${entry.returnDeparture}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: AppColors.textMuted,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Driver: ${entry.driverName} • Reg: ${entry.vehicleNo}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: AppColors.textSecondary,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Text(
+                                'ROUTE STOP TIMINGS',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.textMuted,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 1.2,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                        ],
+                      );
+                    }
+
+                    final stopIdx = i - 1;
+                    final stop = widget.route.stops[stopIdx];
+                    final stopName = stop['name'] as String? ?? 'Stop ${stopIdx + 1}';
                     final times = _timesForStop(stopName);
-                    return _buildStopCard(stopName, times, i)
+                    return _buildStopCard(stopName, times, stopIdx)
                         .animate()
-                        .fadeIn(delay: (i * 35).ms)
+                        .fadeIn(delay: (stopIdx * 25).ms)
                         .slideY(begin: 0.04, duration: 250.ms);
                   },
-                  childCount: widget.route.stops.length,
+                  childCount: widget.route.stops.length + 1,
                 ),
               ),
             ),
@@ -201,7 +315,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       decoration: BoxDecoration(
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
         boxShadow: AppShadows.card,
       ),
       child: Column(
@@ -246,7 +360,48 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                 if (isFirst)
                   _pill('ORIGIN', AppColors.primaryLight)
                 else if (isLast)
-                  _pill('CAMPUS DESTINATION', AppColors.accentGreen),
+                  _pill('CAMPUS DESTINATION', AppColors.accentGreen)
+                else
+                  InkWell(
+                    onTap: () {
+                      final stopData = widget.route.stops[index];
+                      final lat = (stopData['lat'] ?? 0.0).toDouble();
+                      final lng = (stopData['lng'] ?? 0.0).toDouble();
+                      StopFeedbackSheet.show(
+                        context,
+                        routeId: widget.route.id,
+                        routeName: widget.route.name,
+                        stopName: stopName,
+                        currentLat: lat,
+                        currentLng: lng,
+                        onFeedbackSubmitted: _fetchSchedule,
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.verified_outlined, color: AppColors.primaryLight, size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Verify',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.primaryLight,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
               ],
             ),
           ),

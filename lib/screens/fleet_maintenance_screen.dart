@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../constants/constants.dart';
+import '../utils/timetable_resolver.dart';
 
 class FleetMaintenanceScreen extends StatefulWidget {
   final bool nested;
@@ -426,7 +427,14 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+              Expanded(
+                child: Text(
+                  title, 
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
@@ -442,11 +450,11 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
           const SizedBox(height: 10),
           Row(
             children: [
-              Icon(Icons.access_time_rounded, color: Colors.blueAccent, size: 16),
+              const Icon(Icons.access_time_rounded, color: Colors.blueAccent, size: 16),
               const SizedBox(width: 6),
               Text(timeRange, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11)),
               const Spacer(),
-              Icon(Icons.people_outline_rounded, color: Colors.greenAccent, size: 16),
+              const Icon(Icons.people_outline_rounded, color: Colors.greenAccent, size: 16),
               const SizedBox(width: 6),
               Text(passengers, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11)),
             ],
@@ -597,14 +605,14 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
               final String rawStatus = bus['status']?.toString() ?? 'Offline';
               final Color statusColor = _getStatusColor(rawStatus);
               
-              final String busName = bus['name']?.toString() ?? '';
-              final String busLabel = busName.contains(' - ') 
-                  ? busName.split(' - ').first 
-                  : (busName.isNotEmpty ? busName : 'Bus');
-              final String busNum = bus['busNumber']?.toString() ?? 'N/A';
-              final String cleanPlate = (busNum.isNotEmpty && busNum != 'N/A') 
-                  ? busNum 
-                  : 'N/A';
+              final String routeName = bus['routeName']?.toString() ?? '';
+              final String assignedBusLabel = TimetableResolver.resolveAssignedBusNumber(
+                explicitBusNumber: bus['busNumber'],
+                busName: bus['name'],
+                routeName: routeName,
+              );
+              final busDetails = TimetableResolver.resolveBusDetails(routeName: routeName);
+              final String cleanPlate = busDetails?.vehicleNo ?? (bus['busNumber']?.toString() ?? 'N/A');
 
               return GestureDetector(
                 onTap: () => _showBusDetailSheet(context, bus),
@@ -656,7 +664,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                               runSpacing: 4,
                               children: [
                                 Text(
-                                  busLabel,
+                                  assignedBusLabel,
                                   style: GoogleFonts.plusJakartaSans(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w800,
@@ -693,7 +701,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                                 const SizedBox(width: 4),
                                 Expanded(
                                   child: Text(
-                                    bus['routeName'] ?? 'Unassigned Route',
+                                    routeName.isNotEmpty ? routeName : 'Unassigned Route',
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.plusJakartaSans(
@@ -757,7 +765,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                             constraints: const BoxConstraints(),
                             padding: const EdgeInsets.all(4),
                             icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 18),
-                            onPressed: () => _confirmDeleteBus(bus['_id'], busLabel),
+                            onPressed: () => _confirmDeleteBus(bus['_id'], assignedBusLabel),
                           ),
                         ],
                       ),

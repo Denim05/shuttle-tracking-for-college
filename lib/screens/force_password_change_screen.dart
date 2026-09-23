@@ -227,13 +227,17 @@ class _ForcePasswordChangeScreenState extends State<ForcePasswordChangeScreen> {
                         children: [
                           const Icon(Icons.shield_outlined, color: AppColors.warning, size: 14),
                           const SizedBox(width: 6),
-                          Text(
-                            'MANDATORY FIRST-TIME SECURITY SETUP',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                              color: AppColors.warning,
-                              letterSpacing: 1,
+                          Flexible(
+                            child: Text(
+                              'MANDATORY FIRST-TIME SECURITY SETUP',
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.warning,
+                                letterSpacing: 1,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
