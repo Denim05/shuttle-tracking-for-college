@@ -691,34 +691,6 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       ),
                     ),
 
-              // Reconnecting Guard
-              if (_isOnline && !isConnected)
-                Positioned(
-                  top: MediaQuery.of(context).padding.top,
-                  left: 0, right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    color: AppColors.danger.withValues(alpha: 0.85),
-                    child: Center(
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const SizedBox(
-                            width: 8,
-                            height: 8,
-                            child: CircularProgressIndicator(strokeWidth: 1.5, color: Colors.white),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'SYNCHRONIZING WITH COMMAND SERVER...',
-                            style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 8.5, fontWeight: FontWeight.w900, letterSpacing: 1.5),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ).animate(onPlay: (c) => c.repeat()).shimmer(duration: 2.seconds),
-                ),
-
               // Top Floating Header Bar (Always present with sleek glass design)
               Positioned(
                 top: 0,
