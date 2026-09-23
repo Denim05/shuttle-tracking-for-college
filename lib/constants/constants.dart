@@ -17,6 +17,11 @@ class AppConstants {
 
   static const String modelApiKey = 'al-rqfpNNmS9Ny2xW4gjZURmYgnUDZJET089BXf3dga8wk';
 
+  // --- APP VERSION & PLAY STORE ---
+  static const String currentAppVersion = '1.0.4';
+  static const int currentBuildNumber = 18;
+  static const String playStoreUrl = 'https://play.google.com/store/apps/details?id=com.smartcampus.shuttle';
+
   // Helper to confirm connection type
   static String get currentConfigInfo => isProduction
       ? 'Connected to Production Server'

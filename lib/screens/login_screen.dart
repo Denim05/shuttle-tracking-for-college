@@ -10,6 +10,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
+import '../components/update_dialog.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,6 +32,9 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _requestInitialPermissions();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      checkForAppUpdate(context);
+    });
   }
 
   Future<void> _requestInitialPermissions() async {

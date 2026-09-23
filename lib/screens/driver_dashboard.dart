@@ -20,6 +20,7 @@ import 'profile_settings_screen.dart';
 import '../theme/app_theme.dart';
 import '../utils/timetable_resolver.dart';
 import '../components/stop_feedback_sheet.dart';
+import '../components/update_dialog.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -62,7 +63,10 @@ class _DriverDashboardState extends State<DriverDashboard> {
     super.initState();
     _checkPermissions();
     _fetchMyBus();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _initSocketListeners());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initSocketListeners();
+      checkForAppUpdate(context);
+    });
   }
 
   void _initSocketListeners() {

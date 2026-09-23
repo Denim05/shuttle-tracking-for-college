@@ -25,6 +25,7 @@ import 'profile_settings_screen.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../utils/timetable_resolver.dart';
+import '../components/update_dialog.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -58,6 +59,9 @@ class _UserDashboardState extends State<UserDashboard> {
     super.initState();
     _fetchData();
     _initSocket();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      checkForAppUpdate(context);
+    });
   }
 
   Future<void> _fetchData() async {
