@@ -214,6 +214,26 @@ app.get(['/api/health', '/health'], (req, res) => {
     res.status(200).json({ status: 'ok', service: 'SISTecChalo Backend', uptime: Math.round(process.uptime()), timestamp: new Date().toISOString() });
 });
 
+// 🚀 Public App Version & In-App Update Checker
+app.get('/api/app-version', (req, res) => {
+    res.status(200).json({
+        latestVersion: "1.0.4",
+        latestBuildNumber: 18,
+        minSupportedBuildNumber: 1,
+        title: "New Update Available! 🚀",
+        message: "A new version of SISTec Chalo is ready on Google Play Store with Where-Is-My-Train Stop Calibration, Guest Mode Logout, and Notification Management.",
+        releaseNotes: [
+            "📍 Crowdsourced Where-Is-My-Train Stop Verification & Auto-Calibration",
+            "👤 1-Tap Guest Mode Exit & Account Switcher",
+            "🔔 Notification Swipe-to-Dismiss, 1-Tap Delete & Clear All",
+            "⚡ Faster instant-connect live bus tracking engine",
+            "🛡️ Enhanced security and zero-IP credential dispatches"
+        ],
+        playStoreUrl: "https://play.google.com/store/apps/details?id=com.smartcampus.shuttle",
+        isForceUpdate: false
+    });
+});
+
 // Rate Limiting
 app.set('trust proxy', 1); // Trust reverse proxy (e.g. Render) to get correct client IP
 const limiter = rateLimit({
