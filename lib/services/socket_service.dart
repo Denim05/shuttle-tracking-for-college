@@ -70,22 +70,39 @@ class SocketService with ChangeNotifier {
     _setStatus(SocketStatus.connecting);
     debugPrint('🔌 SISTecChalo: connecting to ${AppConstants.baseUrl}');
 
-    _socket = io.io(AppConstants.baseUrl, <String, dynamic>{
-      'transports'           : ['websocket', 'polling'],
-      'autoConnect'          : true,
-      'forceNew'             : false,
-      'reconnection'         : true,
-      'reconnectionAttempts' : 15,
-      'reconnectionDelay'    : 2000,
-      'reconnectionDelayMax' : 8000,
-      'timeout'              : 20000,
-    });
+    try {
+      _socket?.dispose();
+    } catch (_) {}
+
+    _socket = io.io(
+      AppConstants.baseUrl,
+      io.OptionBuilder()
+          .setTransports(['websocket', 'polling'])
+          .enableAutoConnect()
+          .enableReconnection()
+          .setReconnectionAttempts(999)
+          .setReconnectionDelay(1500)
+          .setReconnectionDelayMax(5000)
+          .setTimeout(15000)
+          .enableForceNew()
+          .build(),
+    );
 
     _socket!
       ..on('connect',           _onConnect)
       ..on('reconnect',         _onReconnect)
       ..on('disconnect',        _onDisconnect)
-      ..on('connect_error',     _onConnectError)
+      ..on('connect_error',     (data) {
+          _onConnectError(data);
+          // Immediate background retry on error
+          Future.delayed(const Duration(seconds: 2), () {
+            if (!isConnected && _socket != null) {
+              try {
+                _socket?.connect();
+              } catch (_) {}
+            }
+          });
+        })
       ..on('reconnect_attempt', (_) => _setStatus(SocketStatus.connecting))
       ..on('error',  (data) => debugPrint('❌ Socket error: $data'))
       // ── Permanent SOS listener — not replaceable ──────────────────────

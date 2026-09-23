@@ -126,9 +126,14 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allow expo app to connect
-        methods: ["GET", "POST"]
-    }
+        origin: "*",
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        credentials: true
+    },
+    transports: ['websocket', 'polling'],
+    allowEIO3: true,
+    pingTimeout: 60000,
+    pingInterval: 25000
 });
 
 // Security Hashing Options (Argon2id - Immune to GPU & ASIC offline cracking)
