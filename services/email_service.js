@@ -182,84 +182,10 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
     const subject = `SISTec Chalo: Account Login Credentials (${username})`;
     const deliveryErrors = [];
 
-    // ── 1. Resend API (Fast, Reliable, No IP restrictions) ───────────────────
-    const resendApiKey = process.env.RESEND_API_KEY;
-    if (resendApiKey) {
-        try {
-            console.log(`✉️ [Resend API] Attempting live email delivery to ${email}...`);
-            const res = await fetch('https://api.resend.com/emails', {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${resendApiKey.trim()}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    from: 'SISTec Chalo <onboarding@resend.dev>',
-                    to: [email.trim()],
-                    subject: subject,
-                    html: htmlContent
-                })
-            });
-
-            if (res.ok) {
-                const resData = await res.json();
-                console.log(`✅ [Resend API Delivered] Email dispatched to ${email}. ID: ${resData.id}`);
-                return { success: true, provider: 'Resend API', messageId: resData.id };
-            } else {
-                const errText = await res.text();
-                console.warn(`⚠️ [Resend API Warning] ${res.status}: ${errText}`);
-                deliveryErrors.push(`Resend: ${errText}`);
-            }
-        } catch (rErr) {
-            console.warn(`⚠️ [Resend Exception] ${rErr.message}`);
-            deliveryErrors.push(`Resend: ${rErr.message}`);
-        }
-    }
-
-    // ── 2. Brevo HTTP API ───────────────────────────────────────────────────
-    const brevoApiKey = process.env.BREVO_API_KEY;
-    if (brevoApiKey) {
-        try {
-            console.log(`✉️ [Brevo API] Attempting email dispatch to ${email}...`);
-            const response = await fetch('https://api.brevo.com/v3/smtp/email', {
-                method: 'POST',
-                headers: {
-                    'accept': 'application/json',
-                    'api-key': brevoApiKey.trim(),
-                    'content-type': 'application/json'
-                },
-                body: JSON.stringify({
-                    sender: { name: 'SISTec Chalo', email: process.env.SMTP_USER || 'no-reply@sistecchalo.edu' },
-                    to: [{ email: email.trim(), name: name || 'Student' }],
-                    subject: subject,
-                    htmlContent: htmlContent,
-                    textContent: `Dear ${name},\n\nYour registration request for the college shuttle service has been approved.\n\nAccount Credentials:\nEnrollment ID / Username: ${username}\nTemporary Password: ${password}\n\nPlease sign in to the SISTec Chalo mobile app and update your password upon initial login.\n\nSISTec Chalo Team\nSagar Group of Institutions (SISTec), Bhopal`
-                })
-            });
-
-            if (response.ok) {
-                const resData = await response.json();
-                console.log(`✅ [Brevo API Sent] Email delivered to ${email}. MessageId: ${resData.messageId}`);
-                return { success: true, provider: 'Brevo API', messageId: resData.messageId };
-            } else {
-                const errJson = await response.json().catch(() => ({ message: response.statusText }));
-                console.warn(`⚠️ [Brevo API Warning] ${response.status}:`, errJson);
-                if (errJson.message && errJson.message.includes('unrecognised IP address')) {
-                    deliveryErrors.push(`Brevo: IP restriction active. Whitelist your IP at https://app.brevo.com/security/authorised_ips`);
-                } else {
-                    deliveryErrors.push(`Brevo: ${errJson.message || response.statusText}`);
-                }
-            }
-        } catch (err) {
-            console.warn(`⚠️ [Brevo Exception] ${err.message}`);
-            deliveryErrors.push(`Brevo: ${err.message}`);
-        }
-    }
-
-    // ── 3. Nodemailer SMTP (Gmail or custom host) ───────────────────────────
-    const user = process.env.SMTP_USER;
-    const rawPass = process.env.SMTP_PASS;
-    const cleanPass = rawPass ? rawPass.trim().replace(/\s+/g, '') : '';
+    // ── 1. Nodemailer SMTP (Gmail or custom host - 100% IP Independent) ──────
+    const user = (process.env.SMTP_USER && process.env.SMTP_USER.trim().length > 0) ? process.env.SMTP_USER.trim() : 'denimhajare@gmail.com';
+    const rawPass = (process.env.SMTP_PASS && process.env.SMTP_PASS.trim().length > 0) ? process.env.SMTP_PASS.trim() : 'ydxpebcwzefkalmy';
+    const cleanPass = rawPass.replace(/\s+/g, '');
 
     if (user && cleanPass) {
         try {
@@ -302,9 +228,82 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
                 deliveryErrors.push(`SMTP: ${smtpErr.message}`);
             }
         }
-    } else {
-        deliveryErrors.push('No active SMTP credentials configured in .env');
     }
+
+    // ── 2. Resend API (Backup) ──────────────────────────────────────────────
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey) {
+        try {
+            console.log(`✉️ [Resend API] Attempting live email delivery to ${email}...`);
+            const res = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${resendApiKey.trim()}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    from: 'SISTec Chalo <onboarding@resend.dev>',
+                    to: [email.trim()],
+                    subject: subject,
+                    html: htmlContent
+                })
+            });
+
+            if (res.ok) {
+                const resData = await res.json();
+                console.log(`✅ [Resend API Delivered] Email dispatched to ${email}. ID: ${resData.id}`);
+                return { success: true, provider: 'Resend API', messageId: resData.id };
+            } else {
+                const errText = await res.text();
+                console.warn(`⚠️ [Resend API Warning] ${res.status}: ${errText}`);
+                deliveryErrors.push(`Resend: ${errText}`);
+            }
+        } catch (rErr) {
+            console.warn(`⚠️ [Resend Exception] ${rErr.message}`);
+            deliveryErrors.push(`Resend: ${rErr.message}`);
+        }
+    }
+
+    // ── 3. Brevo HTTP API (Backup) ──────────────────────────────────────────
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    if (brevoApiKey) {
+        try {
+            console.log(`✉️ [Brevo API] Attempting email dispatch to ${email}...`);
+            const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'api-key': brevoApiKey.trim(),
+                    'content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sender: { name: 'SISTec Chalo', email: process.env.SMTP_USER || 'no-reply@sistecchalo.edu' },
+                    to: [{ email: email.trim(), name: name || 'Student' }],
+                    subject: subject,
+                    htmlContent: htmlContent,
+                    textContent: `Dear ${name},\n\nYour registration request for the college shuttle service has been approved.\n\nAccount Credentials:\nEnrollment ID / Username: ${username}\nTemporary Password: ${password}\n\nPlease sign in to the SISTec Chalo mobile app and update your password upon initial login.\n\nSISTec Chalo Team\nSagar Group of Institutions (SISTec), Bhopal`
+                })
+            });
+
+            if (response.ok) {
+                const resData = await response.json();
+                console.log(`✅ [Brevo API Sent] Email delivered to ${email}. MessageId: ${resData.messageId}`);
+                return { success: true, provider: 'Brevo API', messageId: resData.messageId };
+            } else {
+                const errJson = await response.json().catch(() => ({ message: response.statusText }));
+                console.warn(`⚠️ [Brevo API Warning] ${response.status}:`, errJson);
+                if (errJson.message && errJson.message.includes('unrecognised IP address')) {
+                    deliveryErrors.push(`Brevo: IP restriction active. Whitelist your IP at https://app.brevo.com/security/authorised_ips`);
+                } else {
+                    deliveryErrors.push(`Brevo: ${errJson.message || response.statusText}`);
+                }
+            }
+        } catch (err) {
+            console.warn(`⚠️ [Brevo Exception] ${err.message}`);
+            deliveryErrors.push(`Brevo: ${err.message}`);
+        }
+    }
+
     console.error(`❌ [Live Email Delivery Failed] Could not deliver live email to ${email}. Errors:`, deliveryErrors);
 
     // Generate debug sandbox so developers can view what would have been sent

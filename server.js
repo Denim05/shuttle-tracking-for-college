@@ -117,6 +117,8 @@ const RegistrationForm = require('./models/RegistrationForm');
 const RegistrationSubmission = require('./models/RegistrationSubmission');
 const BoardingLog = require('./models/BoardingLog');
 const FuelLog = require('./models/FuelLog');
+const StopFeedback = require('./models/StopFeedback');
+const { processStopFeedback, getRouteFeedbackSummary } = require('./services/stop_consensus_service');
 
 const authMiddleware = require('./middleware/authMiddleware');
 
@@ -1043,6 +1045,150 @@ app.get('/api/routes/geocode-stop', authMiddleware, async (req, res) => {
     } catch (err) {
         console.error('Stop geocoding error:', err);
         return res.status(500).json({ error: 'Failed to geocode stop' });
+    }
+});
+
+// ── CROWDSOURCED STOP VERIFICATION & AUTO-CALIBRATION API ───────────────────
+// Submit a stop verification or GPS coordinate suggestion
+app.post('/api/routes/:id/stops/feedback', authMiddleware, async (req, res) => {
+    try {
+        const routeId = req.params.id;
+        const { stopName, feedbackType, suggestedLat, suggestedLng, accuracy, comment } = req.body;
+
+        if (!stopName || !stopName.trim()) {
+            return res.status(400).json({ error: 'Stop name is required' });
+        }
+        if (!feedbackType || !['confirm_correct', 'suggest_location', 'stop_moved'].includes(feedbackType)) {
+            return res.status(400).json({ error: 'Valid feedbackType (confirm_correct, suggest_location, stop_moved) is required' });
+        }
+
+        const route = await Route.findById(routeId);
+        if (!route) return res.status(404).json({ error: 'Route not found' });
+
+        const userId = req.user?.id || req.user?._id || 'anonymous_user';
+        const userName = req.user?.name || req.user?.username || 'Passenger';
+        const userRole = req.user?.role || 'student';
+
+        const result = await processStopFeedback({
+            routeId,
+            routeName: route.name,
+            stopName: stopName.trim(),
+            userId,
+            userName,
+            userRole,
+            feedbackType,
+            suggestedLat: suggestedLat ? Number(suggestedLat) : undefined,
+            suggestedLng: suggestedLng ? Number(suggestedLng) : undefined,
+            accuracy: accuracy ? Number(accuracy) : 10,
+            comment: comment ? comment.toString().trim() : undefined,
+        });
+
+        // Broadcast realtime update to clients if stop coordinates were auto-calibrated
+        if (result.autoApplied) {
+            io.emit('route_stop_calibrated', {
+                routeId,
+                routeName: route.name,
+                stopName: stopName.trim(),
+                newLat: result.newLat,
+                newLng: result.newLng,
+                message: result.message,
+            });
+        }
+
+        return res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('❌ Stop Feedback Error:', err);
+        return res.status(500).json({ error: 'Failed to process stop feedback' });
+    }
+});
+
+// Get feedback summary & consensus status for all stops on a route
+app.get('/api/routes/:id/stops/feedback-summary', authMiddleware, async (req, res) => {
+    try {
+        const routeId = req.params.id;
+        const summary = await getRouteFeedbackSummary(routeId);
+        return res.json({ success: true, summary });
+    } catch (err) {
+        console.error('❌ Route Feedback Summary Error:', err);
+        return res.status(500).json({ error: 'Failed to fetch stop feedback summary' });
+    }
+});
+
+// Manager: Get all stop feedback reports across the entire system
+app.get('/api/manager/stop-feedback', authMiddleware, async (req, res) => {
+    try {
+        const feedbacks = await StopFeedback.find()
+            .populate('routeId', 'name color stops')
+            .sort({ createdAt: -1 })
+            .limit(100);
+        return res.json({ success: true, count: feedbacks.length, feedbacks });
+    } catch (err) {
+        console.error('❌ Manager Stop Feedback Error:', err);
+        return res.status(500).json({ error: 'Failed to fetch manager stop feedback' });
+    }
+});
+
+// Manager: 1-Click Apply a suggested stop location to the route
+app.post('/api/manager/stop-feedback/:id/apply', authMiddleware, async (req, res) => {
+    try {
+        const feedback = await StopFeedback.findById(req.params.id);
+        if (!feedback) return res.status(404).json({ error: 'Feedback report not found' });
+        if (!feedback.suggestedLat || !feedback.suggestedLng) {
+            return res.status(400).json({ error: 'Feedback does not contain valid GPS coordinates' });
+        }
+
+        const route = await Route.findById(feedback.routeId);
+        if (!route) return res.status(404).json({ error: 'Associated route not found' });
+
+        const stopIndex = route.stops.findIndex(
+            s => s.name && s.name.trim().toLowerCase() === feedback.stopName.trim().toLowerCase()
+        );
+
+        if (stopIndex === -1) {
+            return res.status(404).json({ error: `Stop "${feedback.stopName}" not found on route` });
+        }
+
+        route.stops[stopIndex].lat = Number(feedback.suggestedLat.toFixed(6));
+        route.stops[stopIndex].lng = Number(feedback.suggestedLng.toFixed(6));
+        await route.save();
+
+        feedback.status = 'applied';
+        await feedback.save();
+
+        // Broadcast update
+        io.emit('route_stop_calibrated', {
+            routeId: route._id,
+            routeName: route.name,
+            stopName: feedback.stopName,
+            newLat: feedback.suggestedLat,
+            newLng: feedback.suggestedLng,
+            message: `Manager approved new coordinates for stop "${feedback.stopName}".`,
+        });
+
+        return res.json({
+            success: true,
+            message: `Successfully updated "${feedback.stopName}" to (${feedback.suggestedLat}, ${feedback.suggestedLng})`,
+            stop: route.stops[stopIndex],
+        });
+    } catch (err) {
+        console.error('❌ Apply Stop Feedback Error:', err);
+        return res.status(500).json({ error: 'Failed to apply stop feedback' });
+    }
+});
+
+// Manager: Reject a feedback report
+app.post('/api/manager/stop-feedback/:id/reject', authMiddleware, async (req, res) => {
+    try {
+        const feedback = await StopFeedback.findByIdAndUpdate(
+            req.params.id,
+            { $set: { status: 'rejected' } },
+            { new: true }
+        );
+        if (!feedback) return res.status(404).json({ error: 'Feedback report not found' });
+        return res.json({ success: true, message: 'Feedback report rejected', feedback });
+    } catch (err) {
+        console.error('❌ Reject Stop Feedback Error:', err);
+        return res.status(500).json({ error: 'Failed to reject stop feedback' });
     }
 });
 
@@ -4951,6 +5097,12 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
                     id: bus._id,
                     busNumber: bus.busNumber,
                     name: bus.name,
+                    routeId: bus.routeId,
+                    routeName: bus.routeName,
+                    routeColor: bus.routeColor,
+                    tripType: bus.tripType,
+                    occupancy: bus.occupancy,
+                    driverId: bus.driverId,
                     currentLat: bus.currentLat,
                     latitude: bus.currentLat,
                     currentLng: bus.currentLng,
