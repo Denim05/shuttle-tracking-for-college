@@ -4,6 +4,7 @@ const routeSchema = new mongoose.Schema({
   name: { type: String, required: true },
   color: String,
   coordinates: [{
+    _id: false,
     latitude: Number,
     longitude: Number
   }],
