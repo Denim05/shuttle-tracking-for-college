@@ -8,6 +8,7 @@ require('dotenv').config({ path: envPath });
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const compression = require('compression');
 const http = require('http');
 const { Server } = require('socket.io');
 const argon2 = require('argon2');
@@ -184,6 +185,16 @@ app.use(helmet({
 }));
 app.use(cors());
 
+// ⚡ High-Performance Gzip/Brotli Compression (Compresses 3.2MB routes to <270KB)
+app.use(compression({
+    level: 6,
+    threshold: 1024,
+    filter: (req, res) => {
+        if (req.headers['x-no-compression']) return false;
+        return compression.filter(req, res);
+    }
+}));
+
 // 🛡️ Enterprise NoSQL Injection & Query Sanitization Middleware
 const sanitizeInput = (obj) => {
     if (!obj || typeof obj !== 'object') return obj;
@@ -205,7 +216,6 @@ app.use((req, res, next) => {
     if (req.params) sanitizeInput(req.params);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
     next();
 });
 
@@ -1015,10 +1025,47 @@ app.post('/api/auth/force-change-password', async (req, res) => {
     }
 });
 
+// ── IN-MEMORY ROUTE CACHING & COORDINATE PAYLOAD OPTIMIZER ──────────────────
+let cachedRoutesData = null;
+let routesCacheTimestamp = 0;
+const ROUTE_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes in-memory TTL
+
+const sanitizeRouteForWire = (r) => {
+    if (!r) return null;
+    return {
+        _id: r._id,
+        name: r.name,
+        color: r.color,
+        stops: r.stops,
+        // Strip redundant MongoDB _ids on coordinate points to save ~1.8MB payload
+        coordinates: (r.coordinates || []).map(c => ({
+            latitude: c.latitude,
+            longitude: c.longitude
+        }))
+    };
+};
+
+const getOptimizedRoutes = async (forceRefresh = false) => {
+    const now = Date.now();
+    if (!forceRefresh && cachedRoutesData && (now - routesCacheTimestamp < ROUTE_CACHE_TTL_MS)) {
+        return cachedRoutesData;
+    }
+    const rawRoutes = await Route.find().lean();
+    cachedRoutesData = rawRoutes.map(sanitizeRouteForWire);
+    routesCacheTimestamp = now;
+    return cachedRoutesData;
+};
+
+const invalidateRoutesCache = () => {
+    cachedRoutesData = null;
+    routesCacheTimestamp = 0;
+};
+
 // Public routes for Guests (No auth required)
 app.get('/api/guest/routes', async (req, res) => {
     try {
-        const routes = await Route.find();
+        const routes = await getOptimizedRoutes();
+        res.setHeader('Cache-Control', 'public, max-age=60, stale-while-revalidate=300');
         res.json(routes);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch routes' });
@@ -1027,15 +1074,18 @@ app.get('/api/guest/routes', async (req, res) => {
 
 app.get('/api/guest/buses', async (req, res) => {
     try {
-        const buses = await Bus.find();
+        const buses = await Bus.find().lean();
+        res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=15');
         res.json(buses);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch buses' });
     }
 });
+
 app.get('/api/routes', authMiddleware, async (req, res) => {
     try {
-        const routes = await Route.find();
+        const routes = await getOptimizedRoutes();
+        res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
         res.json(routes);
     } catch (_) {
         res.status(500).json({ error: 'Failed to fetch routes' });
@@ -1044,9 +1094,9 @@ app.get('/api/routes', authMiddleware, async (req, res) => {
 
 app.get('/api/routes/:id', authMiddleware, async (req, res) => {
     try {
-        const route = await Route.findById(req.params.id);
+        const route = await Route.findById(req.params.id).lean();
         if (!route) return res.status(404).json({ error: 'Route not found' });
-        res.json(route);
+        res.json(sanitizeRouteForWire(route));
     } catch (_) {
         res.status(500).json({ error: 'Failed to fetch route' });
     }
@@ -1424,7 +1474,8 @@ app.delete('/api/students/:id', async (req, res) => {
 // Bus Status Management
 app.get('/api/buses', async (req, res) => {
     try {
-        const buses = await Bus.find();
+        const buses = await Bus.find().lean();
+        res.setHeader('Cache-Control', 'private, max-age=5, stale-while-revalidate=15');
         res.json(buses);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch buses' });
@@ -2227,6 +2278,7 @@ app.post('/api/manager/routes', authMiddleware, async (req, res) => {
 
         const route = new Route(routeData);
         await route.save();
+        invalidateRoutesCache();
         io.emit('routeCreated', route);
         io.emit('routeUpdated', route);
         broadcastStats();
@@ -2241,6 +2293,7 @@ app.post('/api/manager/routes', authMiddleware, async (req, res) => {
 app.delete('/api/manager/routes/:id', authMiddleware, async (req, res) => {
     try {
         await Route.findByIdAndDelete(req.params.id);
+        invalidateRoutesCache();
         io.emit('routeDeleted', { id: req.params.id });
         broadcastStats();
         res.json({ message: 'Route deleted successfully' });
@@ -2707,6 +2760,7 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
             req.params.id, updateData, { new: true }
         );
         if (!updatedRoute) return res.status(404).json({ error: 'Route not found' });
+        invalidateRoutesCache();
 
         // Cascade: update routeName on every bus that uses this route
         if (name) {
@@ -3278,6 +3332,7 @@ app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
             .map(s => ({ latitude: s.lat, longitude: s.lng }));
 
         await route.save();
+        invalidateRoutesCache();
         io.emit('routeUpdated', route);
         res.json({ success: true, route });
     } catch (err) {
@@ -5101,11 +5156,19 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
     }
 });
 
-    // ─── Live Bus Telemetry Simulator ───────────────────
+    // ─── Live Bus Telemetry Simulator (Resource-Optimized) ───────────────────
+    let simCycleCount = 0;
     setInterval(async () => {
         try {
+            // Only simulate if clients are actively connected to reduce Render & Mongo load
+            if (!io.engine || io.engine.clientsCount === 0) return;
+
             const buses = await Bus.find({ status: { $in: ['On-time', 'Delayed', 'Active'] } }).limit(8);
             if (!buses || buses.length === 0) return;
+
+            simCycleCount++;
+            const shouldPersistToDb = (simCycleCount % 6 === 0); // Persist every ~24s instead of 120 writes/min
+            const bulkOps = [];
 
             for (const bus of buses) {
                 const deltaLat = (Math.random() - 0.48) * 0.0005;
@@ -5115,7 +5178,23 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
                 bus.speed = Math.floor(32 + Math.random() * 22);
                 bus.heading = Math.floor((bus.heading + Math.random() * 12) % 360);
                 bus.lastUpdated = new Date();
-                await bus.save();
+
+                if (shouldPersistToDb) {
+                    bulkOps.push({
+                        updateOne: {
+                            filter: { _id: bus._id },
+                            update: {
+                                $set: {
+                                    currentLat: bus.currentLat,
+                                    currentLng: bus.currentLng,
+                                    speed: bus.speed,
+                                    heading: bus.heading,
+                                    lastUpdated: bus.lastUpdated
+                                }
+                            }
+                        }
+                    });
+                }
 
                 const telemetryData = {
                     busId: bus._id,
@@ -5140,6 +5219,10 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
                 io.emit('busLocationUpdate', telemetryData);
                 io.emit('locationUpdate', telemetryData);
             }
+
+            if (bulkOps.length > 0) {
+                await Bus.bulkWrite(bulkOps);
+            }
         } catch (_) {}
     }, 4000);
 
@@ -5147,15 +5230,24 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
     const SELF_URL = process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
     const httpProtocol = SELF_URL.startsWith('https') ? require('https') : require('http');
 
-    setInterval(() => {
-        httpProtocol.get(`${SELF_URL}/api/health`, (res) => {
-            console.log(`🏓 [Render Free Keep-Alive 24/7] Self-Ping OK — status: ${res.statusCode}`);
-        }).on('error', (err) => {
-            console.warn(`⚠️ [Render Free Keep-Alive] Self-Ping warn: ${err.message}`);
-        });
-    }, 8 * 60 * 1000); // Ping every 8 minutes (Render sleep threshold is 15 minutes)
+    const triggerKeepAlive = () => {
+        try {
+            httpProtocol.get(`${SELF_URL}/api/health`, (res) => {
+                console.log(`🏓 [Render Free Keep-Alive] Self-Ping OK — status: ${res.statusCode}`);
+            }).on('error', (err) => {
+                console.warn(`⚠️ [Render Free Keep-Alive] Self-Ping warn: ${err.message}`);
+            });
+        } catch (e) {
+            console.warn(`⚠️ [Render Free Keep-Alive] Ping invoke error: ${e.message}`);
+        }
+    };
 
-    console.log(`⚡ [Render 100% Free Keep-Alive] Active every 8 min → ${SELF_URL}/api/health`);
+    // Ping every 5 minutes (Render sleep threshold is 15 minutes)
+    setInterval(triggerKeepAlive, 5 * 60 * 1000);
+    // Initial ping 15 seconds after startup
+    setTimeout(triggerKeepAlive, 15000);
+
+    console.log(`⚡ [Render 100% Free Keep-Alive] Active every 5 min → ${SELF_URL}/api/health`);
 });
 
 

@@ -8,6 +8,7 @@ import 'services/auth_service.dart';
 import 'services/socket_service.dart';
 import 'services/bus_store.dart';
 import 'services/notification_service.dart';
+import 'services/api_service.dart';
 import 'theme/app_theme.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -40,6 +41,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // ⚡ Non-blocking eager Render cloud server pre-warm
+  ApiService.warmUpBackend();
   // No dart:io override needed — Render uses valid HTTPS certificates.
 
   // Lock portrait orientation (only on mobile, not web)
