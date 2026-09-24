@@ -22,6 +22,7 @@ import 'fleet_radar_screen.dart';
 import 'schedule_screen.dart';
 import 'complaint_screen.dart';
 import 'profile_settings_screen.dart';
+import '../main.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../utils/timetable_resolver.dart';
@@ -1991,10 +1992,85 @@ class _UserDashboardState extends State<UserDashboard> {
     return Consumer<AuthService>(
       builder: (context, authService, _) {
         final user = authService.currentUser;
-        final displayName = _getUserDisplayName(user);
+        if (!authService.isAuthenticated || user == null) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 32.0),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: const Color(0xFF3B82F6).withValues(alpha: 0.3)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF3B82F6).withValues(alpha: 0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.lock_clock_rounded, color: Color(0xFF60A5FA), size: 36),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      'SESSION EXPIRED',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Your login session has ended. Please sign in again to access live tracking and personalized alerts.',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF94A3B8),
+                        fontSize: 13,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+                            MaterialPageRoute(builder: (_) => const AuthWrapper()),
+                            (route) => false,
+                          );
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF2563EB),
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        ),
+                        icon: const Icon(Icons.login_rounded, size: 18),
+                        label: Text(
+                          'RETURN TO LOGIN',
+                          style: GoogleFonts.plusJakartaSans(
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.8,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        final displayName = _getUserDisplayName(user, authService);
         final enrollmentId = _getEnrollmentId(user);
-        final avatarInitials = _getAvatarInitials(user);
-        final roleName = (user?.role ?? 'User').toUpperCase();
+        final avatarInitials = _getAvatarInitials(user, authService);
+        final roleName = (user.role).toUpperCase();
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(20, 70, 20, 100),
@@ -2164,7 +2240,7 @@ class _UserDashboardState extends State<UserDashboard> {
             ]),
             const SizedBox(height: 20),
             _buildProfileSection('TRANSPORT', [
-              _buildProfileTile('PICKUP', user?.pickupPoint ?? 'NOT SET', Icons.location_on_outlined),
+              _buildProfileTile('PICKUP', user.pickupPoint ?? 'NOT SET', Icons.location_on_outlined),
               _buildProfileTile('ROUTE', _selectedRoute?.name ?? 'NOT ASSIGNED', Icons.alt_route_rounded),
             ]),
             if (!authService.isGuest) ...[
@@ -2404,13 +2480,17 @@ class _UserDashboardState extends State<UserDashboard> {
     if (confirm == true) {
       await authService.logout();
       if (context.mounted) {
-        Navigator.of(context).popUntil((route) => route.isFirst);
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthWrapper()),
+          (route) => false,
+        );
       }
     }
   }
 
-  String _getUserDisplayName(User? user) {
-    if (user == null) return 'Guest User';
+  String _getUserDisplayName(User? user, AuthService auth) {
+    if (auth.isGuest) return 'Guest Explorer';
+    if (user == null) return 'Campus Commuter';
     if (user.name != null && user.name!.trim().isNotEmpty && user.name!.trim().toLowerCase() != user.username.trim().toLowerCase()) {
       return user.name!.trim();
     }
@@ -2422,8 +2502,9 @@ class _UserDashboardState extends State<UserDashboard> {
     return user.userId ?? user.username;
   }
 
-  String _getAvatarInitials(User? user) {
-    if (user == null) return 'G';
+  String _getAvatarInitials(User? user, AuthService auth) {
+    if (auth.isGuest) return 'G';
+    if (user == null) return 'U';
     final name = (user.name != null && user.name!.trim().isNotEmpty) ? user.name!.trim() : user.username.trim();
     final parts = name.split(RegExp(r'\s+'));
     if (parts.length >= 2 && parts[0].isNotEmpty && parts[1].isNotEmpty) {

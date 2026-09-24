@@ -3,10 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../constants/constants.dart';
 import '../models/user_model.dart';
 import 'notification_service.dart';
 import 'api_service.dart';
+import '../main.dart';
 
 class AuthService with ChangeNotifier {
   final _storage = const FlutterSecureStorage(
@@ -21,6 +23,14 @@ class AuthService with ChangeNotifier {
   bool _isAuthenticated = false;
   String? _token;
   bool _isAuthenticating = true; // Start in "loading" state
+
+  AuthService() {
+    // Hook automatic session expiry handler from ApiService
+    ApiService.onUnauthorized = () {
+      debugPrint('🔒 [AuthService] Session expired (401). Triggering automatic clean logout.');
+      logout();
+    };
+  }
 
   User? get currentUser => _currentUser;
   bool get isAuthenticated => _isAuthenticated;
@@ -56,8 +66,14 @@ class AuthService with ChangeNotifier {
         _isAuthenticated = true;
         ApiService.cachedToken = _token;
         
+        // Mirror credentials across both secure storage and SharedPreferences for bulletproof resilience
         await _storage.write(key: 'auth_token', value: _token);
         await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('auth_token', _token!);
+          await prefs.setString('user_data', jsonEncode(_currentUser!.toJson()));
+        } catch (_) {}
         
         // Background FCM Token Upload
         _uploadFcmToken();
@@ -104,6 +120,11 @@ class AuthService with ChangeNotifier {
     
     await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
     await _storage.delete(key: 'auth_token');
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_data', jsonEncode(_currentUser!.toJson()));
+      await prefs.remove('auth_token');
+    } catch (_) {}
     
     _isAuthenticating = false;
     notifyListeners();
@@ -116,26 +137,83 @@ class AuthService with ChangeNotifier {
     _isAuthenticating = false;
     ApiService.cachedToken = null;
     ApiService.clearCache();
-    await _storage.deleteAll();
+
+    // 1. Purge Secure Storage with individual fallback
+    try {
+      await _storage.deleteAll();
+    } catch (e) {
+      debugPrint('⚠️ Secure storage deleteAll notice: $e');
+      try {
+        await _storage.delete(key: 'auth_token');
+        await _storage.delete(key: 'user_data');
+        await _storage.delete(key: 'last_selected_route_id');
+      } catch (_) {}
+    }
+
+    // 2. Purge SharedPreferences cached sessions and user routes
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('auth_token');
+      await prefs.remove('user_data');
+      final keys = prefs.getKeys().where((k) => k.startsWith('api_cache_')).toList();
+      for (final k in keys) {
+        await prefs.remove(k);
+      }
+    } catch (e) {
+      debugPrint('⚠️ SharedPreferences clear notice: $e');
+    }
+
     notifyListeners();
+
+    // 3. Cleanly reset global navigation back to AuthWrapper
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (navigatorKey.currentState != null) {
+        navigatorKey.currentState!.pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthWrapper()),
+          (route) => false,
+        );
+      }
+    });
   }
 
   Future<void> tryAutoLogin() async {
     try {
-      final token = await _storage.read(key: 'auth_token');
-      final userDataStr = await _storage.read(key: 'user_data');
-      
+      String? token;
+      String? userDataStr;
+
+      try {
+        token = await _storage.read(key: 'auth_token');
+        userDataStr = await _storage.read(key: 'user_data');
+      } catch (e) {
+        debugPrint('⚠️ SecureStorage read failed, falling back to SharedPreferences: $e');
+      }
+
+      if (token == null || userDataStr == null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          token ??= prefs.getString('auth_token');
+          userDataStr ??= prefs.getString('user_data');
+        } catch (_) {}
+      }
+
       if (token != null && userDataStr != null) {
         _token = token;
         _currentUser = User.fromJson(jsonDecode(userDataStr));
         _isAuthenticated = true;
         ApiService.cachedToken = token;
-        
+
         // Background FCM Token Upload
         _uploadFcmToken();
+      } else {
+        _token = null;
+        _currentUser = null;
+        _isAuthenticated = false;
       }
     } catch (e) {
-      // Ignored
+      debugPrint('⚠️ Error during tryAutoLogin: $e');
+      _token = null;
+      _currentUser = null;
+      _isAuthenticated = false;
     } finally {
       _isAuthenticating = false;
       notifyListeners();

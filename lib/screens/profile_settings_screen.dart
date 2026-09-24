@@ -6,6 +6,9 @@ import '../services/api_service.dart';
 import 'commute_setup_screen.dart';
 import '../theme/app_theme.dart';
 import '../components/developer_info_dialog.dart';
+import 'package:provider/provider.dart';
+import '../services/auth_service.dart';
+import '../main.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({super.key});
@@ -566,6 +569,26 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
             letterSpacing: 1.5,
           ),
         ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Center(
+              child: GestureDetector(
+                onTap: () => _handleLogout(context),
+                child: Container(
+                  width: 36,
+                  height: 36,
+                  decoration: BoxDecoration(
+                    color: AppColors.danger.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.danger.withValues(alpha: 0.25)),
+                  ),
+                  child: const Icon(Icons.logout_rounded, color: Color(0xFFF87171), size: 18),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2.5))
@@ -837,10 +860,89 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                         : Text('SAVE CHANGES', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13, letterSpacing: 1.2)),
                   ),
                 ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _handleLogout(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: const Color(0xFFF87171),
+                      side: BorderSide(color: const Color(0xFFEF4444).withValues(alpha: 0.4), width: 1.2),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    ),
+                    icon: const Icon(Icons.logout_rounded, size: 18),
+                    label: Text(
+                      'LOG OUT OF SESSION',
+                      style: GoogleFonts.plusJakartaSans(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 13,
+                        letterSpacing: 1.0,
+                      ),
+                    ),
+                  ),
+                ),
                 const SizedBox(height: 48),
               ],
             ),
     );
+  }
+
+  Future<void> _handleLogout(BuildContext context) async {
+    HapticFeedback.mediumImpact();
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF0F172A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+        ),
+        title: Text(
+          'Confirm Logout',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800),
+        ),
+        content: Text(
+          'Are you sure you want to log out of your session on this device?',
+          style: GoogleFonts.plusJakartaSans(color: const Color(0xFF94A3B8), fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              'CANCEL',
+              style: GoogleFonts.plusJakartaSans(
+                color: const Color(0xFF64748B),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFEF4444),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: Text(
+              'LOG OUT',
+              style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await auth.logout();
+      if (context.mounted) {
+        Navigator.of(context, rootNavigator: true).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const AuthWrapper()),
+          (route) => false,
+        );
+      }
+    }
   }
 
   Widget _buildSectionHeader(String title) {

@@ -9,7 +9,7 @@ import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/route_model.dart';
 import '../theme/app_theme.dart';
-import 'user_dashboard.dart';
+import '../main.dart';
 
 class CommuteSetupScreen extends StatefulWidget {
   final bool isInitialSetup;
@@ -297,11 +297,11 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
 
       _showCustomSnackBar('Commute preferences saved for $_selectedStop!');
 
-      // Immediate & reliable navigation transition to UserDashboard
+      // Immediate & reliable navigation transition to AuthWrapper
       if (widget.isInitialSetup) {
         Navigator.of(context).pushAndRemoveUntil(
           PageRouteBuilder(
-            pageBuilder: (context, anim, secAnim) => const UserDashboard(),
+            pageBuilder: (context, anim, secAnim) => const AuthWrapper(),
             transitionsBuilder: (context, anim, secAnim, child) {
               return FadeTransition(opacity: anim, child: child);
             },
@@ -317,7 +317,7 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
       _showCustomSnackBar('Notice: Continuing to dashboard ($e)', isError: true);
       if (widget.isInitialSetup) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const UserDashboard()),
+          MaterialPageRoute(builder: (_) => const AuthWrapper()),
           (route) => false,
         );
       }
@@ -331,7 +331,7 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
     if (widget.isInitialSetup) {
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
-          pageBuilder: (context, anim, secAnim) => const UserDashboard(),
+          pageBuilder: (context, anim, secAnim) => const AuthWrapper(),
           transitionsBuilder: (context, anim, secAnim, child) => FadeTransition(opacity: anim, child: child),
           transitionDuration: const Duration(milliseconds: 300),
         ),

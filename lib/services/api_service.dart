@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/foundation.dart' show debugPrint, VoidCallback;
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,6 +53,9 @@ class ApiService {
 
   /// Global in-memory cached bearer token to avoid repeated platform-channel IPC reads
   static String? cachedToken;
+
+  /// Global callback invoked whenever an endpoint returns 401 Unauthorized
+  static VoidCallback? onUnauthorized;
 
   /// In-memory response cache for read queries
   static final Map<String, _CacheEntry> _cache = {};
@@ -203,6 +206,14 @@ class ApiService {
           message   : 'Server returned malformed JSON.',
         );
       }
+    }
+
+    if (response.statusCode == 401) {
+      onUnauthorized?.call();
+      throw const ApiException(
+        statusCode: 401,
+        message   : 'Session expired. Please log in again.',
+      );
     }
 
     String message = 'Server error (${response.statusCode})';
