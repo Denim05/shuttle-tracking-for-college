@@ -2253,6 +2253,7 @@ app.delete('/api/manager/buses/:id', authMiddleware, async (req, res) => {
 app.post('/api/manager/routes', authMiddleware, async (req, res) => {
     try {
         const { geocodeStopName } = require('./geocode_stops');
+        const { getRoadPolylineForStops } = require('./road_routing_service');
         const routeData = { ...req.body };
 
         if (Array.isArray(routeData.stops)) {
@@ -2270,10 +2271,21 @@ app.post('/api/manager/routes', authMiddleware, async (req, res) => {
             }
             routeData.stops = geocodedStops;
 
-            // Generate polyline coordinates from valid geocoded stops
-            routeData.coordinates = geocodedStops
-                .filter(s => s.lat != null && s.lng != null)
-                .map(s => ({ latitude: s.lat, longitude: s.lng }));
+            // Generate high-resolution road-following polyline coordinates via OSRM
+            const roadResult = await getRoadPolylineForStops(geocodedStops);
+            if (roadResult && roadResult.coordinates && roadResult.coordinates.length > 0) {
+                routeData.coordinates = roadResult.coordinates;
+                if (!routeData.distance || routeData.distance === '0 km') {
+                    routeData.distance = roadResult.distanceKm + ' km';
+                }
+                if (!routeData.duration || routeData.duration === '0 mins') {
+                    routeData.duration = roadResult.durationMins + ' mins';
+                }
+            } else {
+                routeData.coordinates = geocodedStops
+                    .filter(s => s.lat != null && s.lng != null)
+                    .map(s => ({ latitude: s.lat, longitude: s.lng }));
+            }
         }
 
         const route = new Route(routeData);
@@ -2725,6 +2737,7 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
     try {
         const { name, color, stops } = req.body;
         const { geocodeStopName } = require('./geocode_stops');
+        const { getRoadPolylineForStops } = require('./road_routing_service');
         const updateData = {};
         if (name)  updateData.name  = name;
         if (color) updateData.color = color;
@@ -2750,10 +2763,17 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
             }
             updateData.stops = geocodedStops;
 
-            // Generate polyline coordinates connecting valid stops
-            updateData.coordinates = geocodedStops
-                .filter(s => s.lat != null && s.lng != null && s.lat !== 0 && s.lng !== 0)
-                .map(s => ({ latitude: s.lat, longitude: s.lng }));
+            // Generate high-resolution road-following polyline coordinates via OSRM
+            const roadResult = await getRoadPolylineForStops(geocodedStops);
+            if (roadResult && roadResult.coordinates && roadResult.coordinates.length > 0) {
+                updateData.coordinates = roadResult.coordinates;
+                if (roadResult.distanceKm) updateData.distance = roadResult.distanceKm + ' km';
+                if (roadResult.durationMins) updateData.duration = roadResult.durationMins + ' mins';
+            } else {
+                updateData.coordinates = geocodedStops
+                    .filter(s => s.lat != null && s.lng != null && s.lat !== 0 && s.lng !== 0)
+                    .map(s => ({ latitude: s.lat, longitude: s.lng }));
+            }
         }
 
         const updatedRoute = await Route.findByIdAndUpdate(
@@ -3310,6 +3330,7 @@ app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
         if (!route) return res.status(404).json({ error: 'Route not found' });
 
         const { geocodeStopName } = require('./geocode_stops');
+        const { getRoadPolylineForStops } = require('./road_routing_service');
         const updatedStops = [];
 
         for (const s of stops) {
@@ -3326,10 +3347,17 @@ app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
 
         route.stops = updatedStops;
 
-        // Re-generate polyline coordinates from valid geocoded stop lat/lngs
-        route.coordinates = updatedStops
-            .filter(s => s.lat != null && s.lng != null)
-            .map(s => ({ latitude: s.lat, longitude: s.lng }));
+        // Generate high-resolution road-following polyline coordinates via OSRM
+        const roadResult = await getRoadPolylineForStops(updatedStops);
+        if (roadResult && roadResult.coordinates && roadResult.coordinates.length > 0) {
+            route.coordinates = roadResult.coordinates;
+            if (roadResult.distanceKm) route.distance = roadResult.distanceKm + ' km';
+            if (roadResult.durationMins) route.duration = roadResult.durationMins + ' mins';
+        } else {
+            route.coordinates = updatedStops
+                .filter(s => s.lat != null && s.lng != null)
+                .map(s => ({ latitude: s.lat, longitude: s.lng }));
+        }
 
         await route.save();
         invalidateRoutesCache();

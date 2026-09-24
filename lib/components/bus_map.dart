@@ -84,9 +84,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   static BitmapDescriptor? _firstStopIcon;
   static BitmapDescriptor? _stopIcon;
   static BitmapDescriptor? _lastStopIcon;
+  static BitmapDescriptor? _routeArrowIcon;
 
   final List<LatLng> _selectedRoutePoints = [];
   final List<Marker> _cachedStopMarkers = [];
+  final List<Marker> _cachedArrowMarkers = [];
 
   static const int    _maxTrail         = 20;
   static const LatLng _bhopal           = LatLng(23.2599, 77.4126);
@@ -327,6 +329,59 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           .map((c) => LatLng(c['latitude']!, c['longitude']!)));
     }
     _rebuildStopMarkers();
+    _rebuildArrowMarkers();
+  }
+
+  /// Orthogonally snaps a stop coordinate dead-center onto the closest polyline segment
+  LatLng _snapToPolyline(LatLng point, List<LatLng> polyline, {double maxSnapMeters = 200.0}) {
+    if (polyline.isEmpty) return point;
+    if (polyline.length == 1) return polyline.first;
+
+    LatLng bestPoint = point;
+    double minDistanceMeters = double.infinity;
+
+    for (int i = 0; i < polyline.length - 1; i++) {
+      final a = polyline[i];
+      final b = polyline[i + 1];
+
+      // Quick bounding box check (~300m threshold: ~0.003 degrees)
+      final minLat = (a.latitude < b.latitude ? a.latitude : b.latitude) - 0.003;
+      final maxLat = (a.latitude > b.latitude ? a.latitude : b.latitude) + 0.003;
+      final minLng = (a.longitude < b.longitude ? a.longitude : b.longitude) - 0.003;
+      final maxLng = (a.longitude > b.longitude ? a.longitude : b.longitude) + 0.003;
+
+      if (point.latitude < minLat || point.latitude > maxLat ||
+          point.longitude < minLng || point.longitude > maxLng) {
+        continue;
+      }
+
+      // Orthogonal projection of point onto segment AB
+      final dx = b.longitude - a.longitude;
+      final dy = b.latitude - a.latitude;
+      final lengthSq = dx * dx + dy * dy;
+
+      LatLng candidate;
+      if (lengthSq < 1e-12) {
+        candidate = a;
+      } else {
+        final t = (((point.longitude - a.longitude) * dx +
+                    (point.latitude - a.latitude) * dy) / lengthSq)
+            .clamp(0.0, 1.0);
+        candidate = LatLng(a.latitude + t * dy, a.longitude + t * dx);
+      }
+
+      final dist = Geolocator.distanceBetween(
+        point.latitude, point.longitude,
+        candidate.latitude, candidate.longitude,
+      );
+
+      if (dist < minDistanceMeters) {
+        minDistanceMeters = dist;
+        bestPoint = candidate;
+      }
+    }
+
+    return minDistanceMeters <= maxSnapMeters ? bestPoint : point;
   }
 
   void _rebuildStopMarkers() {
@@ -342,9 +397,14 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       for (var i = 0; i < stops.length; i++) {
         final stop = stops[i];
         if (stop['lat'] == null || stop['lng'] == null) continue;
-        final lat = (stop['lat'] as num).toDouble();
-        final lng = (stop['lng'] as num).toDouble();
-        if (lat == 0 && lng == 0) continue;
+        final rawLat = (stop['lat'] as num).toDouble();
+        final rawLng = (stop['lng'] as num).toDouble();
+        if (rawLat == 0 && rawLng == 0) continue;
+
+        // Perfect snapping: Align stop coordinate dead-center onto the highway polyline
+        final snappedPos = _selectedRoutePoints.isNotEmpty
+            ? _snapToPolyline(LatLng(rawLat, rawLng), _selectedRoutePoints)
+            : LatLng(rawLat, rawLng);
 
         final stopId = 'stop_${stop['name']}';
         final isFirst = i == 0;
@@ -358,14 +418,54 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
         _cachedStopMarkers.add(Marker(
           markerId: MarkerId(stopId),
-          position: LatLng(lat, lng),
+          position: snappedPos,
           anchor:   const Offset(0.5, 0.5),
           icon:     markerIcon,
-          alpha:    0.95,
+          alpha:    0.98,
+          zIndex:   5.0,
           infoWindow: InfoWindow(
             title: stop['name'],
             snippet: isFirst ? 'Origin Stop' : (isLast ? 'SISTec Campus Terminal' : 'Bus Stop #${i + 1}'),
           ),
+        ));
+      }
+    }
+  }
+
+  void _rebuildArrowMarkers() {
+    _cachedArrowMarkers.clear();
+    if (_selectedRoutePoints.length < 4 || _routeArrowIcon == null) return;
+
+    double accumulatedDistance = 0.0;
+    const double arrowIntervalMeters = 1200.0; // Place an arrow roughly every 1.2 km along the road
+
+    for (int i = 0; i < _selectedRoutePoints.length - 1; i++) {
+      final p1 = _selectedRoutePoints[i];
+      final p2 = _selectedRoutePoints[i + 1];
+
+      final segDist = Geolocator.distanceBetween(
+        p1.latitude, p1.longitude,
+        p2.latitude, p2.longitude,
+      );
+
+      accumulatedDistance += segDist;
+
+      if (accumulatedDistance >= arrowIntervalMeters) {
+        accumulatedDistance = 0.0;
+        final bearing = Geolocator.bearingBetween(
+          p1.latitude, p1.longitude,
+          p2.latitude, p2.longitude,
+        );
+
+        _cachedArrowMarkers.add(Marker(
+          markerId: MarkerId('route_arrow_$i'),
+          position: p1,
+          rotation: (bearing + 360) % 360,
+          anchor: const Offset(0.5, 0.5),
+          flat: true,
+          icon: _routeArrowIcon!,
+          zIndex: 3.5,
+          consumeTapEvents: false,
         ));
       }
     }
@@ -444,6 +544,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     }
 
     final allMarkers = Set<Marker>.of(result.values);
+    allMarkers.addAll(_cachedArrowMarkers);
     allMarkers.addAll(_cachedStopMarkers);
     return allMarkers;
   }
@@ -455,37 +556,53 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       final routeColor = Color(
           int.parse(widget.selectedRoute!.color.replaceAll('#', '0xFF')));
 
-      // 1. Ambient Road Glow Layer
+      // 1. Ambient Road Glow Layer (Soft aura around highway)
       result['route_glow'] = Polyline(
         polylineId: const PolylineId('route_glow'),
         points:     _selectedRoutePoints,
-        width:      8,
-        color:      routeColor.withValues(alpha: 0.25),
+        width:      14,
+        color:      routeColor.withValues(alpha: 0.18),
         jointType:  JointType.round,
         endCap:     Cap.roundCap,
         startCap:   Cap.roundCap,
+        zIndex:     1,
       );
 
-      // 2. High-Contrast Core Road Polyline
-      result['route'] = Polyline(
-        polylineId: const PolylineId('route'),
+      // 2. High-Contrast Outer Casing / Dark Border (Razor-sharp road edge)
+      result['route_casing'] = Polyline(
+        polylineId: const PolylineId('route_casing'),
         points:     _selectedRoutePoints,
-        width:      4,
+        width:      9,
+        color:      const Color(0xFF0F172A), // Deep slate navy border
+        jointType:  JointType.round,
+        endCap:     Cap.roundCap,
+        startCap:   Cap.roundCap,
+        zIndex:     2,
+      );
+
+      // 3. Vibrant Navigation Core Polyline
+      result['route_core'] = Polyline(
+        polylineId: const PolylineId('route_core'),
+        points:     _selectedRoutePoints,
+        width:      6,
         color:      routeColor,
         jointType:  JointType.round,
         endCap:     Cap.roundCap,
         startCap:   Cap.roundCap,
+        zIndex:     3,
       );
 
-      // 3. Subtle Inner Road Highlight
+      // 4. Directional Dash / Road Centerline Flow
       result['route_flow'] = Polyline(
         polylineId: const PolylineId('route_flow'),
         points:     _selectedRoutePoints,
         width:      2,
-        color:      Colors.white.withValues(alpha: 0.45),
+        color:      Colors.white.withValues(alpha: 0.85),
+        patterns:   [PatternItem.dash(14), PatternItem.gap(22)],
         jointType:  JointType.round,
         endCap:     Cap.roundCap,
         startCap:   Cap.roundCap,
+        zIndex:     4,
       );
     }
 
@@ -595,6 +712,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     }
     if (_lastStopIcon == null) {
       futures.add(_drawStopMarker(2).then((icon) => _lastStopIcon = icon));
+    }
+    if (_routeArrowIcon == null) {
+      futures.add(_drawRouteArrowMarker().then((icon) => _routeArrowIcon = icon));
     }
 
     if (futures.isNotEmpty) {
@@ -843,13 +963,51 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     return BitmapDescriptor.fromBytes(data.buffer.asUint8List());
   }
 
+  Future<BitmapDescriptor> _drawRouteArrowMarker() async {
+    const double scale = 2.0;
+    const double size = 28.0 * scale;
+    const double drawSize = 28.0;
+
+    final ui.PictureRecorder rec = ui.PictureRecorder();
+    final Canvas canvas = Canvas(rec, const Rect.fromLTWH(0, 0, size, size));
+    canvas.scale(scale);
+
+    // Arrow pointing strictly UP (North = 0 deg bearing)
+    final arrowPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.95)
+      ..style = PaintingStyle.fill;
+
+    final casingPaint = Paint()
+      ..color = const Color(0xFF0F172A).withValues(alpha: 0.50)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.4
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = ui.Path()
+      ..moveTo(drawSize * 0.50, drawSize * 0.18) // Tip top
+      ..lineTo(drawSize * 0.78, drawSize * 0.68) // Right wing
+      ..lineTo(drawSize * 0.50, drawSize * 0.52) // Inner notch
+      ..lineTo(drawSize * 0.22, drawSize * 0.68) // Left wing
+      ..close();
+
+    // Dark casing outline for contrast against map roads
+    canvas.drawPath(path, casingPaint);
+    // Vibrant white core
+    canvas.drawPath(path, arrowPaint);
+
+    final ui.Image img = await rec.endRecording().toImage(size.toInt(), size.toInt());
+    final ByteData? bd = await img.toByteData(format: ui.ImageByteFormat.png);
+    if (bd == null) return BitmapDescriptor.defaultMarker;
+    return BitmapDescriptor.fromBytes(bd.buffer.asUint8List());
+  }
+
   Future<BitmapDescriptor> _drawStopMarker(int type) async {
-    const double scale = 1.4;
+    const double scale = 1.8;
     const double size = 36.0 * scale;
     const double drawSize = 36.0;
     
     final ui.PictureRecorder rec = ui.PictureRecorder();
-    final Canvas canvas = Canvas(rec, Rect.fromLTWH(0, 0, size, size));
+    final Canvas canvas = Canvas(rec, const Rect.fromLTWH(0, 0, size, size));
 
     canvas.scale(scale);
 
