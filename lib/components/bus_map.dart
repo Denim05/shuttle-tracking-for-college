@@ -150,17 +150,25 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     // Keep focused bus updated with latest live telemetry
     if (widget.centerOnBusId != null) {
       try {
-        final b = widget.buses.firstWhere((b) => b.id == widget.centerOnBusId);
+        final b = widget.buses.firstWhere((b) => b.id == widget.centerOnBusId && b.isBroadcastingLive);
         _focusedBus = b;
         _updateNavigationInstructions(b);
-      } catch (_) {}
+      } catch (_) {
+        _focusedBus = null;
+      }
     } else if (_focusedBus != null) {
       try {
-        _focusedBus = widget.buses.firstWhere((b) => b.id == _focusedBus!.id);
+        _focusedBus = widget.buses.firstWhere((b) => b.id == _focusedBus!.id && b.isBroadcastingLive);
         _updateNavigationInstructions(_focusedBus!);
-      } catch (_) {}
+      } catch (_) {
+        _focusedBus = null;
+      }
     } else if (_isDriveMode) {
       _focusInitialBus();
+    }
+
+    if (_focusedBus == null || !_focusedBus!.isBroadcastingLive) {
+      _isFollowing = false;
     }
 
     if (old.centerOnBusId != widget.centerOnBusId && widget.centerOnBusId != null) {
@@ -521,7 +529,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     final result = <String, Marker>{};
 
     for (final bus in widget.buses) {
-      if (bus.status.toLowerCase() == 'offline') {
+      // STRICT PRODUCTION RULE: Bus marker ONLY renders when actively broadcasting GPS!
+      if (!bus.isBroadcastingLive) {
         continue;
       }
 
@@ -647,7 +656,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
   Set<Circle> _buildCircles() {
     final result = <Circle>{};
-    if (_focusedBus != null) {
+    if (_focusedBus != null && _focusedBus!.isBroadcastingLive) {
       final pos = _animatedPos[_focusedBus!.id]
           ?? LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng);
       result.add(Circle(
@@ -1115,22 +1124,29 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   void _focusInitialBus() {
+    final liveBuses = widget.buses.where((b) => b.isBroadcastingLive).toList();
     if (widget.centerOnBusId != null) {
       try {
-        final bus = widget.buses.firstWhere((b) => b.id == widget.centerOnBusId);
+        final bus = liveBuses.firstWhere((b) => b.id == widget.centerOnBusId);
         _focusedBus = bus;
         _isFollowing = true;
         if (widget.initialDriveMode) {
           _isDriveMode = true;
         }
-      } catch (_) {}
-    } else if (widget.initialDriveMode && widget.buses.isNotEmpty) {
-      _focusedBus = widget.buses.first;
+      } catch (_) {
+        _focusedBus = null;
+        _isFollowing = false;
+      }
+    } else if (widget.initialDriveMode && liveBuses.isNotEmpty) {
+      _focusedBus = liveBuses.first;
       _isDriveMode = true;
       _isFollowing = true;
-    } else if (widget.buses.isNotEmpty) {
-      _focusedBus = widget.buses.first;
+    } else if (liveBuses.isNotEmpty) {
+      _focusedBus = liveBuses.first;
       _isFollowing = true;
+    } else {
+      _focusedBus = null;
+      _isFollowing = false;
     }
   }
 
@@ -1748,7 +1764,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         ),
 
         // ── Floating Re-centre Pill when unfollowed ───────────────────────
-        if (_focusedBus != null && !_isFollowing)
+        if (_focusedBus != null && _focusedBus!.isBroadcastingLive && !_isFollowing)
           Positioned(
             left: 16,
             top: MediaQuery.of(context).padding.top + (_isDriveMode ? 156 : 94),

@@ -50,6 +50,14 @@ class Bus {
   bool get isDropoff => tripType == 'dropoff';
   String get directionLabel => isDropoff ? 'College ➔ Stop' : 'Stop ➔ College';
 
+  /// Returns true ONLY if the driver is actively broadcasting live telemetry
+  /// within the last 30 seconds and status is not Offline.
+  bool get isBroadcastingLive {
+    if (status.toLowerCase().trim() == 'offline') return false;
+    final diffSeconds = DateTime.now().difference(lastUpdated).inSeconds;
+    return diffSeconds <= 30;
+  }
+
   /// Returns the manager-assigned Bus Number (e.g. "BUS 02", "BUS 19", "BUS T-4")
   /// Permanently guaranteed NEVER to return a raw hex ID substring.
   String get displayBusNumber {

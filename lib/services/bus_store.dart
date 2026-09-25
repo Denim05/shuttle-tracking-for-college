@@ -64,7 +64,7 @@ class BusStore extends ChangeNotifier {
   Timer?   _purgeTimer;
   DateTime _lastUpdateTime = DateTime.now();
 
-  static const int _staleSecs = 120;
+  static const int _staleSecs = 25;
   static const int _maxNotifications = 100;
 
   List<Bus>? _cachedSortedBuses;
@@ -131,7 +131,7 @@ class BusStore extends ChangeNotifier {
   List<Bus> get activeBuses {
     final cutoff = DateTime.now().subtract(const Duration(seconds: _staleSecs));
     return _buses.values
-        .where((b) => b.status.toLowerCase() != 'offline' && b.lastUpdated.isAfter(cutoff))
+        .where((b) => b.isBroadcastingLive && b.lastUpdated.isAfter(cutoff))
         .toList();
   }
 
@@ -199,9 +199,14 @@ class BusStore extends ChangeNotifier {
   // ─── Seeding ────────────────────────────────────────────────────────────
 
   void seedBuses(List<dynamic> json) {
+    final cutoff = DateTime.now().subtract(const Duration(seconds: _staleSecs));
     for (final item in json) {
       try {
-        final bus = Bus.fromJson(item as Map<String, dynamic>);
+        var bus = Bus.fromJson(item as Map<String, dynamic>);
+        // Guarantee stale seeded buses on startup or login are immediately marked Offline
+        if (bus.status.toLowerCase() != 'offline' && bus.lastUpdated.isBefore(cutoff)) {
+          bus = bus.copyWith(status: 'Offline', speed: 0, etas: const []);
+        }
         _buses[bus.id] = bus;
       } catch (_) {}
     }
@@ -348,7 +353,7 @@ class BusStore extends ChangeNotifier {
   // ─── Stale Purge ────────────────────────────────────────────────────────
 
   void _startStalePurge() {
-    _purgeTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _purgeTimer = Timer.periodic(const Duration(seconds: 5), (_) {
       final cutoff = DateTime.now()
           .subtract(const Duration(seconds: _staleSecs));
       final stale = _buses.entries

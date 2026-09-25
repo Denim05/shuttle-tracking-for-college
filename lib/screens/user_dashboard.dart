@@ -340,9 +340,9 @@ class _UserDashboardState extends State<UserDashboard> {
     final selId = route.id.trim().toLowerCase();
     final selName = route.name.trim().toLowerCase();
 
-    // 1. Search for live/online buses on this route
+    // 1. Search ONLY for live buses actively broadcasting on this route
     final onlineBuses = busStore.allBuses.where((b) {
-      if (b.status.toLowerCase().trim() == 'offline') return false;
+      if (!b.isBroadcastingLive) return false;
       final rId = b.routeId.trim().toLowerCase();
       final rName = b.routeName.trim().toLowerCase();
       return (rId.isNotEmpty && (rId == selId || selId.contains(rId) || rId.contains(selId))) ||
@@ -354,19 +354,7 @@ class _UserDashboardState extends State<UserDashboard> {
       return onlineBuses.first;
     }
 
-    // 2. Fallback to any buses on this route (even if offline)
-    final anyBuses = busStore.allBuses.where((b) {
-      final rId = b.routeId.trim().toLowerCase();
-      final rName = b.routeName.trim().toLowerCase();
-      return (rId.isNotEmpty && (rId == selId || selId.contains(rId) || rId.contains(selId))) ||
-             (rName.isNotEmpty && (rName == selName || rName.contains(selName) || selName.contains(rName)));
-    }).toList();
-
-    if (anyBuses.isNotEmpty) {
-      anyBuses.sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
-      return anyBuses.first;
-    }
-
+    // Do NOT fall back to offline buses as active buses — shuttle must only show when driver broadcasts
     return null;
   }
 
@@ -675,7 +663,7 @@ class _UserDashboardState extends State<UserDashboard> {
         _activeBus = currentActiveBus;
 
         // In Guest Mode: If current route has no live bus, auto-switch to active live shuttle
-        if (auth.isGuest && (currentActiveBus == null || currentActiveBus.status.toLowerCase() == 'offline')) {
+        if (auth.isGuest && (currentActiveBus == null || !currentActiveBus.isBroadcastingLive)) {
           final liveBuses = store.activeBuses;
           if (liveBuses.isNotEmpty) {
             final liveBus = liveBuses.first;
@@ -700,7 +688,7 @@ class _UserDashboardState extends State<UserDashboard> {
         }
 
         final mapBuses = store.allBuses.where((b) {
-          if (b.status.toLowerCase().trim() == 'offline') return false;
+          if (!b.isBroadcastingLive) return false;
           if (_selectedRoute == null) return true;
           final rId = b.routeId.trim().toLowerCase();
           final rName = b.routeName.trim().toLowerCase();
@@ -712,11 +700,10 @@ class _UserDashboardState extends State<UserDashboard> {
 
         // Safety guarantee: If currentActiveBus is live, ensure it is present in mapBuses
         if (currentActiveBus != null &&
-            currentActiveBus.status.toLowerCase().trim() != 'offline' &&
+            currentActiveBus.isBroadcastingLive &&
             !mapBuses.any((b) => b.id == currentActiveBus!.id)) {
           mapBuses.add(currentActiveBus);
-        } else if ((currentActiveBus == null || currentActiveBus.status.toLowerCase() == 'offline') && mapBuses.isNotEmpty) {
-          // If activeBus fell back to an offline document but an online bus is active on this route corridor, adopt the online bus
+        } else if ((currentActiveBus == null || !currentActiveBus.isBroadcastingLive) && mapBuses.isNotEmpty) {
           currentActiveBus = mapBuses.first;
           _activeBus = currentActiveBus;
         }
@@ -726,7 +713,7 @@ class _UserDashboardState extends State<UserDashboard> {
             BusMap(
               buses: mapBuses,
               selectedRoute: _selectedRoute,
-              centerOnBusId: currentActiveBus?.id,
+              centerOnBusId: (currentActiveBus != null && currentActiveBus.isBroadcastingLive) ? currentActiveBus.id : null,
               showFocusedBusCard: false,
               onDriveModeChanged: (isDrive) {
                 setState(() => _isDriveMode = isDrive);
@@ -828,7 +815,7 @@ class _UserDashboardState extends State<UserDashboard> {
                                   runSpacing: 6,
                                   crossAxisAlignment: WrapCrossAlignment.center,
                                   children: [
-                                    if (currentActiveBus != null && currentActiveBus.status.toLowerCase() != 'offline') ...[
+                                    if (currentActiveBus != null && currentActiveBus.isBroadcastingLive) ...[
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                         decoration: BoxDecoration(
@@ -946,8 +933,10 @@ class _UserDashboardState extends State<UserDashboard> {
                           ValueListenableBuilder<DateTime?>(
                             valueListenable: Provider.of<SocketService>(context, listen: false).lastDataReceived,
                             builder: (context, lastPacket, _) {
-                              final isRecent = lastPacket != null && 
-                                  DateTime.now().difference(lastPacket).inSeconds < 15;
+                              final isRecent = currentActiveBus != null &&
+                                  currentActiveBus.isBroadcastingLive &&
+                                  lastPacket != null && 
+                                  DateTime.now().difference(lastPacket).inSeconds < 25;
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
                                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -989,7 +978,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       const SizedBox(height: 14),
                       _buildQuickActionsRow(),
                       const SizedBox(height: 24),
-                      if (currentActiveBus != null && currentActiveBus.status.toLowerCase() != 'offline') ...[
+                      if (currentActiveBus != null && currentActiveBus.isBroadcastingLive) ...[
                         LinearTrackingView(
                           bus: currentActiveBus, 
                           route: _selectedRoute!,
@@ -1412,7 +1401,7 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildHeroTransitCard(BusStore busStore) {
     final bus = _resolveActiveBus(busStore, _selectedRoute) ?? _activeBus;
-    final isLive = bus != null && bus.status.toLowerCase() != 'offline';
+    final isLive = bus != null && bus.isBroadcastingLive;
     final auth = Provider.of<AuthService>(context, listen: false);
     final hasPickup = (auth.currentUser?.pickupPoint ?? '').isNotEmpty;
     final pickupName = auth.currentUser?.pickupPoint ?? '';
