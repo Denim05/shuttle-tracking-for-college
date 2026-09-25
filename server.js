@@ -1059,6 +1059,23 @@ app.get('/api/guest/routes', async (req, res) => {
 app.get('/api/guest/buses', async (req, res) => {
     try {
         const buses = await Bus.find().lean();
+        const nowTime = Date.now();
+        const staleIds = [];
+        for (const b of buses) {
+            const lastUp = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+            if (b.status && b.status.toLowerCase() !== 'offline' && (nowTime - lastUp) > 30000) {
+                b.status = 'Offline';
+                b.speed = 0;
+                b.etas = [];
+                staleIds.push(b._id);
+            }
+        }
+        if (staleIds.length > 0) {
+            Bus.updateMany(
+                { _id: { $in: staleIds } },
+                { $set: { status: 'Offline', speed: 0, etas: [] } }
+            ).catch(() => {});
+        }
         res.setHeader('Cache-Control', 'public, max-age=5, stale-while-revalidate=15');
         res.json(buses);
     } catch (_err) {
@@ -1459,6 +1476,23 @@ app.delete('/api/students/:id', async (req, res) => {
 app.get('/api/buses', async (req, res) => {
     try {
         const buses = await Bus.find().lean();
+        const nowTime = Date.now();
+        const staleIds = [];
+        for (const b of buses) {
+            const lastUp = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+            if (b.status && b.status.toLowerCase() !== 'offline' && (nowTime - lastUp) > 30000) {
+                b.status = 'Offline';
+                b.speed = 0;
+                b.etas = [];
+                staleIds.push(b._id);
+            }
+        }
+        if (staleIds.length > 0) {
+            Bus.updateMany(
+                { _id: { $in: staleIds } },
+                { $set: { status: 'Offline', speed: 0, etas: [] } }
+            ).catch(() => {});
+        }
         res.setHeader('Cache-Control', 'private, max-age=5, stale-while-revalidate=15');
         res.json(buses);
     } catch (_err) {
@@ -3288,24 +3322,51 @@ io.on('connection', (socket) => {
         }
     });
 
-    // Driver signals end of trip
-    socket.on('tripEnd', async (data) => {
+    // Driver signals end of trip or stops broadcast
+    const handleTripEndOrStopBroadcast = async (data) => {
         try {
-            const busId = (data.busId || '').toString();
+            const busId = (data.busId || data.id || data._id || '').toString();
+            if (busId) {
+                const bus = await Bus.findByIdAndUpdate(
+                    busId, 
+                    { status: 'Offline', speed: 0, etas: [], lastUpdated: new Date() },
+                    { new: true }
+                );
+                const offlinePayload = {
+                    id: busId,
+                    _id: busId,
+                    busId: busId,
+                    busNumber: bus ? bus.busNumber : undefined,
+                    status: 'Offline',
+                    speed: 0,
+                    etas: [],
+                    lastUpdated: new Date()
+                };
+                io.emit('busLocationUpdate', offlinePayload);
+                io.emit('locationUpdate', offlinePayload);
+                io.emit('busUpdated', offlinePayload);
+                if (bus && bus.routeId) {
+                    io.to(`route_${bus.routeId.toString()}`).emit('busLocationUpdate', offlinePayload);
+                    io.to(`route_${bus.routeId.toString()}`).emit('locationUpdate', offlinePayload);
+                    io.to(`route_${bus.routeId.toString()}`).emit('busUpdated', offlinePayload);
+                }
+                console.log(`🏁 [TRIP END / STOP BROADCAST] Bus ${busId} marked Offline`);
+            }
             const todayStr = new Date().toISOString().split('T')[0];
             const tripLog = await LiveTripLog.findOne({ busId, date: todayStr, status: 'Active' });
             if (tripLog) {
                 tripLog.endTime = new Date();
                 tripLog.status = 'Completed';
                 await tripLog.save();
-                // Update bus status to Offline
-                await Bus.findByIdAndUpdate(busId, { status: 'Offline' });
-                console.log(`🏁 [TRIP END] Bus trip completed for busId: ${busId}`);
             }
         } catch (err) {
             console.error('❌ [TRIP END ERROR]:', err.message);
         }
-    });
+    };
+
+    socket.on('tripEnd', handleTripEndOrStopBroadcast);
+    socket.on('stopBroadcast', handleTripEndOrStopBroadcast);
+    socket.on('stopTrip', handleTripEndOrStopBroadcast);
     socket.on('ping', () => socket.emit('pong'));
     socket.on('disconnect', () => { console.log('Client disconnected'); });
 });
@@ -5205,85 +5266,61 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
     }
 });
 
-    // ─── Live Bus Telemetry Simulator (Resource-Optimized) ───────────────────
-    let simCycleCount = 0;
+    // ─── Real Driver Telemetry Inactivity Watchdog (Production Strict) ────────
+    // Automatically marks bus Offline if driver stops broadcasting (>30s)
     setInterval(async () => {
         try {
-            // Only simulate if clients are actively connected to reduce Render & Mongo load
-            if (!io.engine || io.engine.clientsCount === 0) return;
-
-            const buses = await Bus.find({ status: { $in: ['On-time', 'Delayed', 'Active'] } }).limit(8);
-            if (!buses || buses.length === 0) return;
-
-            // CRITICAL: Filter out any bus operated by an actual driver or recently updated by driver GPS (< 5 min)
-            const nowTime = Date.now();
-            const busesToSimulate = buses.filter(b => {
-                const lastUp = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
-                const isRealDriverLive = (nowTime - lastUp) < 300000; // 5 minutes
-                // If real driver broadcasted recently or has assigned driver, do NOT simulate
-                return !isRealDriverLive && !b.driverId;
+            const staleCutoff = new Date(Date.now() - 30 * 1000);
+            const staleBuses = await Bus.find({
+                status: { $in: ['On-time', 'Delayed', 'Active'] },
+                lastUpdated: { $lt: staleCutoff }
             });
-            if (busesToSimulate.length === 0) return;
 
-            simCycleCount++;
-            const shouldPersistToDb = (simCycleCount % 6 === 0); // Persist every ~24s instead of 120 writes/min
-            const bulkOps = [];
+            if (staleBuses && staleBuses.length > 0) {
+                for (const bus of staleBuses) {
+                    bus.status = 'Offline';
+                    bus.speed = 0;
+                    bus.etas = [];
+                    await bus.save();
 
-            for (const bus of busesToSimulate) {
-                const deltaLat = (Math.random() - 0.48) * 0.0005;
-                const deltaLng = (Math.random() - 0.48) * 0.0005;
-                bus.currentLat = Number((bus.currentLat + deltaLat).toFixed(6));
-                bus.currentLng = Number((bus.currentLng + deltaLng).toFixed(6));
-                bus.speed = Math.floor(32 + Math.random() * 22);
-                bus.heading = Math.floor((bus.heading + Math.random() * 12) % 360);
-                bus.lastUpdated = new Date();
+                    const offlinePayload = {
+                        id: bus._id.toString(),
+                        _id: bus._id.toString(),
+                        busId: bus._id.toString(),
+                        busNumber: bus.busNumber,
+                        name: bus.name,
+                        routeId: bus.routeId,
+                        routeName: bus.routeName,
+                        routeColor: bus.routeColor,
+                        tripType: bus.tripType,
+                        occupancy: bus.occupancy,
+                        driverId: bus.driverId,
+                        currentLat: bus.currentLat,
+                        latitude: bus.currentLat,
+                        currentLng: bus.currentLng,
+                        longitude: bus.currentLng,
+                        speed: 0,
+                        heading: bus.heading,
+                        status: 'Offline',
+                        etas: [],
+                        lastUpdated: new Date()
+                    };
 
-                if (shouldPersistToDb) {
-                    bulkOps.push({
-                        updateOne: {
-                            filter: { _id: bus._id },
-                            update: {
-                                $set: {
-                                    currentLat: bus.currentLat,
-                                    currentLng: bus.currentLng,
-                                    speed: bus.speed,
-                                    heading: bus.heading,
-                                    lastUpdated: bus.lastUpdated
-                                }
-                            }
-                        }
-                    });
+                    io.emit('busLocationUpdate', offlinePayload);
+                    io.emit('locationUpdate', offlinePayload);
+                    io.emit('busUpdated', offlinePayload);
+                    if (bus.routeId) {
+                        io.to(`route_${bus.routeId.toString()}`).emit('busLocationUpdate', offlinePayload);
+                        io.to(`route_${bus.routeId.toString()}`).emit('locationUpdate', offlinePayload);
+                        io.to(`route_${bus.routeId.toString()}`).emit('busUpdated', offlinePayload);
+                    }
+                    console.log(`📴 [DRIVER INACTIVITY WATCHDOG] Bus ${bus.busNumber || bus._id} stopped broadcasting (>30s) -> Marked Offline`);
                 }
-
-                const telemetryData = {
-                    busId: bus._id,
-                    id: bus._id,
-                    busNumber: bus.busNumber,
-                    name: bus.name,
-                    routeId: bus.routeId,
-                    routeName: bus.routeName,
-                    routeColor: bus.routeColor,
-                    tripType: bus.tripType,
-                    occupancy: bus.occupancy,
-                    driverId: bus.driverId,
-                    currentLat: bus.currentLat,
-                    latitude: bus.currentLat,
-                    currentLng: bus.currentLng,
-                    longitude: bus.currentLng,
-                    speed: bus.speed,
-                    heading: bus.heading,
-                    status: bus.status,
-                    lastUpdated: bus.lastUpdated
-                };
-                io.emit('busLocationUpdate', telemetryData);
-                io.emit('locationUpdate', telemetryData);
             }
-
-            if (bulkOps.length > 0) {
-                await Bus.bulkWrite(bulkOps);
-            }
-        } catch (_) {}
-    }, 4000);
+        } catch (err) {
+            console.error('Watchdog interval error:', err.message);
+        }
+    }, 10000);
 
     // ⚡ RENDER 100% FREE KEEP-ALIVE ENGINE (Prevents 15-min idle sleep)
     const SELF_URL = process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
