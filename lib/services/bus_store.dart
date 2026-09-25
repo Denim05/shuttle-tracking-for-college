@@ -67,15 +67,25 @@ class BusStore extends ChangeNotifier {
   static const int _staleSecs = 120;
   static const int _maxNotifications = 100;
 
+  List<Bus>? _cachedSortedBuses;
+
+  static final RegExp _busNoRegex = RegExp(r'Bus\s+no:\s*([A-Za-z0-9\-]+)', caseSensitive: false);
+  static final RegExp _busRegex = RegExp(r'Bus\s+([A-Za-z0-9\-]+)', caseSensitive: false);
+  static final RegExp _isNumRegex = RegExp(r'^\d+$');
+  static final RegExp _isTRegex = RegExp(r'^T-\d+$', caseSensitive: false);
+  static final RegExp _digitsRegex = RegExp(r'\D');
+
   // ─── Public Getters ─────────────────────────────────────────────────────
 
   List<Bus> get allBuses {
+    if (_cachedSortedBuses != null) return _cachedSortedBuses!;
+
     final list = _buses.values.toList();
     list.sort((a, b) {
       String getBusKey(Bus bus) {
-        final match = RegExp(r'Bus\s+no:\s*([A-Za-z0-9\-]+)', caseSensitive: false).firstMatch(bus.routeName);
+        final match = _busNoRegex.firstMatch(bus.routeName);
         if (match != null) return match.group(1)!;
-        final match2 = RegExp(r'Bus\s+([A-Za-z0-9\-]+)', caseSensitive: false).firstMatch(bus.routeName);
+        final match2 = _busRegex.firstMatch(bus.routeName);
         if (match2 != null) return match2.group(1)!;
         return bus.routeName;
       }
@@ -83,8 +93,8 @@ class BusStore extends ChangeNotifier {
       final aKey = getBusKey(a);
       final bKey = getBusKey(b);
 
-      final aIsNum = RegExp(r'^\d+$').hasMatch(aKey);
-      final bIsNum = RegExp(r'^\d+$').hasMatch(bKey);
+      final aIsNum = _isNumRegex.hasMatch(aKey);
+      final bIsNum = _isNumRegex.hasMatch(bKey);
 
       if (aIsNum && bIsNum) {
         final aInt = int.tryParse(aKey) ?? 0;
@@ -96,11 +106,11 @@ class BusStore extends ChangeNotifier {
         return 1;
       }
 
-      final aIsT = RegExp(r'^T-\d+$', caseSensitive: false).hasMatch(aKey);
-      final bIsT = RegExp(r'^T-\d+$', caseSensitive: false).hasMatch(bKey);
+      final aIsT = _isTRegex.hasMatch(aKey);
+      final bIsT = _isTRegex.hasMatch(bKey);
       if (aIsT && bIsT) {
-        final aInt = int.tryParse(aKey.replaceAll(RegExp(r'\D'), '')) ?? 0;
-        final bInt = int.tryParse(bKey.replaceAll(RegExp(r'\D'), '')) ?? 0;
+        final aInt = int.tryParse(aKey.replaceAll(_digitsRegex, '')) ?? 0;
+        final bInt = int.tryParse(bKey.replaceAll(_digitsRegex, '')) ?? 0;
         if (aInt != bInt) return aInt.compareTo(bInt);
       } else if (aIsT) {
         return -1;
@@ -110,13 +120,18 @@ class BusStore extends ChangeNotifier {
 
       return aKey.compareTo(bKey);
     });
+
+    _cachedSortedBuses = list;
     return list;
   }
+
+  /// Alias for allBuses
+  List<Bus> get buses => allBuses;
 
   List<Bus> get activeBuses {
     final cutoff = DateTime.now().subtract(const Duration(seconds: _staleSecs));
     return _buses.values
-        .where((b) => b.status != 'Offline' && b.lastUpdated.isAfter(cutoff))
+        .where((b) => b.status.toLowerCase() != 'offline' && b.lastUpdated.isAfter(cutoff))
         .toList();
   }
 
@@ -190,6 +205,7 @@ class BusStore extends ChangeNotifier {
         _buses[bus.id] = bus;
       } catch (_) {}
     }
+    _cachedSortedBuses = null;
     notifyListeners();
   }
 
@@ -197,6 +213,7 @@ class BusStore extends ChangeNotifier {
 
   void _initListeners() {
     _socketService.listenToBusUpdates(_onBusUpdate);
+    _socketService.listenToLocationUpdates(_onBusUpdate);
     _socketService.listenToBusCreated(_onBusUpdate);
     _socketService.listenToBusUpdated(_onBusUpdate);
     _socketService.listenToBusDeleted(_onBusDeleted);
@@ -213,6 +230,7 @@ class BusStore extends ChangeNotifier {
       final String? id = json['id']?.toString() ?? json['_id']?.toString();
       if (id != null) {
         _buses.remove(id);
+        _cachedSortedBuses = null;
         notifyListeners();
       }
     } catch (e) {
@@ -236,11 +254,10 @@ class BusStore extends ChangeNotifier {
 
   void _onBusUpdate(dynamic data) {
     try {
-      final Map<String, dynamic> json = data is Map<String, dynamic>
-          ? data
-          : Map<String, dynamic>.from(data as Map);
+      final incoming = Bus.fromJson(data);
+      if (incoming.id.isEmpty) return;
 
-      final incoming = Bus.fromJson(json);
+      final now = DateTime.now();
       final existing = _buses[incoming.id];
       if (existing != null) {
         _buses[incoming.id] = existing.copyWith(
@@ -254,7 +271,7 @@ class BusStore extends ChangeNotifier {
           routeColor: (incoming.routeColor.isNotEmpty && incoming.routeColor != '#2D5BFF') ? incoming.routeColor : existing.routeColor,
           currentLat: incoming.currentLat != 0.0 ? incoming.currentLat : existing.currentLat,
           currentLng: incoming.currentLng != 0.0 ? incoming.currentLng : existing.currentLng,
-          heading: incoming.heading != 0.0 ? incoming.heading : existing.heading,
+          heading: incoming.heading,
           speed: incoming.speed,
           status: incoming.status,
           driverId: incoming.driverId ?? existing.driverId,
@@ -265,12 +282,14 @@ class BusStore extends ChangeNotifier {
           nextStop: incoming.nextStop ?? existing.nextStop,
           distanceToNextStopMeters: incoming.distanceToNextStopMeters ?? existing.distanceToNextStopMeters,
           etas: incoming.etas.isNotEmpty ? incoming.etas : existing.etas,
-          lastUpdated: incoming.lastUpdated,
+          lastUpdated: now,
         );
       } else {
-        _buses[incoming.id] = incoming;
+        _buses[incoming.id] = incoming.copyWith(lastUpdated: now);
       }
-      _lastUpdateTime = DateTime.now();
+      _cachedSortedBuses = null; // Invalidate cache so all getters return fresh state immediately
+      _lastUpdateTime = now;
+      debugPrint('🚌 BusStore: live update applied for ${incoming.busNumber ?? incoming.id} (${incoming.status}, ${incoming.speed.toInt()} km/h, pos: ${incoming.currentLat.toStringAsFixed(4)}, ${incoming.currentLng.toStringAsFixed(4)})');
       notifyListeners();
     } catch (e) {
       debugPrint('BusStore._onBusUpdate error: $e');
@@ -333,29 +352,21 @@ class BusStore extends ChangeNotifier {
       final cutoff = DateTime.now()
           .subtract(const Duration(seconds: _staleSecs));
       final stale = _buses.entries
-          .where((e) => e.value.lastUpdated.isBefore(cutoff))
+          .where((e) => e.value.status.toLowerCase() != 'offline' && e.value.lastUpdated.isBefore(cutoff))
           .map((e) => e.key)
           .toList();
 
       if (stale.isNotEmpty) {
         for (final id in stale) {
           final b = _buses[id]!;
-          _buses[id] = Bus(
-            id         : b.id,
-            routeId    : b.routeId,
-            routeName  : b.routeName,
-            routeColor : b.routeColor,
-            currentLat : b.currentLat,
-            currentLng : b.currentLng,
-            heading    : b.heading,
-            speed      : 0,
-            status     : 'Offline',
-            driverId   : b.driverId,
-            occupancy  : b.occupancy,
-            etas       : const [],
-            lastUpdated: b.lastUpdated,
+          _buses[id] = b.copyWith(
+            status: 'Offline',
+            speed: 0,
+            etas: const [],
+            lastUpdated: DateTime.now(),
           );
         }
+        _cachedSortedBuses = null;
         notifyListeners();
         debugPrint('BusStore: ${stale.length} bus(es) marked Offline (stale)');
       }

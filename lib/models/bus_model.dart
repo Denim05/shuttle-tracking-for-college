@@ -118,33 +118,51 @@ class Bus {
     );
   }
 
-  factory Bus.fromJson(Map<String, dynamic> json) {
+  factory Bus.fromJson(dynamic raw) {
+    final Map<dynamic, dynamic> json = raw is Map ? raw : <dynamic, dynamic>{};
+
+    double parseDouble(dynamic v, [double fallback = 0.0]) {
+      if (v == null) return fallback;
+      if (v is num) return v.toDouble();
+      return double.tryParse(v.toString()) ?? fallback;
+    }
+
+    int parseInt(dynamic v, [int fallback = 0]) {
+      if (v == null) return fallback;
+      if (v is num) return v.toInt();
+      return int.tryParse(v.toString()) ?? fallback;
+    }
+
+    DateTime parseDate(dynamic v) {
+      if (v == null) return DateTime.now();
+      if (v is DateTime) return v.toLocal();
+      return DateTime.tryParse(v.toString())?.toLocal() ?? DateTime.now();
+    }
+
     return Bus(
       id: json['_id']?.toString() ?? json['id']?.toString() ?? json['busId']?.toString() ?? '',
       busNumber: json['busNumber']?.toString() ?? json['busNo']?.toString() ?? json['vehicleNo']?.toString() ?? json['plateNumber']?.toString(),
       name: json['name']?.toString() ?? json['busName']?.toString(),
       shift: json['shift']?.toString(),
       routeId: json['routeId']?.toString() ?? '',
-      routeName: json['routeName'] ?? 'Unknown Route',
-      routeColor: json['routeColor'] ?? '#2D5BFF',
-      currentLat: (json['currentLat'] ?? json['latitude'] ?? 0.0).toDouble(),
-      currentLng: (json['currentLng'] ?? json['longitude'] ?? 0.0).toDouble(),
-      heading: (json['heading'] ?? 0.0).toDouble(),
-      speed: (json['speed'] ?? 0.0).toDouble(),
-      status: json['status'] ?? 'Offline',
+      routeName: json['routeName']?.toString() ?? 'Unknown Route',
+      routeColor: json['routeColor']?.toString() ?? '#2D5BFF',
+      currentLat: parseDouble(json['currentLat'] ?? json['latitude']),
+      currentLng: parseDouble(json['currentLng'] ?? json['longitude']),
+      heading: parseDouble(json['heading']),
+      speed: parseDouble(json['speed']),
+      status: json['status']?.toString() ?? 'Offline',
       driverId: json['driverId']?.toString(),
-      occupancy: json['occupancy'] ?? 'Low',
-      tripType: json['tripType'] ?? 'pickup',
+      occupancy: json['occupancy']?.toString() ?? 'Low',
+      tripType: json['tripType']?.toString() ?? 'pickup',
       reachedStops: (json['reachedStops'] as List<dynamic>?)?.map((e) => e.toString()).toList() ?? const [],
-      completedStops: (json['completedStops'] ?? (json['reachedStops'] as List?)?.length ?? 0) as int,
+      completedStops: parseInt(json['completedStops'], (json['reachedStops'] as List?)?.length ?? 0),
       nextStop: json['nextStop']?.toString(),
-      distanceToNextStopMeters: (json['distanceToNextStopMeters'] as num?)?.toInt(),
+      distanceToNextStopMeters: json['distanceToNextStopMeters'] != null ? parseInt(json['distanceToNextStopMeters']) : null,
       etas: (json['etas'] as List? ?? [])
           .map((e) => BusETA.fromJson(e))
           .toList(),
-      lastUpdated: json['lastUpdated'] != null 
-          ? DateTime.parse(json['lastUpdated'].toString())
-          : DateTime.now(),
+      lastUpdated: parseDate(json['lastUpdated']),
     );
   }
 }
@@ -155,10 +173,13 @@ class BusETA {
 
   BusETA({required this.stopName, required this.minutes});
 
-  factory BusETA.fromJson(Map<String, dynamic> json) {
+  factory BusETA.fromJson(dynamic raw) {
+    if (raw is! Map) return BusETA(stopName: '', minutes: 0);
+    final mins = raw['minutes'];
+    final minsInt = (mins is num) ? mins.toInt() : (int.tryParse('$mins') ?? 0);
     return BusETA(
-      stopName: json['stopName'] ?? '',
-      minutes: (json['minutes'] ?? 0).toInt(),
+      stopName: raw['stopName']?.toString() ?? '',
+      minutes: minsInt,
     );
   }
 }

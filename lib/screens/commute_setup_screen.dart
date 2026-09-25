@@ -9,7 +9,7 @@ import '../services/auth_service.dart';
 import '../services/api_service.dart';
 import '../models/route_model.dart';
 import '../theme/app_theme.dart';
-import '../main.dart';
+import 'user_dashboard.dart';
 
 class CommuteSetupScreen extends StatefulWidget {
   final bool isInitialSetup;
@@ -76,46 +76,68 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
   Future<void> _fetchRoutes() async {
     setState(() => _isLoadingRoutes = true);
 
+    // 1. Instantly check persisted cache for 0ms loading
     try {
-      final data = await _apiService.get('routes');
-      if (data is List) {
+      final cached = await ApiService.getPersisted('routes') ?? 
+                     await ApiService.getPersisted('guest_routes');
+      if (cached is List && cached.isNotEmpty && mounted) {
+        final parsed = cached.map((json) => RouteModel.fromJson(json)).toList();
+        _applyParsedRoutes(parsed);
+      }
+    } catch (_) {}
+
+    // 2. Network fetch using verified public route endpoint for instant loading
+    try {
+      dynamic data;
+      try {
+        data = await _apiService.get('guest/routes', requiresAuth: false, useCache: true, persistCache: true);
+      } catch (_) {
+        data = await _apiService.get('routes', requiresAuth: false, useCache: true, persistCache: true);
+      }
+
+      if (data is List && data.isNotEmpty) {
         if (!mounted) return;
         final parsed = data.map((json) => RouteModel.fromJson(json)).toList();
-        final auth = Provider.of<AuthService>(context, listen: false);
-        final user = auth.currentUser;
-
-        RouteModel? initialRoute;
-        String? initialStop;
-
-        if (user?.routeId != null) {
-          initialRoute = parsed.where((r) => r.id == user!.routeId).firstOrNull;
-          if (initialRoute != null && user?.pickupPoint != null) {
-            final matched = initialRoute.stops.where((s) => s['name'] == user!.pickupPoint).firstOrNull;
-            if (matched != null) {
-              initialStop = matched['name'];
-            }
-          }
-        }
-
-        if (mounted) {
-          setState(() {
-            _routes = parsed;
-            _selectedRoute = initialRoute ?? (parsed.isNotEmpty ? parsed.first : null);
-            final bool hasStop = _selectedRoute?.stops.any((s) => s['name'] == initialStop) ?? false;
-            _selectedStop = hasStop
-                ? initialStop
-                : (_selectedRoute?.stops.isNotEmpty == true
-                    ? _selectedRoute!.stops.first['name']
-                    : null);
-            _isLoadingRoutes = false;
-          });
-        }
+        _applyParsedRoutes(parsed);
       }
     } catch (e) {
+      debugPrint('⚠️ [CommuteSetup] Error loading routes: $e');
+    } finally {
       if (mounted) {
         setState(() => _isLoadingRoutes = false);
       }
     }
+  }
+
+  void _applyParsedRoutes(List<RouteModel> parsed) {
+    if (parsed.isEmpty || !mounted) return;
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final user = auth.currentUser;
+
+    RouteModel? initialRoute;
+    String? initialStop;
+
+    if (user?.routeId != null) {
+      initialRoute = parsed.where((r) => r.id == user!.routeId).firstOrNull;
+      if (initialRoute != null && user?.pickupPoint != null) {
+        final matched = initialRoute.stops.where((s) => s['name'] == user!.pickupPoint).firstOrNull;
+        if (matched != null) {
+          initialStop = matched['name'];
+        }
+      }
+    }
+
+    setState(() {
+      _routes = parsed;
+      _selectedRoute = initialRoute ?? (parsed.isNotEmpty ? parsed.first : null);
+      final bool hasStop = _selectedRoute?.stops.any((s) => s['name'] == initialStop) ?? false;
+      _selectedStop = hasStop
+          ? initialStop
+          : (_selectedRoute?.stops.isNotEmpty == true
+              ? _selectedRoute!.stops.first['name']
+              : null);
+      _isLoadingRoutes = false;
+    });
   }
 
   Future<void> _detectGPSLocation() async {
@@ -147,8 +169,8 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
       }
 
       final Position pos = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 10),
+        desiredAccuracy: LocationAccuracy.medium,
+        timeLimit: const Duration(seconds: 4),
       );
 
       _calculateAndRankNearestStops(pos.latitude, pos.longitude, 'GPS Location');
@@ -297,11 +319,11 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
 
       _showCustomSnackBar('Commute preferences saved for $_selectedStop!');
 
-      // Immediate & reliable navigation transition to AuthWrapper
+      // Immediate & reliable navigation transition directly to UserDashboard
       if (widget.isInitialSetup) {
         Navigator.of(context).pushAndRemoveUntil(
           PageRouteBuilder(
-            pageBuilder: (context, anim, secAnim) => const AuthWrapper(),
+            pageBuilder: (context, anim, secAnim) => const UserDashboard(),
             transitionsBuilder: (context, anim, secAnim, child) {
               return FadeTransition(opacity: anim, child: child);
             },
@@ -314,10 +336,12 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-      _showCustomSnackBar('Notice: Continuing to dashboard ($e)', isError: true);
-      if (widget.isInitialSetup) {
+      _showCustomSnackBar('Continuing to dashboard...', isError: false);
+      final auth = Provider.of<AuthService>(context, listen: false);
+      await auth.skipCommuteSetup();
+      if (widget.isInitialSetup && mounted) {
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const AuthWrapper()),
+          MaterialPageRoute(builder: (_) => const UserDashboard()),
           (route) => false,
         );
       }
@@ -326,12 +350,15 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
     }
   }
 
-  void _skipToDashboard() {
+  Future<void> _skipToDashboard() async {
     HapticFeedback.lightImpact();
+    final auth = Provider.of<AuthService>(context, listen: false);
+    await auth.skipCommuteSetup();
+    if (!mounted) return;
     if (widget.isInitialSetup) {
       Navigator.of(context).pushAndRemoveUntil(
         PageRouteBuilder(
-          pageBuilder: (context, anim, secAnim) => const AuthWrapper(),
+          pageBuilder: (context, anim, secAnim) => const UserDashboard(),
           transitionsBuilder: (context, anim, secAnim, child) => FadeTransition(opacity: anim, child: child),
           transitionDuration: const Duration(milliseconds: 300),
         ),

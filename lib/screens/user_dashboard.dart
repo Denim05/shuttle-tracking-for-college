@@ -205,6 +205,11 @@ class _UserDashboardState extends State<UserDashboard> {
         _isLoading = false;
         _updateActiveBus(busStore);
       });
+      if (!mounted) return;
+      if (_selectedRoute != null && _selectedRoute!.id.isNotEmpty) {
+        final socketService = Provider.of<SocketService>(context, listen: false);
+        socketService.joinRoute(_selectedRoute!.id);
+      }
     } catch (e) {
       debugPrint('Error fetching user dashboard data: $e');
       if (mounted) setState(() => _isLoading = false);
@@ -332,16 +337,16 @@ class _UserDashboardState extends State<UserDashboard> {
       return online.isNotEmpty ? online.first : null;
     }
 
-    final selId = route.id.trim();
+    final selId = route.id.trim().toLowerCase();
     final selName = route.name.trim().toLowerCase();
 
     // 1. Search for live/online buses on this route
     final onlineBuses = busStore.allBuses.where((b) {
       if (b.status.toLowerCase().trim() == 'offline') return false;
-      final rId = b.routeId.trim();
+      final rId = b.routeId.trim().toLowerCase();
       final rName = b.routeName.trim().toLowerCase();
-      return (rId.isNotEmpty && rId == selId) ||
-             (rName.isNotEmpty && rName == selName);
+      return (rId.isNotEmpty && (rId == selId || selId.contains(rId) || rId.contains(selId))) ||
+             (rName.isNotEmpty && (rName == selName || rName.contains(selName) || selName.contains(rName)));
     }).toList();
 
     if (onlineBuses.isNotEmpty) {
@@ -351,10 +356,10 @@ class _UserDashboardState extends State<UserDashboard> {
 
     // 2. Fallback to any buses on this route (even if offline)
     final anyBuses = busStore.allBuses.where((b) {
-      final rId = b.routeId.trim();
+      final rId = b.routeId.trim().toLowerCase();
       final rName = b.routeName.trim().toLowerCase();
-      return (rId.isNotEmpty && rId == selId) ||
-             (rName.isNotEmpty && rName == selName);
+      return (rId.isNotEmpty && (rId == selId || selId.contains(rId) || rId.contains(selId))) ||
+             (rName.isNotEmpty && (rName == selName || rName.contains(selName) || selName.contains(rName)));
     }).toList();
 
     if (anyBuses.isNotEmpty) {
@@ -367,6 +372,27 @@ class _UserDashboardState extends State<UserDashboard> {
 
   void _updateActiveBus(BusStore busStore) {
     _activeBus = _resolveActiveBus(busStore, _selectedRoute);
+  }
+
+  void _changeSelectedRoute(RouteModel? route, [Bus? liveBus]) {
+    final prevRouteId = _selectedRoute?.id;
+    setState(() {
+      _selectedRoute = route;
+      if (liveBus != null) {
+        _activeBus = liveBus;
+      } else {
+        final store = Provider.of<BusStore>(context, listen: false);
+        _updateActiveBus(store);
+      }
+    });
+
+    final socketService = Provider.of<SocketService>(context, listen: false);
+    if (prevRouteId != null && prevRouteId != route?.id) {
+      socketService.leaveRoute(prevRouteId);
+    }
+    if (route != null && route.id.isNotEmpty) {
+      socketService.joinRoute(route.id);
+    }
   }
 
   @override
@@ -666,10 +692,7 @@ class _UserDashboardState extends State<UserDashboard> {
             if (matchingRoute != null && matchingRoute.id != _selectedRoute?.id) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
                 if (mounted && _selectedRoute?.id != matchingRoute?.id) {
-                  setState(() {
-                    _selectedRoute = matchingRoute;
-                    _activeBus = liveBus;
-                  });
+                  _changeSelectedRoute(matchingRoute, liveBus);
                 }
               });
             }
@@ -679,19 +702,27 @@ class _UserDashboardState extends State<UserDashboard> {
         final mapBuses = store.allBuses.where((b) {
           if (b.status.toLowerCase().trim() == 'offline') return false;
           if (_selectedRoute == null) return true;
-          final rId = b.routeId.trim();
+          final rId = b.routeId.trim().toLowerCase();
           final rName = b.routeName.trim().toLowerCase();
-          final selId = _selectedRoute!.id.trim();
+          final selId = _selectedRoute!.id.trim().toLowerCase();
           final selName = _selectedRoute!.name.trim().toLowerCase();
-          return (rId.isNotEmpty && rId == selId) ||
-                 (rName.isNotEmpty && rName == selName);
+          return (rId.isNotEmpty && (rId == selId || selId.contains(rId) || rId.contains(selId))) ||
+                 (rName.isNotEmpty && (rName == selName || rName.contains(selName) || selName.contains(rName)));
         }).toList();
+
+        // Safety guarantee: If currentActiveBus is live, ensure it is present in mapBuses
+        if (currentActiveBus != null &&
+            currentActiveBus.status.toLowerCase().trim() != 'offline' &&
+            !mapBuses.any((b) => b.id == currentActiveBus.id)) {
+          mapBuses.add(currentActiveBus);
+        }
 
         return Stack(
           children: [
             BusMap(
               buses: mapBuses,
               selectedRoute: _selectedRoute,
+              centerOnBusId: currentActiveBus?.id,
               onDriveModeChanged: (isDrive) {
                 setState(() => _isDriveMode = isDrive);
               },
@@ -1013,10 +1044,7 @@ class _UserDashboardState extends State<UserDashboard> {
         onTap: () {
           HapticFeedback.mediumImpact();
           if (matchingRoute != null) {
-            setState(() {
-              _selectedRoute = matchingRoute;
-              _activeBus = otherLiveBus;
-            });
+            _changeSelectedRoute(matchingRoute, otherLiveBus);
           }
         },
         child: Container(
@@ -1378,30 +1406,102 @@ class _UserDashboardState extends State<UserDashboard> {
   }
 
   Widget _buildHeroTransitCard(BusStore busStore) {
-    final isLive = _activeBus != null && _activeBus!.status != 'Offline';
+    final bus = _resolveActiveBus(busStore, _selectedRoute) ?? _activeBus;
+    final isLive = bus != null && bus.status.toLowerCase() != 'offline';
     final auth = Provider.of<AuthService>(context, listen: false);
     final hasPickup = (auth.currentUser?.pickupPoint ?? '').isNotEmpty;
     final pickupName = auth.currentUser?.pickupPoint ?? '';
 
     String etaDisplay = '--';
     String etaUnit = 'MIN';
+    String targetStopHeader = 'ROUTE TERMINAL';
+    String targetStopLabel = 'SISTEC CAMPUS';
+
     if (_etaLoading) {
       etaDisplay = '...';
       etaUnit = '';
-    } else if (_etaMinutes != null) {
-      etaDisplay = '$_etaMinutes';
-      etaUnit = 'MIN';
     } else if (isLive) {
-      if (_activeBus!.etas.isNotEmpty) {
-        // Resolve ETA to user's assigned pickup stop, or next upcoming stop
-        final matchedEta = hasPickup
-            ? _activeBus!.etas.firstWhere(
-                (e) => e.stopName.toLowerCase().trim() == pickupName.toLowerCase().trim(),
-                orElse: () => _activeBus!.etas.first,
-              )
-            : _activeBus!.etas.first;
-        etaDisplay = '${matchedEta.minutes}';
+      int? mins;
+      if (hasPickup) {
+        targetStopHeader = (_shiftTimelineDirection == 'dropoff')
+            ? 'ESTIMATED DROP-OFF AT YOUR STOP'
+            : 'ESTIMATED ARRIVAL AT YOUR STOP';
+        targetStopLabel = pickupName.toUpperCase();
+
+        final matched = bus.etas.where(
+          (e) => e.stopName.toLowerCase().trim() == pickupName.toLowerCase().trim(),
+        );
+        if (matched.isNotEmpty) {
+          mins = matched.first.minutes;
+        } else if (_selectedRoute != null && _selectedRoute!.stops.isNotEmpty) {
+          final stop = _selectedRoute!.stops.firstWhere(
+            (s) => (s['name'] ?? '').toString().toLowerCase().trim() == pickupName.toLowerCase().trim(),
+            orElse: () => <String, dynamic>{},
+          );
+          if (stop.isNotEmpty && stop['lat'] != null && stop['lng'] != null) {
+            final distM = Geolocator.distanceBetween(
+              bus.currentLat, bus.currentLng,
+              (stop['lat'] as num).toDouble(), (stop['lng'] as num).toDouble(),
+            );
+            final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+            final speedMps = (speedKmh * 1000) / 3600;
+            mins = math.max(1, (distM / speedMps / 60).round());
+          }
+        }
+      } else {
+        // Guest or unassigned student commuter: target the next upcoming stop
+        targetStopHeader = 'NEXT UPCOMING STOP • LIVE ETA';
+        if (bus.etas.isNotEmpty) {
+          final nextEta = bus.etas.first;
+          targetStopLabel = nextEta.stopName.toUpperCase();
+          mins = nextEta.minutes;
+        } else if (bus.nextStop != null && bus.nextStop!.isNotEmpty) {
+          targetStopLabel = bus.nextStop!.toUpperCase();
+          if (bus.distanceToNextStopMeters != null && bus.distanceToNextStopMeters! > 0) {
+            final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+            final speedMps = (speedKmh * 1000) / 3600;
+            mins = math.max(1, (bus.distanceToNextStopMeters! / speedMps / 60).round());
+          }
+        }
+
+        // If still not resolved, determine from route stops
+        if (mins == null && _selectedRoute != null && _selectedRoute!.stops.isNotEmpty) {
+          final unreached = _selectedRoute!.stops.where((s) {
+            final sName = (s['name'] ?? '').toString();
+            return !bus.reachedStops.contains(sName);
+          }).toList();
+          final candidateStop = unreached.isNotEmpty ? unreached.first : _selectedRoute!.stops.first;
+          targetStopLabel = (candidateStop['name'] ?? 'CAMPUS TERMINAL').toString().toUpperCase();
+          if (candidateStop['lat'] != null && candidateStop['lng'] != null) {
+            final distM = Geolocator.distanceBetween(
+              bus.currentLat, bus.currentLng,
+              (candidateStop['lat'] as num).toDouble(), (candidateStop['lng'] as num).toDouble(),
+            );
+            final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+            final speedMps = (speedKmh * 1000) / 3600;
+            mins = math.max(1, (distM / speedMps / 60).round());
+          }
+        }
+      }
+
+      if (mins != null) {
+        etaDisplay = '$mins';
         etaUnit = 'MIN';
+      } else if (_etaMinutes != null) {
+        etaDisplay = '$_etaMinutes';
+        etaUnit = 'MIN';
+      }
+    } else {
+      if (hasPickup) {
+        targetStopHeader = 'ASSIGNED PICKUP STOP';
+        targetStopLabel = pickupName.toUpperCase();
+      } else {
+        targetStopHeader = (_shiftTimelineDirection == 'dropoff')
+            ? 'CAMPUS DEPARTURE ➔ CITY DROP-OFF'
+            : 'ORIGIN & ROUTE TERMINAL';
+        targetStopLabel = (_selectedRoute?.stops.isNotEmpty == true)
+            ? (_selectedRoute!.stops.first['name'] ?? 'SISTEC CAMPUS').toString().toUpperCase()
+            : 'SISTEC CAMPUS';
       }
     }
 
@@ -1478,14 +1578,14 @@ class _UserDashboardState extends State<UserDashboard> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.directions_bus_rounded, size: 11, color: AppColors.primaryLight),
+                              Icon(Icons.directions_bus_rounded, size: 11, color: isLive ? AppColors.accentGreen : AppColors.primaryLight),
                               const SizedBox(width: 4),
                               Text(
                                 _getAssignedBusLabel(busStore),
                                 style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 9.5,
+                                  fontSize: 9,
                                   fontWeight: FontWeight.w800,
-                                  color: AppColors.primaryLight,
+                                  color: isLive ? AppColors.accentGreen : AppColors.primaryLight,
                                   letterSpacing: 0.5,
                                 ),
                               ),
@@ -1496,7 +1596,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       GestureDetector(
                         onTap: () => _showShiftAllocationModal(busStore),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
                           decoration: BoxDecoration(
                             color: AppColors.bgSecondary,
                             borderRadius: BorderRadius.circular(8),
@@ -1588,7 +1688,7 @@ class _UserDashboardState extends State<UserDashboard> {
                       const Icon(Icons.speed_rounded, color: AppColors.accent, size: 15),
                       const SizedBox(width: 6),
                       Text(
-                        isLive ? '${_activeBus!.speed.toInt()}' : '--',
+                        isLive ? '${bus.speed.toInt()}' : '--',
                         style: GoogleFonts.plusJakartaSans(
                           color: Colors.white,
                           fontSize: 13.5,
@@ -1631,16 +1731,16 @@ class _UserDashboardState extends State<UserDashboard> {
                     decoration: BoxDecoration(
                       color: hasPickup 
                           ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))
-                          : AppColors.accentGreen.withValues(alpha: 0.15),
+                          : (isLive ? AppColors.accentGreen.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15)),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
                       hasPickup 
                           ? (_shiftTimelineDirection == 'dropoff' ? Icons.departure_board_rounded : Icons.my_location_rounded) 
-                          : Icons.location_on_rounded,
+                          : (isLive ? Icons.near_me_rounded : Icons.location_on_rounded),
                       color: hasPickup 
                           ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primary) 
-                          : AppColors.accentGreen,
+                          : (isLive ? AppColors.accentGreen : AppColors.primaryLight),
                       size: 15,
                     ),
                   ),
@@ -1650,11 +1750,9 @@ class _UserDashboardState extends State<UserDashboard> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          hasPickup 
-                              ? (_shiftTimelineDirection == 'dropoff' ? 'ESTIMATED DROP-OFF AT YOUR STOP' : 'ESTIMATED ARRIVAL AT YOUR STOP')
-                              : (_shiftTimelineDirection == 'dropoff' ? 'CAMPUS DEPARTURE ➔ CITY DROP-OFF' : 'ORIGIN & ROUTE TERMINAL'),
+                          targetStopHeader,
                           style: GoogleFonts.plusJakartaSans(
-                            color: AppColors.textMuted,
+                            color: (isLive && !hasPickup) ? AppColors.accentGreen : AppColors.textMuted,
                             fontSize: 8.5,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
@@ -1662,13 +1760,7 @@ class _UserDashboardState extends State<UserDashboard> {
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          hasPickup 
-                              ? pickupName.toUpperCase() 
-                              : (_shiftTimelineDirection == 'dropoff'
-                                  ? 'SISTEC CAMPUS ➔ ${_selectedRoute?.stops.isNotEmpty == true ? (_selectedRoute!.stops.first['name'] ?? "CITY TERMINAL").toString().toUpperCase() : "CITY TERMINAL"}'
-                                  : (_selectedRoute?.stops.isNotEmpty == true 
-                                      ? (_selectedRoute!.stops.first['name'] ?? 'TERMINAL STOP').toString().toUpperCase()
-                                      : 'SISTEC CAMPUS')),
+                          targetStopLabel,
                           style: GoogleFonts.plusJakartaSans(
                             color: Colors.white,
                             fontSize: 12.5,
@@ -1691,6 +1783,24 @@ class _UserDashboardState extends State<UserDashboard> {
                         _shiftTimelineDirection == 'dropoff' ? 'MY DROP-OFF' : 'MY STOP',
                         style: GoogleFonts.plusJakartaSans(
                           color: _shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primaryLight,
+                          fontSize: 8,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    )
+                  else if (isLive && bus.etas.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentGreen.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        'LIVE',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.accentGreen,
                           fontSize: 8,
                           fontWeight: FontWeight.w900,
                           letterSpacing: 0.5,
@@ -3221,11 +3331,7 @@ class _UserDashboardState extends State<UserDashboard> {
                             child: ListTile(
                               contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                               onTap: () async {
-                                final store = Provider.of<BusStore>(context, listen: false);
-                                setState(() {
-                                  _selectedRoute = route;
-                                  _updateActiveBus(store);
-                                });
+                                _changeSelectedRoute(route);
                                 try {
                                   const storage = FlutterSecureStorage();
                                   await storage.write(key: 'last_selected_route_id', value: route.id);
@@ -3334,8 +3440,24 @@ class _UserDashboardState extends State<UserDashboard> {
     }
 
     final auth = Provider.of<AuthService>(context, listen: false);
+    final busStore = Provider.of<BusStore>(context);
     final userPickup = auth.currentUser?.pickupPoint?.toLowerCase().trim() ?? '';
     final isDropoff = _shiftTimelineDirection == 'dropoff';
+
+    // Resolve active bus for this route if available and live
+    Bus? activeBus;
+    for (final bus in busStore.allBuses) {
+      if (bus.routeId == _selectedRoute!.id ||
+          (bus.routeName.isNotEmpty && (
+            bus.routeName.toLowerCase() == _selectedRoute!.name.toLowerCase() ||
+            bus.routeName.toLowerCase().contains(_selectedRoute!.name.toLowerCase()) ||
+            _selectedRoute!.name.toLowerCase().contains(bus.routeName.toLowerCase())
+          ))) {
+        activeBus = bus;
+        break;
+      }
+    }
+    final isBusLive = activeBus != null && activeBus.status.toLowerCase() != 'offline';
     
     // In morning (Shift 1 / Pickup): Stops -> Campus (regular order)
     // In 2nd shift (Shift 2+ / Dropoff): Campus -> Stops (reversed order)
@@ -3579,6 +3701,35 @@ class _UserDashboardState extends State<UserDashboard> {
                stopName.toLowerCase().contains(userPickup) ||
                userPickup.contains(stopName.toLowerCase().trim()));
 
+          final liveBus = isBusLive ? activeBus : null;
+          final hasReached = liveBus != null && liveBus.reachedStops.any(
+            (s) => s.toLowerCase().trim() == stopName.toLowerCase().trim() ||
+                   stopName.toLowerCase().contains(s.toLowerCase().trim()),
+          );
+
+          BusETA? stopEta;
+          if (liveBus != null && liveBus.etas.isNotEmpty) {
+            for (final eta in liveBus.etas) {
+              if (eta.stopName.toLowerCase().trim() == stopName.toLowerCase().trim() ||
+                  stopName.toLowerCase().contains(eta.stopName.toLowerCase().trim()) ||
+                  eta.stopName.toLowerCase().contains(stopName.toLowerCase().trim())) {
+                stopEta = eta;
+                break;
+              }
+            }
+          }
+
+          final isNextStop = liveBus != null && !hasReached && (
+            (liveBus.nextStop != null && (
+              liveBus.nextStop!.toLowerCase().trim() == stopName.toLowerCase().trim() ||
+              stopName.toLowerCase().contains(liveBus.nextStop!.toLowerCase().trim())
+            )) ||
+            (liveBus.etas.isNotEmpty && (
+              liveBus.etas.first.stopName.toLowerCase().trim() == stopName.toLowerCase().trim() ||
+              stopName.toLowerCase().contains(liveBus.etas.first.stopName.toLowerCase().trim())
+            ))
+          );
+
           Color nodeColor;
           String subtitle;
           IconData? nodeIcon;
@@ -3587,6 +3738,16 @@ class _UserDashboardState extends State<UserDashboard> {
             nodeColor = isDropoff ? AppColors.accent : AppColors.primary;
             subtitle = isDropoff ? 'Your Assigned Drop-off Stop' : 'Your Assigned Pickup Stop';
             nodeIcon = isDropoff ? Icons.location_on_rounded : Icons.my_location_rounded;
+          } else if (hasReached) {
+            nodeColor = const Color(0xFF64748B);
+            subtitle = 'Departed / Passed';
+            nodeIcon = Icons.check_rounded;
+          } else if (isNextStop) {
+            nodeColor = AppColors.accentGreen;
+            subtitle = (stopEta != null && stopEta.minutes <= 1)
+                ? 'Approaching Now • Next Stop' 
+                : 'Next Stop on Route';
+            nodeIcon = Icons.navigation_rounded;
           } else if (isFirst) {
             nodeColor = isDropoff ? AppColors.accentGreen : AppColors.primaryLight;
             subtitle = isDropoff ? 'Campus Departure • SISTec Ratibad' : 'Departure Origin • Stop 1';
@@ -3610,13 +3771,13 @@ class _UserDashboardState extends State<UserDashboard> {
                   child: Column(
                     children: [
                       Container(
-                        width: (isUserStop || isFirst || isLast) ? 18 : 12,
-                        height: (isUserStop || isFirst || isLast) ? 18 : 12,
+                        width: (isUserStop || isFirst || isLast || isNextStop) ? 18 : 12,
+                        height: (isUserStop || isFirst || isLast || isNextStop) ? 18 : 12,
                         decoration: BoxDecoration(
-                          color: (isFirst || isLast || isUserStop) ? nodeColor : AppColors.surface,
+                          color: (isFirst || isLast || isUserStop || isNextStop || hasReached) ? nodeColor : AppColors.surface,
                           border: Border.all(color: nodeColor, width: isUserStop ? 3 : 2),
                           shape: BoxShape.circle,
-                          boxShadow: (isUserStop || isFirst || isLast) ? [
+                          boxShadow: (isUserStop || isFirst || isLast || isNextStop) ? [
                             BoxShadow(
                               color: nodeColor.withValues(alpha: 0.35),
                               blurRadius: 6,
@@ -3638,7 +3799,9 @@ class _UserDashboardState extends State<UserDashboard> {
                         Expanded(
                           child: Container(
                             width: 2,
-                            color: const Color(0xFF1E293B),
+                            color: hasReached 
+                                ? const Color(0xFF334155) 
+                                : const Color(0xFF1E293B),
                           ),
                         ),
                     ],
@@ -3650,7 +3813,9 @@ class _UserDashboardState extends State<UserDashboard> {
                     margin: const EdgeInsets.only(bottom: 16),
                     padding: isUserStop
                         ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-                        : EdgeInsets.zero,
+                        : (isNextStop
+                            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 8)
+                            : EdgeInsets.zero),
                     decoration: isUserStop
                         ? BoxDecoration(
                             color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.08),
@@ -3660,7 +3825,16 @@ class _UserDashboardState extends State<UserDashboard> {
                               width: 1.2,
                             ),
                           )
-                        : null,
+                        : (isNextStop
+                            ? BoxDecoration(
+                                color: AppColors.accentGreen.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: AppColors.accentGreen.withValues(alpha: 0.3),
+                                  width: 1.0,
+                                ),
+                              )
+                            : null),
                     child: Row(
                       children: [
                         Expanded(
@@ -3670,9 +3844,13 @@ class _UserDashboardState extends State<UserDashboard> {
                               Text(
                                 stopName,
                                 style: GoogleFonts.plusJakartaSans(
-                                  color: isUserStop ? Colors.white : AppColors.text,
+                                  color: isUserStop 
+                                      ? Colors.white 
+                                      : (hasReached 
+                                          ? const Color(0xFF94A3B8) 
+                                          : (isNextStop ? AppColors.accentGreen : AppColors.text)),
                                   fontSize: 13.5,
-                                  fontWeight: isUserStop ? FontWeight.w800 : FontWeight.w600,
+                                  fontWeight: (isUserStop || isNextStop) ? FontWeight.w800 : FontWeight.w600,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -3682,7 +3860,9 @@ class _UserDashboardState extends State<UserDashboard> {
                                 style: GoogleFonts.plusJakartaSans(
                                   color: isUserStop 
                                       ? (isDropoff ? AppColors.accent : AppColors.primaryLight) 
-                                      : AppColors.textMuted,
+                                      : (isNextStop 
+                                          ? AppColors.accentGreen.withValues(alpha: 0.8) 
+                                          : AppColors.textMuted),
                                   fontSize: 10,
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -3690,7 +3870,7 @@ class _UserDashboardState extends State<UserDashboard> {
                             ],
                           ),
                         ),
-                        if (isUserStop)
+                        if (isUserStop) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
@@ -3710,6 +3890,82 @@ class _UserDashboardState extends State<UserDashboard> {
                               ),
                             ),
                           ),
+                          const SizedBox(width: 6),
+                        ],
+                        if (isBusLive) ...[
+                          if (hasReached)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.check_circle_rounded, size: 10, color: Color(0xFF64748B)),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'PASSED',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: const Color(0xFF94A3B8),
+                                      fontSize: 8.5,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (isNextStop || (stopEta != null && stopEta.minutes <= 1))
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                              decoration: BoxDecoration(
+                                color: AppColors.accentGreen.withValues(alpha: 0.18),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.5)),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.accentGreen,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    stopEta != null ? '${stopEta.minutes} MIN' : 'APPROACHING',
+                                    style: GoogleFonts.plusJakartaSans(
+                                      color: AppColors.accentGreen,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            )
+                          else if (stopEta != null)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
+                              ),
+                              child: Text(
+                                '${stopEta.minutes} MIN',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.primaryLight,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ),
+                        ],
                       ],
                     ),
                   ),

@@ -147,7 +147,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     }
 
     // Keep focused bus updated with latest live telemetry
-    if (_focusedBus != null) {
+    if (widget.centerOnBusId != null) {
+      try {
+        final b = widget.buses.firstWhere((b) => b.id == widget.centerOnBusId);
+        _focusedBus = b;
+        _updateNavigationInstructions(b);
+      } catch (_) {}
+    } else if (_focusedBus != null) {
       try {
         _focusedBus = widget.buses.firstWhere((b) => b.id == _focusedBus!.id);
         _updateNavigationInstructions(_focusedBus!);
@@ -158,6 +164,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     if (old.centerOnBusId != widget.centerOnBusId && widget.centerOnBusId != null) {
       _focusInitialBus();
+      if (_focusedBus != null && _mapReady) {
+        _scheduleCameraMove(_focusedBus!);
+      }
     }
 
     for (final bus in widget.buses) {
@@ -225,6 +234,9 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     if (old.selectedRoute?.id != widget.selectedRoute?.id) {
       _cacheRouteData();
       _rebuildMapObjects();
+      if (_selectedRoutePoints.isNotEmpty && _mapReady) {
+        _fitRouteBounds();
+      }
     }
   }
 
@@ -509,7 +521,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       }
 
       final isFocused = _focusedBus?.id == bus.id;
-      final pos       = _animatedPos[bus.id]     ?? LatLng(bus.currentLat, bus.currentLng);
+      final rawPos    = _animatedPos[bus.id]     ?? LatLng(bus.currentLat, bus.currentLng);
+      // Perfect road alignment: snap bus marker cleanly onto route polyline if near the corridor
+      final pos       = _selectedRoutePoints.isNotEmpty
+          ? _snapToPolyline(rawPos, _selectedRoutePoints, maxSnapMeters: 45.0)
+          : rawPos;
       final heading   = _animatedHeading[bus.id] ?? bus.heading;
 
       final icon = isFocused
@@ -1081,19 +1097,48 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
+  void _fitRouteBounds() {
+    if (_selectedRoutePoints.isEmpty || _mapController == null) return;
+    try {
+      double minLat = _selectedRoutePoints.first.latitude;
+      double maxLat = _selectedRoutePoints.first.latitude;
+      double minLng = _selectedRoutePoints.first.longitude;
+      double maxLng = _selectedRoutePoints.first.longitude;
+
+      for (final p in _selectedRoutePoints) {
+        if (p.latitude < minLat) minLat = p.latitude;
+        if (p.latitude > maxLat) maxLat = p.latitude;
+        if (p.longitude < minLng) minLng = p.longitude;
+        if (p.longitude > maxLng) maxLng = p.longitude;
+      }
+
+      final bounds = LatLngBounds(
+        southwest: LatLng(minLat, minLng),
+        northeast: LatLng(maxLat, maxLng),
+      );
+
+      _mapController?.animateCamera(
+        CameraUpdate.newLatLngBounds(bounds, 64.0),
+      );
+    } catch (_) {}
+  }
+
   void _focusInitialBus() {
     if (widget.centerOnBusId != null) {
       try {
         final bus = widget.buses.firstWhere((b) => b.id == widget.centerOnBusId);
         _focusedBus = bus;
+        _isFollowing = true;
         if (widget.initialDriveMode) {
           _isDriveMode = true;
-          _isFollowing = true;
         }
       } catch (_) {}
     } else if (widget.initialDriveMode && widget.buses.isNotEmpty) {
       _focusedBus = widget.buses.first;
       _isDriveMode = true;
+      _isFollowing = true;
+    } else if (widget.buses.isNotEmpty) {
+      _focusedBus = widget.buses.first;
       _isFollowing = true;
     }
   }
@@ -1287,66 +1332,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         );
   }
 
-  Widget _buildSidebarCompassBtn() {
-    return Container(
-      width: 44,
-      height: 44,
-      decoration: BoxDecoration(
-        color: const Color(0xFF0F172A),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-      ),
-      child: Transform.rotate(
-        angle: -((_animatedHeading[_focusedBus?.id] ?? 0.0) * (3.14159 / 180.0)),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            const Icon(Icons.explore_outlined, color: Colors.white60, size: 26),
-            Positioned(
-              top: 8,
-              child: Container(
-                width: 3,
-                height: 10,
-                decoration: BoxDecoration(
-                  color: Colors.redAccent,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
-  Widget _buildSidebarSearchBtn() {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            backgroundColor: const Color(0xFF0F172A),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-            content: Text(
-              'Search along route is active.',
-              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
-            ),
-          ),
-        );
-      },
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: const Color(0xFF0F172A),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
-        ),
-        child: const Icon(Icons.search_rounded, color: Colors.white, size: 20),
-      ),
-    );
-  }
 
   Widget _buildSidebarMuteBtn() {
     return GestureDetector(
@@ -1374,6 +1360,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   Widget _buildReCentreBtn() {
+    final busLabel = _focusedBus?.displayBusNumber ?? 'Shuttle';
     return GestureDetector(
       onTap: () {
         HapticFeedback.mediumImpact();
@@ -1385,32 +1372,30 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         }
       },
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.8),
+          color: const Color(0xFF0F172A).withValues(alpha: 0.92),
           borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: _isFollowing ? const Color(0xFF38EF7D) : Colors.white10, width: 1.5),
+          border: Border.all(color: const Color(0xFF2D5BFF).withValues(alpha: 0.6), width: 1.5),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 8,
+              color: Colors.black.withValues(alpha: 0.4),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             )
           ],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Transform.rotate(
-              angle: 45 * 3.14159 / 180, // tilt icon slightly to look like navigation
-              child: Icon(
-                Icons.navigation_rounded,
-                color: _isFollowing ? const Color(0xFF38EF7D) : Colors.white,
-                size: 16,
-              ),
+            const Icon(
+              Icons.gps_fixed_rounded,
+              color: Color(0xFF38EF7D),
+              size: 16,
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 6),
             Text(
-              'Re-centre',
+              'Follow $busLabel',
               style: GoogleFonts.plusJakartaSans(
                 color: Colors.white,
                 fontWeight: FontWeight.bold,
@@ -1423,40 +1408,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildReportBtn() {
-    return GestureDetector(
-      onTap: _showReportDialog,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.8),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: Colors.white10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.3),
-              blurRadius: 8,
-            )
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 16),
-            const SizedBox(width: 8),
-            Text(
-              'Report',
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 12,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   Widget _buildBottomStatsPanel() {
     // Generate realistic remaining time and distance using ETA or a dynamic fallback
@@ -1466,14 +1418,16 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
     if (_focusedBus != null) {
       if (_focusedBus!.etas.isNotEmpty) {
-        final totalMins = _focusedBus!.etas.fold<int>(0, (prev, element) => prev + element.minutes);
-        timeStr = totalMins > 60 
-            ? '${totalMins ~/ 60} hr ${totalMins % 60} min'
-            : '$totalMins min';
+        // Use the upcoming stop ETA directly (etas are road-calibrated travel durations)
+        final nextStopEta = _focusedBus!.etas.first;
+        final mins = nextStopEta.minutes;
+        timeStr = mins > 60 
+            ? '${mins ~/ 60} hr ${mins % 60} min'
+            : '$mins min';
         final speed = _focusedBus!.speed > 0 ? _focusedBus!.speed : 30.0; // km/h
-        final distanceKm = (speed * (totalMins / 60.0)).clamp(0.5, 45.0);
+        final distanceKm = (speed * (mins / 60.0)).clamp(0.4, 45.0);
         distanceStr = '${distanceKm.toStringAsFixed(1)} km';
-        final arrivalTime = DateTime.now().add(Duration(minutes: totalMins));
+        final arrivalTime = DateTime.now().add(Duration(minutes: mins));
         final hour = arrivalTime.hour > 12 ? arrivalTime.hour - 12 : (arrivalTime.hour == 0 ? 12 : arrivalTime.hour);
         final min = arrivalTime.minute.toString().padLeft(2, '0');
         final ampm = arrivalTime.hour >= 12 ? 'pm' : 'am';
@@ -1563,6 +1517,18 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 ),
               ),
               GestureDetector(
+                onTap: _showReportDialog,
+                child: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orangeAccent.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded, color: Colors.orangeAccent, size: 20),
+                ),
+              ),
+              const SizedBox(width: 8),
+              GestureDetector(
                 onTap: () {
                   HapticFeedback.lightImpact();
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -1593,13 +1559,19 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   // ═══════════════════════════════════════════════════════════════════════════
 
   void _toggleFollow() {
+    HapticFeedback.mediumImpact();
     setState(() {
       _isFollowing = !_isFollowing;
       if (!_isFollowing) _isDriveMode = false;
     });
-    if (_isFollowing && widget.buses.isNotEmpty) {
-      final bus = _focusedBus ?? widget.buses.first;
-      _scheduleCameraMove(bus);
+    if (_isFollowing) {
+      final bus = _focusedBus ?? (widget.buses.isNotEmpty ? widget.buses.first : null);
+      if (bus != null) {
+        _focusedBus = bus;
+        final pos = _animatedPos[bus.id] ?? LatLng(bus.currentLat, bus.currentLng);
+        final heading = _animatedHeading[bus.id] ?? bus.heading;
+        _moveCameraTo(pos, heading);
+      }
     }
   }
 
@@ -1717,45 +1689,64 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 return ValueListenableBuilder<Set<Circle>>(
                   valueListenable: _circlesNotifier,
                   builder: (context, circles, _) {
-                    return GoogleMap(
-                      initialCameraPosition: CameraPosition(
-                        target: widget.buses.isNotEmpty
-                            ? LatLng(widget.buses.first.currentLat,
-                                     widget.buses.first.currentLng)
-                            : _bhopal,
-                        zoom: _isDriveMode ? 18 : 15,
-                        tilt:    _isDriveMode ? 52 : 0,
-                        bearing: _isDriveMode
-                            ? (_animatedHeading[widget.buses.isNotEmpty ? widget.buses.first.id : ''] ?? 0)
-                            : 0,
-                      ),
-                      onMapCreated: (ctrl) {
-                        _mapController = ctrl;
-                        _mapReady = true;
-                        if (_currentMapType == MapType.none) {
-                          ctrl.setMapStyle(_darkMapStyle);
-                        }
-                        if (widget.buses.isNotEmpty) {
-                          final b = widget.buses.first;
-                          ctrl.animateCamera(CameraUpdate.newLatLngZoom(
-                              LatLng(b.currentLat, b.currentLng),
-                              _isDriveMode ? 18 : 15));
+                    return Listener(
+                      onPointerDown: (_) {
+                        if (_isFollowing) {
+                          setState(() => _isFollowing = false);
                         }
                       },
-                      mapType:               _currentMapType == MapType.none ? MapType.normal : _currentMapType,
-                      markers:               markers,
-                      polylines:             polylines,
-                      circles:               circles,
-                      myLocationEnabled:     widget.showMyLocation,
-                      myLocationButtonEnabled: false,
-                      zoomControlsEnabled:   false,
-                      mapToolbarEnabled:     true,
-                      compassEnabled:        _isDriveMode,
-                      tiltGesturesEnabled:   true,
-                      rotateGesturesEnabled: true,
-                      buildingsEnabled:      _isDriveMode,   // 3D buildings only in drive mode
-                      trafficEnabled:        true,
-                      onTap: (_) => setState(() => _focusedBus = null),
+                      behavior: HitTestBehavior.translucent,
+                      child: GoogleMap(
+                        initialCameraPosition: CameraPosition(
+                          target: _focusedBus != null
+                              ? (_animatedPos[_focusedBus!.id] ??
+                                  LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng))
+                              : (widget.buses.isNotEmpty
+                                  ? LatLng(widget.buses.first.currentLat,
+                                           widget.buses.first.currentLng)
+                                  : (_selectedRoutePoints.isNotEmpty ? _selectedRoutePoints.first : _bhopal)),
+                          zoom: _isDriveMode ? 18.0 : 15.5,
+                          tilt:    _isDriveMode ? 52.0 : 0.0,
+                          bearing: _isDriveMode
+                              ? (_animatedHeading[_focusedBus?.id ?? (widget.buses.isNotEmpty ? widget.buses.first.id : '')] ?? 0)
+                              : 0.0,
+                        ),
+                        onMapCreated: (ctrl) {
+                          _mapController = ctrl;
+                          _mapReady = true;
+                          if (_currentMapType == MapType.none) {
+                            ctrl.setMapStyle(_darkMapStyle);
+                          }
+                          if (_focusedBus != null) {
+                            final pos = _animatedPos[_focusedBus!.id] ??
+                                LatLng(_focusedBus!.currentLat, _focusedBus!.currentLng);
+                            ctrl.animateCamera(CameraUpdate.newLatLngZoom(
+                                pos,
+                                _isDriveMode ? 18.0 : 16.0));
+                          } else if (widget.buses.isNotEmpty) {
+                            final b = widget.buses.first;
+                            ctrl.animateCamera(CameraUpdate.newLatLngZoom(
+                                LatLng(b.currentLat, b.currentLng),
+                                _isDriveMode ? 18.0 : 15.5));
+                          } else if (_selectedRoutePoints.isNotEmpty) {
+                            _fitRouteBounds();
+                          }
+                        },
+                        mapType:               _currentMapType == MapType.none ? MapType.normal : _currentMapType,
+                        markers:               markers,
+                        polylines:             polylines,
+                        circles:               circles,
+                        myLocationEnabled:     widget.showMyLocation,
+                        myLocationButtonEnabled: false,
+                        zoomControlsEnabled:   false,
+                        mapToolbarEnabled:     true,
+                        compassEnabled:        _isDriveMode,
+                        tiltGesturesEnabled:   true,
+                        rotateGesturesEnabled: true,
+                        buildingsEnabled:      _isDriveMode,   // 3D buildings only in drive mode
+                        trafficEnabled:        true,
+                        onTap: (_) => setState(() => _focusedBus = null),
+                      ),
                     );
                   },
                 );
@@ -1763,6 +1754,14 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
             );
           },
         ),
+
+        // ── Floating Re-centre Pill when unfollowed ───────────────────────
+        if (_focusedBus != null && !_isFollowing)
+          Positioned(
+            left: 16,
+            top: MediaQuery.of(context).padding.top + (_isDriveMode ? 148 : 76),
+            child: _buildReCentreBtn().animate().fadeIn(duration: 250.ms).slideY(begin: -0.2),
+          ),
 
         // ── Map Floating Action Stack (Right side) ─────────────────────────
         if (widget.showMapControls)

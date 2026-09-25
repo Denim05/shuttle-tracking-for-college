@@ -126,12 +126,19 @@ class ApiService {
     final headers = <String, String>{
       'Content-Type': 'application/json',
       'Accept'      : 'application/json',
-      'Accept-Encoding': 'gzip, deflate, br',
     };
     if (requiresAuth) {
       String? token = cachedToken;
       if (token == null || token.isEmpty) {
-        token = await _storage.read(key: 'auth_token');
+        try {
+          token = await _storage.read(key: 'auth_token');
+        } catch (_) {}
+        if (token == null || token.isEmpty) {
+          try {
+            final prefs = await _getPrefs();
+            token = prefs.getString('auth_token');
+          } catch (_) {}
+        }
         cachedToken = token;
       }
       if (token != null && token.isNotEmpty) {
@@ -209,7 +216,9 @@ class ApiService {
     }
 
     if (response.statusCode == 401) {
-      onUnauthorized?.call();
+      if (cachedToken != null && cachedToken!.isNotEmpty) {
+        onUnauthorized?.call();
+      }
       throw const ApiException(
         statusCode: 401,
         message   : 'Session expired. Please log in again.',

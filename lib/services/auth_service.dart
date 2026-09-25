@@ -198,7 +198,14 @@ class AuthService with ChangeNotifier {
 
       if (token != null && userDataStr != null) {
         _token = token;
-        _currentUser = User.fromJson(jsonDecode(userDataStr));
+        final userMap = jsonDecode(userDataStr);
+        final prefs = await SharedPreferences.getInstance();
+        final localSkipped = prefs.getBool('commute_configured_${userMap['_id'] ?? userMap['id']}') ?? false;
+        
+        _currentUser = User.fromJson(userMap);
+        if (localSkipped || (_currentUser!.routeId != null && _currentUser!.pickupPoint != null)) {
+          _currentUser = _currentUser!.copyWith(isCommuteConfigured: true);
+        }
         _isAuthenticated = true;
         ApiService.cachedToken = token;
 
@@ -369,6 +376,11 @@ class AuthService with ChangeNotifier {
       if (response.statusCode == 200) {
         _currentUser = User.fromJson(data);
         await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('user_data', jsonEncode(_currentUser!.toJson()));
+          await prefs.setBool('commute_configured_${_currentUser!.id}', true);
+        } catch (_) {}
         notifyListeners();
         return true;
       } else {
@@ -376,6 +388,33 @@ class AuthService with ChangeNotifier {
       }
     } catch (e) {
       rethrow;
+    }
+  }
+
+  /// Mark commute preferences as skipped so students can reach the dashboard immediately
+  Future<void> skipCommuteSetup() async {
+    if (_currentUser == null) return;
+    _currentUser = _currentUser!.copyWith(isCommuteConfigured: true);
+    await _storage.write(key: 'user_data', value: jsonEncode(_currentUser!.toJson()));
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('user_data', jsonEncode(_currentUser!.toJson()));
+      await prefs.setBool('commute_configured_${_currentUser!.id}', true);
+    } catch (_) {}
+    notifyListeners();
+
+    // Persist to backend asynchronously
+    if (_token != null) {
+      try {
+        http.put(
+          Uri.parse('${AppConstants.apiUrl}/users/profile'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $_token',
+          },
+          body: jsonEncode({'isCommuteConfigured': true}),
+        ).timeout(const Duration(seconds: 8)).then((_) {}).catchError((_) {});
+      } catch (_) {}
     }
   }
 

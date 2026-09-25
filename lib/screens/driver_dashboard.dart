@@ -548,15 +548,20 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final nextStopName = nextStop?['name']?.toString();
     final distToNext = _getDistanceToNextStop();
 
+    final effectiveRouteId = _selectedRoute?.id ?? (selectedBus != null ? selectedBus['routeId']?.toString() : null);
+    final effectiveRouteName = _selectedRoute?.name ?? selectedBus?['routeName'] ?? 'SISTec Route';
+
     socketService.emitLocationUpdate({
       'driverId': user.id,
       'busId': _selectedBusId,
       'id': _selectedBusId,
       'busNumber': assignedBusNo,
-      'routeId': selectedBus != null ? selectedBus['routeId'] : null,
-      'routeName': _selectedRoute?.name ?? selectedBus?['routeName'] ?? 'SISTec Route',
+      'routeId': effectiveRouteId,
+      'routeName': effectiveRouteName,
       'latitude': _currentPosition!.latitude,
       'longitude': _currentPosition!.longitude,
+      'currentLat': _currentPosition!.latitude,
+      'currentLng': _currentPosition!.longitude,
       'heading': _currentPosition!.heading >= 0 ? _currentPosition!.heading : 0.0,
       'speed': double.parse(_speedKmH.toStringAsFixed(1)),
       'status': 'On-time',
@@ -1132,7 +1137,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('VELOCITY HISTOGRAM', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 8.5, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
+                  Text('SPEED HISTOGRAM', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 8.5, fontWeight: FontWeight.w800, letterSpacing: 1.2)),
                   Text('${maxRecentSpeed.toStringAsFixed(0)} KM/H PEAK', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 8.5, fontWeight: FontWeight.w700)),
                 ],
               ),

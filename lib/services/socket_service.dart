@@ -34,6 +34,7 @@ class SocketService with ChangeNotifier {
 
   int _pingStartMs = 0;
   final List<Function(dynamic)> _sosCallbacks = [];
+  final Set<String> _joinedRoutes = {};
 
   // ─── Getters ─────────────────────────────────────────────────────────────
 
@@ -176,6 +177,10 @@ class SocketService with ChangeNotifier {
     _setStatus(SocketStatus.connected);
     debugPrint('✅ SISTecChalo: Socket connected (id: ${_socket?.id})');
     _bindAllListeners();
+    for (final r in _joinedRoutes) {
+      _socket?.emit('joinRoute', r);
+      debugPrint('🚪 Auto-rejoined Socket Room: route_$r');
+    }
     pingServer(); // measure initial latency
   }
 
@@ -184,6 +189,10 @@ class SocketService with ChangeNotifier {
     _setStatus(SocketStatus.connected);
     debugPrint('♻️ SISTecChalo: Socket reconnected');
     _bindAllListeners();
+    for (final r in _joinedRoutes) {
+      _socket?.emit('joinRoute', r);
+      debugPrint('♻️ Auto-rejoined Socket Room: route_$r');
+    }
     pingServer();
   }
 
@@ -250,6 +259,21 @@ class SocketService with ChangeNotifier {
         callback(data);
       } catch (e) {
         debugPrint('Error in busLocationUpdate callback: $e');
+      }
+    });
+  }
+
+  void listenToLocationUpdates(Function(dynamic) callback) {
+    final list = _registeredListeners.putIfAbsent('locationUpdate', () => []);
+    list.clear();
+    list.add(callback);
+    _socket?.off('locationUpdate');
+    _socket?.on('locationUpdate', (data) {
+      lastDataReceived.value = DateTime.now();
+      try {
+        callback(data);
+      } catch (e) {
+        debugPrint('Error in locationUpdate callback: $e');
       }
     });
   }
@@ -327,15 +351,20 @@ class SocketService with ChangeNotifier {
   }
 
   void joinRoute(String routeId) {
-    if (_socket == null || !_socket!.connected) return;
-    _socket?.emit('joinRoute', routeId);
-    debugPrint('🚪 Joined Socket Room: route_$routeId');
+    if (routeId.isEmpty) return;
+    _joinedRoutes.add(routeId);
+    if (_socket != null && _socket!.connected) {
+      _socket?.emit('joinRoute', routeId);
+      debugPrint('🚪 Joined Socket Room: route_$routeId');
+    }
   }
 
   void leaveRoute(String routeId) {
-    if (_socket == null || !_socket!.connected) return;
-    _socket?.emit('leaveRoute', routeId);
-    debugPrint('🚪 Left Socket Room: route_$routeId');
+    _joinedRoutes.remove(routeId);
+    if (_socket != null && _socket!.connected) {
+      _socket?.emit('leaveRoute', routeId);
+      debugPrint('🚪 Left Socket Room: route_$routeId');
+    }
   }
 
   void emitNotification(Map<String, dynamic> data) =>
