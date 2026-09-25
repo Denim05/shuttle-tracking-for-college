@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'package:shimmer/shimmer.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart' show LatLng;
 import 'dart:math' as math;
 import '../services/auth_service.dart';
 import '../services/socket_service.dart';
@@ -35,8 +36,12 @@ class UserDashboard extends StatefulWidget {
   State<UserDashboard> createState() => _UserDashboardState();
 }
 
-class _UserDashboardState extends State<UserDashboard> {
+class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserver {
   final ApiService _apiService = ApiService();
+  final GlobalKey<BusMapState> _busMapKey = GlobalKey<BusMapState>();
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
+  final Set<String> _notifiedGeofenceStops = {};
+  DateTime? _lastProximityAlertTime;
   
   List<RouteModel> _routes = [];
   bool _isLoading = true;
@@ -58,11 +63,105 @@ class _UserDashboardState extends State<UserDashboard> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    NotificationService().init();
     _fetchData();
     _initSocket();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkForAppUpdate(context);
     });
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _sheetController.dispose();
+    NotificationService().cancelLiveTrackingNotification();
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+      _syncOngoingLockscreenNotification();
+    }
+  }
+
+  void _syncOngoingLockscreenNotification() {
+    if (!mounted) return;
+    final busStore = Provider.of<BusStore>(context, listen: false);
+    Bus? liveBus;
+    for (final b in busStore.allBuses) {
+      if (b.isBroadcastingLive && _selectedRoute != null && (b.routeId == _selectedRoute!.id || b.routeName.toLowerCase() == _selectedRoute!.name.toLowerCase())) {
+        liveBus = b;
+        break;
+      }
+    }
+
+    if (liveBus != null) {
+      final targetStop = liveBus.nextStop ?? (_selectedRoute?.stops.first['name']?.toString() ?? 'Next Stop');
+      final distM = liveBus.distanceToNextStopMeters ?? 650;
+      final distStr = distM < 1000 ? '$distM m' : '${(distM / 1000).toStringAsFixed(1)} km';
+      final speedKmh = liveBus.speed > 5 ? liveBus.speed : 25.0;
+      final speedMps = (speedKmh * 1000) / 3600;
+      final etaMins = math.max(1, (distM / speedMps / 60).round());
+
+      NotificationService().updateLiveTrackingNotification(
+        busNumber: liveBus.displayBusNumber,
+        targetStop: targetStop,
+        etaMinutes: etaMins,
+        distanceStr: distStr,
+        speedKmh: liveBus.speed,
+      );
+    } else {
+      NotificationService().cancelLiveTrackingNotification();
+    }
+  }
+
+  void _checkProximityGeofence(Bus bus, String userPickup) {
+    if (!bus.isBroadcastingLive || userPickup.isEmpty || _selectedRoute == null) return;
+
+    if (_lastProximityAlertTime != null &&
+        DateTime.now().difference(_lastProximityAlertTime!).inMinutes < 10) {
+      return;
+    }
+
+    final pickupStop = _selectedRoute!.stops.firstWhere(
+      (s) {
+        final sName = (s['name'] ?? '').toString().toLowerCase().trim();
+        return sName == userPickup || sName.contains(userPickup) || userPickup.contains(sName);
+      },
+      orElse: () => <String, dynamic>{},
+    );
+
+    if (pickupStop.isEmpty || pickupStop['lat'] == null || pickupStop['lng'] == null) return;
+
+    final stopLat = (pickupStop['lat'] as num).toDouble();
+    final stopLng = (pickupStop['lng'] as num).toDouble();
+    if (stopLat == 0.0 || stopLng == 0.0) return;
+
+    final distMeters = Geolocator.distanceBetween(bus.currentLat, bus.currentLng, stopLat, stopLng);
+    final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+    final speedMps = (speedKmh * 1000) / 3600;
+    final etaMins = math.max(1, (distMeters / speedMps / 60).round());
+
+    // Trigger alert if within 600m or <= 2 minutes
+    if (distMeters <= 600 || etaMins <= 2) {
+      final stopName = pickupStop['name']?.toString() ?? userPickup;
+      if (!_notifiedGeofenceStops.contains(stopName.toLowerCase())) {
+        _notifiedGeofenceStops.add(stopName.toLowerCase());
+        _lastProximityAlertTime = DateTime.now();
+
+        final distStr = distMeters < 1000 ? '${distMeters.toStringAsFixed(0)} m' : '${(distMeters / 1000).toStringAsFixed(1)} km';
+        NotificationService().showProximityArrivalAlert(
+          busNumber: bus.displayBusNumber,
+          stopName: stopName,
+          etaMinutes: etaMins,
+          distanceStr: distStr,
+        );
+        HapticFeedback.heavyImpact();
+      }
+    }
   }
 
   RouteModel? _resolveTargetRoute(AuthService auth, BusStore busStore, String? savedRouteId) {
@@ -707,9 +806,16 @@ class _UserDashboardState extends State<UserDashboard> {
           _activeBus = currentActiveBus;
         }
 
+        // Proximity Geofencing check for student's pickup stop
+        if (currentActiveBus != null && currentActiveBus.isBroadcastingLive) {
+          final userPickup = auth.currentUser?.pickupPoint?.toLowerCase().trim() ?? '';
+          _checkProximityGeofence(currentActiveBus, userPickup);
+        }
+
         return Stack(
           children: [
             BusMap(
+              key: _busMapKey,
               buses: mapBuses,
               selectedRoute: _selectedRoute,
               centerOnBusId: (currentActiveBus != null && currentActiveBus.isBroadcastingLive) ? currentActiveBus.id : null,
@@ -721,6 +827,7 @@ class _UserDashboardState extends State<UserDashboard> {
             if (auth.isGuest && _selectedRoute != null)
               _buildGuestLiveSwitchBanner(store),
             DraggableScrollableSheet(
+              controller: _sheetController,
               initialChildSize: 0.28,
               minChildSize: 0.14,
               maxChildSize: 0.82,
@@ -3928,20 +4035,57 @@ class _UserDashboardState extends State<UserDashboard> {
         GestureDetector(
           onTap: () {
             HapticFeedback.lightImpact();
-            if (isBusLive && !hasPassed) {
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    '$stopName: ${formatDistance(distMeters)} away • ETA ~$stopEtaMins min',
-                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
-                  ),
-                  duration: const Duration(seconds: 2),
-                  behavior: SnackBarBehavior.floating,
-                  backgroundColor: AppColors.bgSecondary,
-                ),
+            final sLat = (stop['lat'] as num?)?.toDouble();
+            final sLng = (stop['lng'] as num?)?.toDouble();
+
+            if (sLat != null && sLng != null && sLat != 0.0 && sLng != 0.0) {
+              // Smoothly glide Google Map to the chosen stop
+              _busMapKey.currentState?.focusOnCoordinates(
+                LatLng(sLat, sLng),
+                name: stopName,
+                zoom: 16.8,
               );
+
+              // Seamlessly retract bottom sheet so commuter sees the map zoom
+              if (_sheetController.isAttached) {
+                _sheetController.animateTo(
+                  0.28,
+                  duration: const Duration(milliseconds: 350),
+                  curve: Curves.easeOutCubic,
+                );
+              }
             }
+
+            ScaffoldMessenger.of(context).hideCurrentSnackBar();
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Row(
+                  children: [
+                    const Icon(Icons.location_on_rounded, color: Color(0xFF00E5FF), size: 16),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        isBusLive && !hasPassed
+                            ? '$stopName: ${formatDistance(distMeters)} away • ETA ~$stopEtaMins min'
+                            : '$stopName • Stop ${index + 1}',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                duration: const Duration(seconds: 2),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: AppColors.bgSecondary,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: const Color(0xFF00E5FF).withValues(alpha: 0.3)),
+                ),
+              ),
+            );
           },
           child: IntrinsicHeight(
             child: Row(
@@ -4193,53 +4337,70 @@ class _UserDashboardState extends State<UserDashboard> {
     required String Function(double) formatDistance,
     bool isCompleted = false,
   }) {
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 4),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            // Left Rail vehicle marker
-            SizedBox(
-              width: 24,
-              child: Column(
-                children: [
-                  Container(
-                    width: 2.5,
-                    height: 10,
-                    color: const Color(0xFF00E5FF),
-                  ),
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF2563EB), Color(0xFF00E5FF)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
-                          blurRadius: 10,
-                          spreadRadius: 1.5,
-                        ),
-                      ],
-                    ),
-                    child: const Center(
-                      child: Icon(Icons.directions_bus_rounded, size: 13, color: Colors.white),
-                    ),
-                  ),
-                  Expanded(
-                    child: Container(
+    return GestureDetector(
+      onTap: () {
+        HapticFeedback.lightImpact();
+        _busMapKey.currentState?.focusOnCoordinates(
+          LatLng(bus.currentLat, bus.currentLng),
+          name: 'Bus ${bus.displayBusNumber}',
+          zoom: 17.2,
+        );
+        if (_sheetController.isAttached) {
+          _sheetController.animateTo(
+            0.28,
+            duration: const Duration(milliseconds: 350),
+            curve: Curves.easeOutCubic,
+          );
+        }
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 4),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // Left Rail vehicle marker
+              SizedBox(
+                width: 24,
+                child: Column(
+                  children: [
+                    Container(
                       width: 2.5,
+                      height: 10,
                       color: const Color(0xFF00E5FF),
                     ),
-                  ),
-                ],
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2563EB), Color(0xFF00E5FF)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+                            blurRadius: 10,
+                            spreadRadius: 1.5,
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(Icons.directions_bus_rounded, size: 13, color: Colors.white),
+                      ),
+                    ).animate(onPlay: (ctrl) => ctrl.repeat(reverse: true))
+                     .scaleXY(begin: 0.94, end: 1.08, duration: 900.ms, curve: Curves.easeInOut),
+                    Expanded(
+                      child: Container(
+                        width: 2.5,
+                        color: const Color(0xFF00E5FF),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
             const SizedBox(width: 14),
 
             // Live In-Transit Vehicle Card
@@ -4358,7 +4519,8 @@ class _UserDashboardState extends State<UserDashboard> {
                 ),
               ),
             ),
-          ],
+            ],
+          ),
         ),
       ),
     );

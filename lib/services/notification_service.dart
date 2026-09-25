@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
@@ -7,6 +9,9 @@ class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
   factory NotificationService() => _instance;
   NotificationService._internal();
+
+  static const int liveTrackingNotificationId = 99991;
+  static const int proximityAlertNotificationId = 99992;
 
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
@@ -29,8 +34,8 @@ class NotificationService {
       },
     );
 
-    // Create the high-priority channel for Android
-    const AndroidNotificationChannel channel = AndroidNotificationChannel(
+    // Create the high-priority alert channel for Android
+    const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
       'SISTecChalo_pulse_alerts',
       'Pulse Alerts',
       description: 'Geofencing and proximity alerts for SISTecChalo',
@@ -39,9 +44,21 @@ class NotificationService {
       enableVibration: true,
     );
 
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-        ?.createNotificationChannel(channel);
+    // Create ongoing live tracking channel for Android lock screen & status bar
+    const AndroidNotificationChannel liveTrackingChannel = AndroidNotificationChannel(
+      'SISTecChalo_live_tracking',
+      'Live Shuttle Tracking',
+      description: 'Ongoing lockscreen status for live college bus tracking',
+      importance: Importance.low,
+      playSound: false,
+      enableVibration: false,
+    );
+
+    final androidPlugin = flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
+
+    await androidPlugin?.createNotificationChannel(alertChannel);
+    await androidPlugin?.createNotificationChannel(liveTrackingChannel);
 
     // Set up foreground message handler for FCM
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
@@ -116,6 +133,91 @@ class NotificationService {
       title,
       body,
       notificationDetails,
+    );
+  }
+
+  /// Shows or updates an ongoing live tracking notification on Android lock screen & status bar
+  Future<void> updateLiveTrackingNotification({
+    required String busNumber,
+    required String targetStop,
+    required int etaMinutes,
+    required String distanceStr,
+    required double speedKmh,
+  }) async {
+    if (kIsWeb) return;
+
+    final String etaStr = etaMinutes <= 1 ? 'ARRIVING NOW' : '~$etaMinutes min';
+    final String speedStr = speedKmh > 1 ? '${speedKmh.toStringAsFixed(0)} km/h' : 'Stationary';
+    final String title = '🚌 Bus $busNumber • $etaStr to $targetStop';
+    final String body = 'Distance: $distanceStr • Speed: $speedStr • Live GPS active';
+
+    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'SISTecChalo_live_tracking',
+      'Live Shuttle Tracking',
+      channelDescription: 'Ongoing lockscreen status for live college bus tracking',
+      importance: Importance.low,
+      priority: Priority.low,
+      ongoing: true,
+      autoCancel: false,
+      onlyAlertOnce: true,
+      showWhen: true,
+      color: const Color(0xFF00E5FF),
+      category: AndroidNotificationCategory.transport,
+      styleInformation: BigTextStyleInformation(
+        body,
+        contentTitle: title,
+        summaryText: 'SISTecChalo Live Transit',
+      ),
+    );
+
+    await flutterLocalNotificationsPlugin.show(
+      liveTrackingNotificationId,
+      title,
+      body,
+      NotificationDetails(android: androidDetails),
+    );
+  }
+
+  /// Cancels the ongoing live tracking notification
+  Future<void> cancelLiveTrackingNotification() async {
+    if (kIsWeb) return;
+    await flutterLocalNotificationsPlugin.cancel(liveTrackingNotificationId);
+  }
+
+  /// High-priority proximity arrival alert when bus is within 500m / 2 min of user stop
+  Future<void> showProximityArrivalAlert({
+    required String busNumber,
+    required String stopName,
+    required int etaMinutes,
+    required String distanceStr,
+  }) async {
+    if (kIsWeb) return;
+
+    final String title = '🚨 Bus $busNumber Approaching Your Stop!';
+    final String body = 'Your bus is $distanceStr away (~$etaMinutes min) from $stopName. Please head to your pickup point now!';
+
+    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'SISTecChalo_pulse_alerts',
+      'Pulse Alerts',
+      channelDescription: 'Geofencing and proximity alerts for SISTecChalo',
+      importance: Importance.max,
+      priority: Priority.high,
+      ticker: 'Bus Approaching Stop',
+      color: const Color(0xFF10B981),
+      enableVibration: true,
+      vibrationPattern: Int64List.fromList([0, 500, 200, 500]),
+      styleInformation: BigTextStyleInformation(
+        body,
+        contentTitle: title,
+        summaryText: 'Proximity Geofence Alert',
+      ),
+    );
+
+    await flutterLocalNotificationsPlugin.show(
+      proximityAlertNotificationId,
+      title,
+      body,
+      NotificationDetails(android: androidDetails),
     );
   }
 }

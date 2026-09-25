@@ -38,12 +38,12 @@ class BusMap extends StatefulWidget {
   });
 
   @override
-  State<BusMap> createState() => _BusMapState();
+  State<BusMap> createState() => BusMapState();
 }
 
 enum MapStyle { street, satellite, hybrid, terrain, dark }
 
-class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
+class BusMapState extends State<BusMap> with TickerProviderStateMixin {
   GoogleMapController? _mapController;
   LatLng _center = const LatLng(23.2599, 77.4126);
   Bus? _focusedBus;
@@ -221,6 +221,13 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           double targetBearing = bus.heading;
           if (bus.speed <= 2.0 && _animatedHeading[bus.id] != null) {
             targetBearing = _animatedHeading[bus.id]!;
+          } else if (targetBearing <= 0.01 && moved) {
+            // Compute real geometric bearing along the street when hardware sensor heading is missing
+            final calculated = Geolocator.bearingBetween(
+              oldPos.latitude, oldPos.longitude,
+              newPos.latitude, newPos.longitude,
+            );
+            targetBearing = (calculated + 360) % 360;
           }
 
           _startMarkerAnimation(
@@ -700,6 +707,21 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         CameraPosition(target: pos, zoom: 16.5, tilt: 0, bearing: 0),
       ));
     }
+  }
+
+  /// Smoothly glides the camera directly to a chosen stop coordinate with high-precision zoom
+  void focusOnCoordinates(LatLng target, {String? name, double zoom = 16.5}) {
+    _isFollowing = false; // Detach vehicle camera follow so commuter can inspect stop
+    _mapController?.animateCamera(
+      CameraUpdate.newCameraPosition(
+        CameraPosition(
+          target: target,
+          zoom: zoom,
+          tilt: 20.0,
+          bearing: 0,
+        ),
+      ),
+    );
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
