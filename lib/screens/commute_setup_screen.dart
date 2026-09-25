@@ -313,6 +313,12 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
         routeId: _selectedRoute!.id,
         pickupPoint: _selectedStop!.trim(),
         localAddress: _localAddressController.text.trim(),
+        // For non-initial updates (from profile settings), defer notifyListeners
+        // until AFTER we've finished navigating. Firing notifyListeners() while
+        // the navigator still has ProfileSettingsScreen → CommuteSetupScreen on
+        // the stack causes the main.dart Consumer to rebuild routes mid-flight,
+        // which destroys the stack and freezes / blanks the screen.
+        silent: !widget.isInitialSetup,
       );
 
       if (!mounted) return;
@@ -332,8 +338,15 @@ class _CommuteSetupScreenState extends State<CommuteSetupScreen> {
           (route) => false,
         );
       } else {
+        // Pop back to ProfileSettingsScreen first, THEN broadcast the update.
+        // This ensures the Consumer in main.dart only rebuilds when the navigator
+        // stack is already at a safe, stable point.
         Navigator.pop(context);
+        // Broadcast the updated user model (pickup, route) to all listeners now
+        // that navigation is complete and the stack is stable.
+        auth.broadcastUserUpdate();
       }
+
     } catch (e) {
       if (!mounted) return;
       _showCustomSnackBar('Continuing to dashboard...', isError: false);

@@ -164,6 +164,23 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     }
   }
 
+  /// Called when returning from ProfileSettingsScreen to reset any stale
+  /// pickup-related state that was computed before the user changed their stop.
+  ///
+  /// Without this, _notifiedGeofenceStops and _etaMinutes would keep their
+  /// old values for the original stop even after the pickup point changes,
+  /// which causes wrong alerts and stale ETA display.
+  void _refreshPickupState() {
+    if (!mounted) return;
+    setState(() {
+      _notifiedGeofenceStops.clear();
+      _lastProximityAlertTime = null;
+      _etaMinutes = null;
+    });
+    // Re-fetch ETA for the updated pickup stop (no-op if no pickup configured)
+    _fetchETA();
+  }
+
   RouteModel? _resolveTargetRoute(AuthService auth, BusStore busStore, String? savedRouteId) {
     RouteModel? target;
     if (auth.currentUser?.routeId != null) {
@@ -753,7 +770,11 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     }
 
   Widget _buildTrackingTab() {
-    final auth = Provider.of<AuthService>(context, listen: false);
+    // Listen to AuthService so that if the user changes their pickup stop
+    // from profile settings the tracking tab rebuilds immediately with the
+    // new pickupPoint — without this the stale listen:false ref causes
+    // _checkProximityGeofence to keep running against the old stop name.
+    final auth = Provider.of<AuthService>(context);
 
     return Consumer<BusStore>(
       builder: (context, store, _) {
@@ -2672,7 +2693,15 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                   ),
                   trailing: const Icon(Icons.chevron_right_rounded, color: Color(0xFF475569)),
                   onTap: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()),
+                    ).then((_) {
+                      // Returning from ProfileSettingsScreen — reset any stale
+                      // proximity/ETA state that was computed for the old pickup
+                      // stop and re-compute with the (possibly new) pickup.
+                      _refreshPickupState();
+                    });
                   },
                 ),
                 ListTile(

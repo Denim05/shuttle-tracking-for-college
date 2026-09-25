@@ -350,6 +350,11 @@ class AuthService with ChangeNotifier {
     required String pickupPoint,
     String? localAddress,
     String? name,
+    // When true, skips notifyListeners() immediately so the caller can
+    // navigate first, then call notifyListeners() manually once safely
+    // back in the widget tree — prevents Consumer rebuild racing the
+    // Navigator stack during non-initial (profile-settings) updates.
+    bool silent = false,
   }) async {
     try {
       final headers = <String, String>{'Content-Type': 'application/json'};
@@ -381,7 +386,7 @@ class AuthService with ChangeNotifier {
           await prefs.setString('user_data', jsonEncode(_currentUser!.toJson()));
           await prefs.setBool('commute_configured_${_currentUser!.id}', true);
         } catch (_) {}
-        notifyListeners();
+        if (!silent) notifyListeners();
         return true;
       } else {
         throw Exception(data['error'] ?? 'Failed to save commute setup');
@@ -390,6 +395,10 @@ class AuthService with ChangeNotifier {
       rethrow;
     }
   }
+
+  /// Call this after a silent updateCommuteSetup to broadcast the new user
+  /// state to all listeners without triggering a full navigation rebuild.
+  void broadcastUserUpdate() => notifyListeners();
 
   /// Mark commute preferences as skipped so students can reach the dashboard immediately
   Future<void> skipCommuteSetup() async {
