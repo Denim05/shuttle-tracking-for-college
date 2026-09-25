@@ -19,6 +19,7 @@ class BusMap extends StatefulWidget {
   final bool showMyLocation;
   final bool showMapControls;
   final bool showLocationButton;
+  final bool showFocusedBusCard;
   final MapType initialMapType;
   final Function(bool)? onDriveModeChanged;
 
@@ -31,6 +32,7 @@ class BusMap extends StatefulWidget {
     this.showMyLocation = true,
     this.showMapControls = true,
     this.showLocationButton = true,
+    this.showFocusedBusCard = true,
     this.initialMapType = MapType.normal,
     this.onDriveModeChanged,
   });
@@ -48,6 +50,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   bool _isFollowing = false;
   bool _isDriveMode = false;
   MapType _currentMapType = MapType.normal;
+  bool _isDarkVector = true;
   bool _showLayerSelector = false;
 
   bool _isMuted = false;
@@ -94,7 +97,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   static const LatLng _bhopal           = LatLng(23.2599, 77.4126);
   static const double _trailMinDistM    = 8.0;
 
-  String? _darkMapStyle;
+  static const String _darkMapStyle = '[{"elementType":"geometry","stylers":[{"color":"#1a1a2e"}]},{"elementType":"labels.icon","stylers":[{"visibility":"off"}]},{"elementType":"labels.text.fill","stylers":[{"color":"#8b8b9e"}]},{"elementType":"labels.text.stroke","stylers":[{"color":"#1a1a2e"}]},{"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#3d3d5c"}]},{"featureType":"poi","stylers":[{"visibility":"off"}]},{"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a2a4a"}]},{"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1a1a2e"}]},{"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#3a3a6a"}]},{"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#1a1a2e"}]},{"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#8b8b9e"}]},{"featureType":"transit","stylers":[{"visibility":"off"}]},{"featureType":"water","elementType":"geometry","stylers":[{"color":"#0d0d1a"}]},{"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#3d3d5c"}]}]';
 
   // ═══════════════════════════════════════════════════════════════════════════
   // LIFECYCLE
@@ -110,8 +113,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     _markersNotifier = ValueNotifier<Set<Marker>>({});
     _polylinesNotifier = ValueNotifier<Set<Polyline>>({});
     _circlesNotifier = ValueNotifier<Set<Circle>>({});
-
-    _buildDarkMapStyle();
 
     _focusInitialBus();
 
@@ -175,7 +176,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
       // Precache icon if new bus
       if (!_busIcons.containsKey(bus.id)) {
-        final label = _busLabel(bus.id);
+        final label = _badgeLabel(bus);
         _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: false);
         _ensureBusIcon(bus.id, label, bus.routeColor, isFocused: true);
       }
@@ -237,6 +238,10 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
       if (_selectedRoutePoints.isNotEmpty && _mapReady) {
         _fitRouteBounds();
       }
+    }
+
+    if (_mapReady && _currentMapType == MapType.normal && _isDarkVector) {
+      _mapController?.setMapStyle(_darkMapStyle);
     }
   }
 
@@ -540,8 +545,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         flat:     true,
         consumeTapEvents: false,
         infoWindow: InfoWindow(
-          title:   'Bus ${_busLabel(bus.id)}',
-          snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}',
+          title:   bus.displayBusNumber,
+          snippet: '${bus.speed.toInt()} km/h  •  ${bus.occupancy}  •  ${bus.routeName}',
         ),
         onTap: () {
           HapticFeedback.mediumImpact();
@@ -555,7 +560,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           _rebuildMapObjects();
         },
         icon:   icon,
-        zIndex: isFocused ? 2.0 : 1.0,
+        zIndex: isFocused ? 100.0 : 50.0,
       );
     }
 
@@ -708,14 +713,25 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   // ICONS
   // ═══════════════════════════════════════════════════════════════════════════
 
-  String _busLabel(String busId) =>
-      busId.substring(busId.length.clamp(4, busId.length) - 4).toUpperCase();
+  String _badgeLabel(Bus bus) {
+    final numStr = bus.busNumber?.trim() ?? '';
+    if (numStr.isNotEmpty) {
+      final stripped = numStr.replaceAll(RegExp(r'^BUS\s*', caseSensitive: false), '').trim();
+      if (stripped.length <= 4) return stripped;
+      final match = RegExp(r'\d{2,4}$').firstMatch(stripped);
+      if (match != null) return match.group(0)!;
+      return stripped.substring(0, 3);
+    }
+    final resolved = bus.displayBusNumber.replaceAll(RegExp(r'^BUS\s*', caseSensitive: false), '').trim();
+    if (resolved.length <= 4) return resolved;
+    return resolved.substring(0, 3);
+  }
 
   Future<void> _precacheIcons() async {
     final List<Future<void>> futures = [];
 
     for (final bus in widget.buses) {
-      final label = _busLabel(bus.id);
+      final label = _badgeLabel(bus);
       futures.add(_ensureBusIcon(bus.id, label, bus.routeColor, isFocused: false));
       futures.add(_ensureBusIcon(bus.id, label, bus.routeColor, isFocused: true));
     }
@@ -1072,31 +1088,6 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // MAP STYLE
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  void _buildDarkMapStyle() {
-    _darkMapStyle = '''
-    [
-      {"elementType":"geometry","stylers":[{"color":"#1a1a2e"}]},
-      {"elementType":"labels.icon","stylers":[{"visibility":"off"}]},
-      {"elementType":"labels.text.fill","stylers":[{"color":"#8b8b9e"}]},
-      {"elementType":"labels.text.stroke","stylers":[{"color":"#1a1a2e"}]},
-      {"featureType":"administrative","elementType":"geometry","stylers":[{"color":"#3d3d5c"}]},
-      {"featureType":"poi","stylers":[{"visibility":"off"}]},
-      {"featureType":"road","elementType":"geometry","stylers":[{"color":"#2a2a4a"}]},
-      {"featureType":"road","elementType":"geometry.stroke","stylers":[{"color":"#1a1a2e"}]},
-      {"featureType":"road.highway","elementType":"geometry","stylers":[{"color":"#3a3a6a"}]},
-      {"featureType":"road.highway","elementType":"geometry.stroke","stylers":[{"color":"#1a1a2e"}]},
-      {"featureType":"road","elementType":"labels.text.fill","stylers":[{"color":"#8b8b9e"}]},
-      {"featureType":"transit","stylers":[{"visibility":"off"}]},
-      {"featureType":"water","elementType":"geometry","stylers":[{"color":"#0d0d1a"}]},
-      {"featureType":"water","elementType":"labels.text.fill","stylers":[{"color":"#3d3d5c"}]}
-    ]
-    ''';
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
   void _fitRouteBounds() {
     if (_selectedRoutePoints.isEmpty || _mapController == null) return;
     try {
@@ -1389,7 +1380,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Icon(
-              Icons.gps_fixed_rounded,
+              Icons.near_me_rounded,
               color: Color(0xFF38EF7D),
               size: 16,
             ),
@@ -1714,7 +1705,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                         onMapCreated: (ctrl) {
                           _mapController = ctrl;
                           _mapReady = true;
-                          if (_currentMapType == MapType.none) {
+                          if (_currentMapType == MapType.normal && _isDarkVector && _darkMapStyle != null) {
                             ctrl.setMapStyle(_darkMapStyle);
                           }
                           if (_focusedBus != null) {
@@ -1732,7 +1723,8 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                             _fitRouteBounds();
                           }
                         },
-                        mapType:               _currentMapType == MapType.none ? MapType.normal : _currentMapType,
+                        mapType:               _currentMapType,
+                        style:                 (_currentMapType == MapType.normal && _isDarkVector) ? _darkMapStyle : null,
                         markers:               markers,
                         polylines:             polylines,
                         circles:               circles,
@@ -1759,7 +1751,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         if (_focusedBus != null && !_isFollowing)
           Positioned(
             left: 16,
-            top: MediaQuery.of(context).padding.top + (_isDriveMode ? 148 : 76),
+            top: MediaQuery.of(context).padding.top + (_isDriveMode ? 156 : 94),
             child: _buildReCentreBtn().animate().fadeIn(duration: 250.ms).slideY(begin: -0.2),
           ),
 
@@ -1767,20 +1759,20 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         if (widget.showMapControls)
           Positioned(
             right: 16,
-            top: MediaQuery.of(context).padding.top + (_isDriveMode ? 148 : 76),
+            top: MediaQuery.of(context).padding.top + (_isDriveMode ? 156 : 94),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 _buildMapBtn(
                   icon: Icons.layers_rounded,
-                  label: 'LAYERS',
+                  label: 'MAP LAYERS',
                   color: Colors.white70,
                   onTap: _showLayersSheet,
                 ),
                 const SizedBox(height: 10),
                 _buildMapBtn(
-                  icon: _isFollowing ? Icons.gps_fixed_rounded : Icons.gps_not_fixed_rounded,
-                  label: _isFollowing ? 'FOLLOWING' : 'FOLLOW BUS',
+                  icon: Icons.navigation_rounded,
+                  label: _isFollowing ? 'TRACKING BUS' : 'TRACK BUS',
                   color: const Color(0xFF2D5BFF),
                   isActive: _isFollowing,
                   onTap: _toggleFollow,
@@ -1827,7 +1819,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
         ],
 
         // ── Focused Bus Card ────────────────────────────────────────────────
-        if (_focusedBus != null && !_isDriveMode)
+        if (widget.showFocusedBusCard && _focusedBus != null && !_isDriveMode)
           Positioned(
             left:   16,
             right:  16,
@@ -1879,7 +1871,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'BUS ${_busLabel(_focusedBus!.id)}',
+                                  _focusedBus!.displayBusNumber,
                                   style: GoogleFonts.plusJakartaSans(
                                     color: Colors.white,
                                     fontSize: 18,
@@ -1901,7 +1893,7 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                                     const SizedBox(width: 6),
                                     Flexible(
                                       child: Text(
-                                        'ONLINE  •  ${_focusedBus!.routeName.isNotEmpty ? _focusedBus!.routeName : "ROUTE ${_busLabel(_focusedBus!.routeId)}"}',
+                                        'ONLINE  •  ${_focusedBus!.routeName.isNotEmpty ? _focusedBus!.routeName : "Commute Route"}',
                                         style: GoogleFonts.plusJakartaSans(
                                           color: Colors.white38,
                                           fontSize: 10,
@@ -2053,11 +2045,11 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
                 runSpacing: 16,
                 alignment: WrapAlignment.center,
                 children: [
-                  _buildLayerGridItem(MapType.normal, Icons.map_rounded, 'STREET'),
+                  _buildLayerGridItem(MapType.normal, Icons.nightlight_round, 'DARK', isDark: true),
+                  _buildLayerGridItem(MapType.normal, Icons.wb_sunny_rounded, 'LIGHT', isDark: false),
                   _buildLayerGridItem(MapType.satellite, Icons.satellite_alt_rounded, 'SATELLITE'),
                   _buildLayerGridItem(MapType.hybrid, Icons.layers_outlined, 'HYBRID'),
                   _buildLayerGridItem(MapType.terrain, Icons.terrain_rounded, 'TERRAIN'),
-                  _buildLayerGridItem(MapType.none, Icons.nightlight_round, 'DARK'),
                 ],
               ),
             ),
@@ -2069,14 +2061,17 @@ class _BusMapState extends State<BusMap> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildLayerGridItem(MapType type, IconData icon, String label) {
-    final isSelected = _currentMapType == type;
+  Widget _buildLayerGridItem(MapType type, IconData icon, String label, {bool isDark = false}) {
+    final isSelected = isDark
+        ? (_currentMapType == MapType.normal && _isDarkVector)
+        : (_currentMapType == type && (!_isDarkVector || type != MapType.normal));
     return GestureDetector(
       onTap: () {
         setState(() {
           _currentMapType = type;
+          _isDarkVector = isDark;
         });
-        if (type == MapType.none) {
+        if (isDark && _darkMapStyle != null) {
           _mapController?.setMapStyle(_darkMapStyle);
         } else {
           _mapController?.setMapStyle(null);

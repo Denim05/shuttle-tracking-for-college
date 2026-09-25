@@ -692,7 +692,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                       initialDriveMode: _isOnline,
                       showMyLocation: false,
                       showMapControls: false,
-                      initialMapType: MapType.none,
+                      showFocusedBusCard: false,
+                      initialMapType: MapType.normal,
                     )
                   : Container(
                       decoration: const BoxDecoration(

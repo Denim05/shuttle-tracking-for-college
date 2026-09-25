@@ -671,7 +671,7 @@ class _UserDashboardState extends State<UserDashboard> {
 
     return Consumer<BusStore>(
       builder: (context, store, _) {
-        final currentActiveBus = _resolveActiveBus(store, _selectedRoute);
+        Bus? currentActiveBus = _resolveActiveBus(store, _selectedRoute);
         _activeBus = currentActiveBus;
 
         // In Guest Mode: If current route has no live bus, auto-switch to active live shuttle
@@ -713,8 +713,12 @@ class _UserDashboardState extends State<UserDashboard> {
         // Safety guarantee: If currentActiveBus is live, ensure it is present in mapBuses
         if (currentActiveBus != null &&
             currentActiveBus.status.toLowerCase().trim() != 'offline' &&
-            !mapBuses.any((b) => b.id == currentActiveBus.id)) {
+            !mapBuses.any((b) => b.id == currentActiveBus!.id)) {
           mapBuses.add(currentActiveBus);
+        } else if ((currentActiveBus == null || currentActiveBus.status.toLowerCase() == 'offline') && mapBuses.isNotEmpty) {
+          // If activeBus fell back to an offline document but an online bus is active on this route corridor, adopt the online bus
+          currentActiveBus = mapBuses.first;
+          _activeBus = currentActiveBus;
         }
 
         return Stack(
@@ -723,6 +727,7 @@ class _UserDashboardState extends State<UserDashboard> {
               buses: mapBuses,
               selectedRoute: _selectedRoute,
               centerOnBusId: currentActiveBus?.id,
+              showFocusedBusCard: false,
               onDriveModeChanged: (isDrive) {
                 setState(() => _isDriveMode = isDrive);
               },
@@ -730,9 +735,9 @@ class _UserDashboardState extends State<UserDashboard> {
             if (auth.isGuest && _selectedRoute != null)
               _buildGuestLiveSwitchBanner(store),
             DraggableScrollableSheet(
-              initialChildSize: 0.32,
-              minChildSize: 0.16,
-              maxChildSize: 0.78,
+              initialChildSize: 0.28,
+              minChildSize: 0.14,
+              maxChildSize: 0.82,
               snap: true,
               builder: (context, scrollController) => Container(
                 decoration: BoxDecoration(
@@ -1037,7 +1042,7 @@ class _UserDashboardState extends State<UserDashboard> {
     final topPadding = MediaQuery.of(context).padding.top;
 
     return Positioned(
-      top: topPadding + 74,
+      top: topPadding + 88,
       left: 20,
       right: 20,
       child: GestureDetector(
