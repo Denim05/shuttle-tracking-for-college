@@ -3097,7 +3097,18 @@ io.on('connection', (socket) => {
                 console.log(`🚀 [TRIP START] New live ${tripType.toUpperCase()} trip log created for Bus ${bus.busNumber} on ${todayStr}`);
             }
 
-            // Update DB
+            // Update Route & Identity if sent by driver cockpit
+            if (data.routeId && data.routeId.toString().length > 5) {
+                bus.routeId = data.routeId.toString();
+            }
+            if (data.routeName && data.routeName.trim().length > 0) {
+                bus.routeName = data.routeName.trim();
+            }
+            if (data.busNumber && data.busNumber.trim().length > 0 && data.busNumber !== 'N/A') {
+                bus.busNumber = data.busNumber.trim();
+            }
+
+            // Update DB telemetry
             bus.currentLat = lat;
             bus.currentLng = lng;
             bus.speed = speed;
@@ -3107,6 +3118,11 @@ io.on('connection', (socket) => {
             bus.status = (data.status && data.status.toLowerCase() !== 'offline')
                 ? data.status
                 : (bus.status === 'Delayed' ? 'Delayed' : 'On-time');
+
+            if (data.reachedStops && Array.isArray(data.reachedStops)) {
+                bus.reachedStops = data.reachedStops.map(s => s.toString());
+                bus.completedStops = data.completedStops !== undefined ? Number(data.completedStops) : bus.reachedStops.length;
+            }
             
             // Calculate True Road Polyline ETAs & Upcoming Stops
             let etas = [];
@@ -3227,6 +3243,14 @@ io.on('connection', (socket) => {
                     }
                 }
             }
+
+            const resolvedNextStop = nextStopName || data.nextStop || (etas[0] ? etas[0].stopName : '');
+            const resolvedDistMeters = data.distanceToNextStopMeters !== undefined 
+                ? Number(data.distanceToNextStopMeters) 
+                : (etas[0] && etas[0].distanceKm ? Math.round(parseFloat(etas[0].distanceKm) * 1000) : null);
+
+            bus.nextStop = resolvedNextStop;
+            bus.distanceToNextStopMeters = resolvedDistMeters;
             bus.etas = etas;
             await bus.save();
 
@@ -3234,12 +3258,29 @@ io.on('connection', (socket) => {
             const busPayload = bus.toObject ? bus.toObject() : { ...bus };
             busPayload.id = bus._id.toString();
             busPayload._id = bus._id.toString();
+            busPayload.currentLat = lat;
+            busPayload.currentLng = lng;
+            busPayload.latitude = lat;
+            busPayload.longitude = lng;
+            busPayload.speed = speed;
+            busPayload.heading = heading;
+            busPayload.status = bus.status;
+            busPayload.tripType = tripType;
             if (bus.routeId) busPayload.routeId = bus.routeId.toString();
+            if (bus.routeName) busPayload.routeName = bus.routeName;
             if (bus.driverId) busPayload.driverId = bus.driverId.toString();
+            busPayload.nextStop = resolvedNextStop;
+            busPayload.distanceToNextStopMeters = resolvedDistMeters;
+            busPayload.reachedStops = bus.reachedStops || [];
+            busPayload.completedStops = bus.completedStops || (bus.reachedStops ? bus.reachedStops.length : 0);
+            busPayload.etas = etas;
+            busPayload.lastUpdated = bus.lastUpdated;
 
             io.emit('busLocationUpdate', busPayload);
+            io.emit('locationUpdate', busPayload);
             if (bus.routeId) {
                 io.to(`route_${bus.routeId.toString()}`).emit('busLocationUpdate', busPayload);
+                io.to(`route_${bus.routeId.toString()}`).emit('locationUpdate', busPayload);
             }
 
         } catch (err) {
@@ -5174,11 +5215,21 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
             const buses = await Bus.find({ status: { $in: ['On-time', 'Delayed', 'Active'] } }).limit(8);
             if (!buses || buses.length === 0) return;
 
+            // CRITICAL: Filter out any bus operated by an actual driver or recently updated by driver GPS (< 5 min)
+            const nowTime = Date.now();
+            const busesToSimulate = buses.filter(b => {
+                const lastUp = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
+                const isRealDriverLive = (nowTime - lastUp) < 300000; // 5 minutes
+                // If real driver broadcasted recently or has assigned driver, do NOT simulate
+                return !isRealDriverLive && !b.driverId;
+            });
+            if (busesToSimulate.length === 0) return;
+
             simCycleCount++;
             const shouldPersistToDb = (simCycleCount % 6 === 0); // Persist every ~24s instead of 120 writes/min
             const bulkOps = [];
 
-            for (const bus of buses) {
+            for (const bus of busesToSimulate) {
                 const deltaLat = (Math.random() - 0.48) * 0.0005;
                 const deltaLng = (Math.random() - 0.48) * 0.0005;
                 bus.currentLat = Number((bus.currentLat + deltaLat).toFixed(6));
