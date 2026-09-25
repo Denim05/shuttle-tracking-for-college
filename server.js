@@ -59,48 +59,15 @@ const safeTrim = (val) => (val !== null && val !== undefined) ? val.toString().t
 const isValidId = (id) => id && typeof id === 'string' && mongoose.Types.ObjectId.isValid(id.trim());
 
 /**
- * Calculates real-time Estimated Time of Arrival (ETA) using Google Maps Distance Matrix API
- * or Road-Network Calibrated Distance Modeling (1.32x road curvature factor).
+ * Calculates accurate real-time Estimated Time of Arrival (ETA)
+ * using true road network routing (Google Routes API / OSRM high-resolution engine).
  */
-const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed) => {
-    if (!busLat || !busLng || !stopLat || !stopLng) return 0;
+const { calculateAccurateETA } = require('./road_routing_service');
 
-    const apiKey = process.env.GOOGLE_MAPS_API_KEY;
-    
-    // If we have an API key, try the Google Distance Matrix for live traffic results
-    if (apiKey && apiKey !== 'YOUR_GOOGLE_MAPS_API_KEY' && apiKey.trim() !== '') {
-        try {
-            const url = `https://maps.googleapis.com/maps/api/distancematrix/json?origins=${busLat},${busLng}&destinations=${stopLat},${stopLng}&mode=driving&traffic_model=best_guess&departure_time=now&key=${apiKey}`;
-            
-            const response = await fetch(url);
-            const data = await response.json();
-
-            if (data.rows && data.rows[0].elements && data.rows[0].elements[0].duration_in_traffic) {
-                return Math.max(1, Math.round(data.rows[0].elements[0].duration_in_traffic.value / 60));
-            } else if (data.rows && data.rows[0].elements && data.rows[0].elements[0].duration) {
-                return Math.max(1, Math.round(data.rows[0].elements[0].duration.value / 60));
-            }
-        } catch (err) {
-            console.error('⚠️ [Google Maps API] ETA Fetch Error:', err.message);
-        }
-    }
-
-    // --- ROAD NETWORK FACTOR (Haversine * 1.32 urban road curvature model) ---
-    const R = 6371; // Earth radius in km
-    const dLat = (stopLat - busLat) * Math.PI / 180;
-    const dLon = (stopLng - busLng) * Math.PI / 180;
-    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos(busLat * Math.PI / 180) * Math.cos(stopLat * Math.PI / 180) *
-        Math.sin(dLon / 2) * Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    const crowFlyDistance = R * c; 
-    const roadDistanceKm = crowFlyDistance * 1.32; // Calibrated Bhopal urban road curvature
-
-    // Dynamic speed model: if actively moving >= 10 km/h, use current speed, else use average urban transit speed (26 km/h)
-    const effectiveSpeed = (currentSpeed && currentSpeed >= 10) ? Math.min(currentSpeed, 55) : 26;
-    const travelMinutes = Math.max(1, Math.round((roadDistanceKm / effectiveSpeed) * 60));
-    return travelMinutes;
+const calculateETA = async (busLat, busLng, stopLat, stopLng, currentSpeed, route = null) => {
+    return await calculateAccurateETA(busLat, busLng, stopLat, stopLng, currentSpeed, route);
 };
+
 
 const Route = require('./models/Route');
 const Bus = require('./models/Bus');
@@ -122,6 +89,17 @@ const StopFeedback = require('./models/StopFeedback');
 const { processStopFeedback, getRouteFeedbackSummary } = require('./services/stop_consensus_service');
 
 const authMiddleware = require('./middleware/authMiddleware');
+
+const optionalAuth = (req, res, next) => {
+    const token = req.header('Authorization');
+    if (!token) return next();
+    try {
+        const tokenString = token.startsWith('Bearer ') ? token.slice(7) : token;
+        const decoded = jwt.verify(tokenString, process.env.JWT_SECRET || 'SISTecChalo_secret_key_777');
+        req.user = decoded.user;
+    } catch (_) {}
+    next();
+};
 
 const app = express();
 const server = http.createServer(app);
@@ -869,11 +847,11 @@ app.post('/api/auth/login', async (req, res) => {
             await user.save().catch(() => {});
         }
 
-        // Generate Token
+        // Generate Token (90 days expiry for persistent seamless mobile login)
         const token = jwt.sign(
             { user: { id: user.id, role: matchedRole } },
             process.env.JWT_SECRET || 'SISTecChalo_secret_key_777',
-            { expiresIn: '1d' }
+            { expiresIn: '90d' }
         );
 
         const userResponse = {
@@ -889,8 +867,11 @@ app.post('/api/auth/login', async (req, res) => {
         if (matchedRole === 'user') {
             userResponse.routeId = user.routeId;
             userResponse.pickupPoint = user.pickupPoint;
+            userResponse.localAddress = user.localAddress || null;
+            userResponse.isCommuteConfigured = user.isCommuteConfigured || (!!user.routeId && !!user.pickupPoint);
             userResponse.userId = user.userId;
-            userResponse.proximityAlertsEnabled = user.proximityAlertsEnabled;
+            userResponse.proximityAlertsEnabled = user.proximityAlertsEnabled ?? true;
+            userResponse.proximityRadiusKm = user.proximityRadiusKm ?? 1.0;
         }
 
         res.json({ 
@@ -986,11 +967,11 @@ app.post('/api/auth/force-change-password', async (req, res) => {
 
         console.log(`✅ [Auth] Password successfully updated for user "${user.username}" (${matchedRole}). mustChangePassword=false`);
 
-        // 6. Generate fresh token
+        // 6. Generate fresh token (90 days expiry)
         const token = jwt.sign(
             { user: { id: user.id, role: matchedRole } },
             process.env.JWT_SECRET || 'SISTecChalo_secret_key_777',
-            { expiresIn: '7d' }
+            { expiresIn: '90d' }
         );
 
         const updatedUserResponse = {
@@ -1007,9 +988,10 @@ app.post('/api/auth/force-change-password', async (req, res) => {
             updatedUserResponse.routeId = user.routeId;
             updatedUserResponse.pickupPoint = user.pickupPoint;
             updatedUserResponse.localAddress = user.localAddress;
-            updatedUserResponse.isCommuteConfigured = user.isCommuteConfigured || false;
+            updatedUserResponse.isCommuteConfigured = user.isCommuteConfigured || (!!user.routeId && !!user.pickupPoint);
             updatedUserResponse.userId = user.userId;
-            updatedUserResponse.proximityAlertsEnabled = user.proximityAlertsEnabled;
+            updatedUserResponse.proximityAlertsEnabled = user.proximityAlertsEnabled ?? true;
+            updatedUserResponse.proximityRadiusKm = user.proximityRadiusKm ?? 1.0;
         }
 
         res.json({
@@ -1037,11 +1019,13 @@ const sanitizeRouteForWire = (r) => {
         name: r.name,
         color: r.color,
         stops: r.stops,
-        // Strip redundant MongoDB _ids on coordinate points to save ~1.8MB payload
-        coordinates: (r.coordinates || []).map(c => ({
-            latitude: c.latitude,
-            longitude: c.longitude
-        }))
+        // Strip redundant MongoDB _ids and ensure coordinates format is clean
+        coordinates: (r.coordinates || [])
+            .map(c => ({
+                latitude: c.latitude != null ? c.latitude : c.lat,
+                longitude: c.longitude != null ? c.longitude : c.lng
+            }))
+            .filter(c => c.latitude != null && c.longitude != null && !isNaN(c.latitude) && !isNaN(c.longitude))
     };
 };
 
@@ -1082,7 +1066,7 @@ app.get('/api/guest/buses', async (req, res) => {
     }
 });
 
-app.get('/api/routes', authMiddleware, async (req, res) => {
+app.get('/api/routes', optionalAuth, async (req, res) => {
     try {
         const routes = await getOptimizedRoutes();
         res.setHeader('Cache-Control', 'private, max-age=60, stale-while-revalidate=300');
@@ -3119,32 +3103,25 @@ io.on('connection', (socket) => {
             bus.speed = speed;
             bus.heading = heading;
             bus.lastUpdated = new Date();
-            bus.status = speed > 2 ? 'On-time' : bus.status;
+            // If the driver is broadcasting location, the shuttle is live and operational
+            bus.status = (data.status && data.status.toLowerCase() !== 'offline')
+                ? data.status
+                : (bus.status === 'Delayed' ? 'Delayed' : 'On-time');
             
-            // Calculate Road-Calibrated Cumulative ETAs and Geofencing against directional stops order
-            const etas = [];
+            // Calculate True Road Polyline ETAs & Upcoming Stops
+            let etas = [];
+            let nextStopName = '';
             if (bus.routeId) {
                 const route = await Route.findById(bus.routeId);
                 if (route && route.stops && route.stops.length > 0) {
-                    const stopsList = tripType === 'dropoff' ? [...route.stops].reverse() : route.stops;
-                    const upcomingStops = stopsList.slice(0, 7);
-                    
-                    let cumulativeMinutes = 0;
-                    let prevLat = lat;
-                    let prevLng = lng;
+                    const { computeRouteProgressAndETAs } = require('./road_routing_service');
+                    const progress = computeRouteProgressAndETAs(lat, lng, speed, route.stops, route.coordinates, tripType);
+                    etas = progress.etas;
+                    nextStopName = progress.nextStopName;
 
-                    for (let sIdx = 0; sIdx < upcomingStops.length; sIdx++) {
-                        const stop = upcomingStops[sIdx];
+                    for (let sIdx = 0; sIdx < etas.length; sIdx++) {
+                        const stop = etas[sIdx];
                         if (stop.lat && stop.lng) {
-                            // Calculate travel duration from previous waypoint/bus position
-                            const legMinutes = await calculateETA(prevLat, prevLng, stop.lat, stop.lng, speed);
-                            cumulativeMinutes += legMinutes;
-                            
-                            // Add 1 minute boarding dwell time for intermediate stops
-                            if (sIdx > 0) cumulativeMinutes += 1;
-
-                            etas.push({ stopName: stop.name, minutes: cumulativeMinutes });
-
                             // GEOFENCE LOGIC (Direct proximity to bus)
                             const R = 6371;
                             const dLat = (stop.lat - lat) * Math.PI / 180;
@@ -3154,10 +3131,7 @@ io.on('connection', (socket) => {
                                 Math.sin(dLon / 2) * Math.sin(dLon / 2);
                             const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
                             const distanceKm = R * c;
-
-                            // Advance next leg starting position to current stop
-                            prevLat = stop.lat;
-                            prevLng = stop.lng;
+                            const stopMinutes = (stop && stop.minutes !== undefined) ? stop.minutes : Math.max(1, Math.round(distanceKm / 0.4));
 
                             // ── TARGETED FCM PUSH NOTIFICATIONS (Custom Geofence Radius) ──
                             if (distanceKm <= 3.0) {
@@ -3190,7 +3164,7 @@ io.on('connection', (socket) => {
                                                 const messagePayload = {
                                                     notification: {
                                                         title: `Bus Approaching: ${bus.routeName || 'Shuttle'}`,
-                                                        body: `Your shuttle is approaching ${stop.name}. Distance: ${distanceKm.toFixed(1)} km. Est: ${minutes} min.`
+                                                        body: `Your shuttle is approaching ${stop.name}. Distance: ${distanceKm.toFixed(1)} km. Est: ${stopMinutes} min.`
                                                     },
                                                     android: {
                                                         priority: 'high',
@@ -3234,7 +3208,7 @@ io.on('connection', (socket) => {
                                     io.emit('busApproachingStop', {
                                         busId: bus._id.toString(),
                                         stopName: stop.name,
-                                        minutes: minutes
+                                        minutes: stopMinutes
                                     });
                                     console.log(`🔔 [GEOFENCE] Bus ${bus.busNumber} reached stop: ${stop.name}`);
 
@@ -3257,9 +3231,15 @@ io.on('connection', (socket) => {
             await bus.save();
 
             // Broadcast real device data (Global & Route-specific Room)
-            io.emit('busLocationUpdate', bus);
+            const busPayload = bus.toObject ? bus.toObject() : { ...bus };
+            busPayload.id = bus._id.toString();
+            busPayload._id = bus._id.toString();
+            if (bus.routeId) busPayload.routeId = bus.routeId.toString();
+            if (bus.driverId) busPayload.driverId = bus.driverId.toString();
+
+            io.emit('busLocationUpdate', busPayload);
             if (bus.routeId) {
-                io.to(`route_${bus.routeId.toString()}`).emit('busLocationUpdate', bus);
+                io.to(`route_${bus.routeId.toString()}`).emit('busLocationUpdate', busPayload);
             }
 
         } catch (err) {
@@ -3396,7 +3376,7 @@ app.get('/api/eta', async (req, res) => {
         }
 
         const speed = bus.speed > 5 ? bus.speed : 30; // default 30 km/h
-        const minutes = await calculateETA(bus.currentLat, bus.currentLng, stop.lat, stop.lng, speed);
+        const minutes = await calculateETA(bus.currentLat, bus.currentLng, stop.lat, stop.lng, speed, route);
 
         res.json({
             eta: minutes,

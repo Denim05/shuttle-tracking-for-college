@@ -17,6 +17,7 @@ const userSchema = new mongoose.Schema({
   // Specific rights given to this user by Admin/Manager
   accessRights: { type: [String], default: ['view_routes', 'track_bus'] }, 
   proximityAlertsEnabled: { type: Boolean, default: true },
+  proximityRadiusKm: { type: Number, default: 1.0 },
   localAddress: { type: String, default: null },
   isCommuteConfigured: { type: Boolean, default: false },
   mustChangePassword: { type: Boolean, default: true },

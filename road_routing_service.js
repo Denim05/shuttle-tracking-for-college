@@ -330,8 +330,268 @@ async function getRoadPolylineForStops(stops) {
     };
 }
 
+/**
+ * Haversine distance in meters between two lat/lng coordinates
+ */
+function haversineDistMeters(lat1, lon1, lat2, lon2) {
+    if (lat1 == null || lon1 == null || lat2 == null || lon2 == null) return 0;
+    const R = 6371000;
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+/**
+ * Find the nearest coordinate index in an array of { latitude/lat, longitude/lng }
+ */
+function findNearestCoordIndex(targetLat, targetLng, coordinates) {
+    if (!coordinates || coordinates.length === 0) return { index: 0, distanceMeters: 0 };
+    let minD = Infinity;
+    let bestIdx = 0;
+    for (let i = 0; i < coordinates.length; i++) {
+        const c = coordinates[i];
+        const lat = c.latitude != null ? c.latitude : c.lat;
+        const lng = c.longitude != null ? c.longitude : c.lng;
+        if (lat == null || lng == null) continue;
+        const d = haversineDistMeters(targetLat, targetLng, lat, lng);
+        if (d < minD) {
+            minD = d;
+            bestIdx = i;
+        }
+    }
+    return { index: bestIdx, distanceMeters: minD };
+}
+
+/**
+ * Sum distance in meters along a slice of polyline coordinates
+ */
+function measurePolylineDistanceMeters(coordinates, startIdx, endIdx) {
+    if (!coordinates || startIdx >= endIdx) return 0;
+    let total = 0;
+    const max = Math.min(endIdx, coordinates.length - 1);
+    for (let i = startIdx; i < max; i++) {
+        const c1 = coordinates[i];
+        const c2 = coordinates[i + 1];
+        const lat1 = c1.latitude != null ? c1.latitude : c1.lat;
+        const lng1 = c1.longitude != null ? c1.longitude : c1.lng;
+        const lat2 = c2.latitude != null ? c2.latitude : c2.lat;
+        const lng2 = c2.longitude != null ? c2.longitude : c2.lng;
+        total += haversineDistMeters(lat1, lng1, lat2, lng2);
+    }
+    return total;
+}
+
+// In-memory memoization cache for point-to-point OSRM queries (TTL 45s)
+const p2pCache = new Map();
+function getP2PCacheKey(lat1, lon1, lat2, lon2) {
+    return `${Number(lat1).toFixed(4)},${Number(lon1).toFixed(4)}_${Number(lat2).toFixed(4)},${Number(lon2).toFixed(4)}`;
+}
+
+/**
+ * Query point-to-point driving route via OSRM with memory caching
+ */
+async function queryOSRMPointToPoint(lat1, lon1, lat2, lon2) {
+    const key = getP2PCacheKey(lat1, lon1, lat2, lon2);
+    const cached = p2pCache.get(key);
+    if (cached && Date.now() - cached.timestamp < 45000) {
+        return cached.data;
+    }
+
+    return new Promise((resolve) => {
+        const url = `https://router.project-osrm.org/route/v1/driving/${lon1},${lat1};${lon2},${lat2}?overview=false`;
+        const req = https.get(url, {
+            headers: { 'User-Agent': 'SISTecChalo-TransitApp/1.0' },
+            timeout: 6000
+        }, (res) => {
+            let data = '';
+            res.on('data', chunk => data += chunk);
+            res.on('end', () => {
+                try {
+                    const json = JSON.parse(data);
+                    if (json.code === 'Ok' && json.routes && json.routes.length > 0) {
+                        const r = json.routes[0];
+                        const result = {
+                            distanceMeters: r.distance,
+                            durationSeconds: r.duration,
+                            distanceKm: (r.distance / 1000).toFixed(1),
+                            minutes: Math.max(1, Math.round(r.duration / 60))
+                        };
+                        p2pCache.set(key, { data: result, timestamp: Date.now() });
+                        // Cap cache size
+                        if (p2pCache.size > 500) {
+                            const oldestKey = p2pCache.keys().next().value;
+                            p2pCache.delete(oldestKey);
+                        }
+                        return resolve(result);
+                    }
+                    resolve(null);
+                } catch (_) {
+                    resolve(null);
+                }
+            });
+        });
+
+        req.on('error', () => resolve(null));
+        req.on('timeout', () => {
+            req.destroy();
+            resolve(null);
+        });
+    });
+}
+
+/**
+ * Calculate accurate road ETA between two coordinates, prioritizing route polyline,
+ * point-to-point OSRM, or calibrated road factor.
+ */
+async function calculateAccurateETA(busLat, busLng, stopLat, stopLng, currentSpeed = 28, route = null) {
+    if (!busLat || !busLng || !stopLat || !stopLng) return 0;
+
+    // 1. If route coordinates exist, calculate along the true road polyline path
+    if (route && route.coordinates && route.coordinates.length > 10) {
+        const busNearest = findNearestCoordIndex(busLat, busLng, route.coordinates);
+        const stopNearest = findNearestCoordIndex(stopLat, stopLng, route.coordinates);
+
+        if (stopNearest.index >= busNearest.index) {
+            const roadDistMeters = measurePolylineDistanceMeters(route.coordinates, busNearest.index, stopNearest.index);
+            const speedKmh = (currentSpeed && currentSpeed >= 12) ? Math.min(currentSpeed, 50) : 28;
+            const speedMps = (speedKmh * 1000) / 3600;
+            const travelSec = roadDistMeters / speedMps;
+            return Math.max(1, Math.round(travelSec / 60));
+        }
+    }
+
+    // 2. Query live OSRM point-to-point driving engine
+    try {
+        const osrmResult = await queryOSRMPointToPoint(busLat, busLng, stopLat, stopLng);
+        if (osrmResult && osrmResult.minutes) {
+            return osrmResult.minutes;
+        }
+    } catch (_) {}
+
+    // 3. Fallback: Calibrated Bhopal urban road curvature model (1.35x Haversine)
+    const directDistM = haversineDistMeters(busLat, busLng, stopLat, stopLng);
+    const roadDistKm = (directDistM * 1.35) / 1000.0;
+    const speedKmh = (currentSpeed && currentSpeed >= 12) ? Math.min(currentSpeed, 50) : 28;
+    return Math.max(1, Math.round((roadDistKm / speedKmh) * 60));
+}
+
+/**
+ * Compute true road ETAs and progress for all stops along a bus route.
+ * Determines which stops are upcoming based on current bus position along the polyline.
+ */
+function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = [], coordinates = [], tripType = 'pickup') {
+    if (!stops || stops.length === 0) return { etas: [], currentStopIndex: 0, nextStopName: '' };
+
+    const orderedStops = tripType === 'dropoff' ? [...stops].reverse() : [...stops];
+    const speedKmh = (currentSpeed && currentSpeed >= 12) ? Math.min(currentSpeed, 50) : 28;
+    const speedMps = (speedKmh * 1000) / 3600;
+
+    // If we have a high-resolution road polyline
+    if (coordinates && coordinates.length > 10) {
+        const busNearest = findNearestCoordIndex(busLat, busLng, coordinates);
+        const busIdx = busNearest.index;
+
+        // Map each stop to its nearest point along the route polyline
+        const stopsWithIndex = orderedStops.map((stop, origIndex) => {
+            if (!stop.lat || !stop.lng) return { stop, index: -1, origIndex };
+            const n = findNearestCoordIndex(stop.lat, stop.lng, coordinates);
+            return { stop, index: n.index, origIndex };
+        });
+
+        const upcomingETAs = [];
+        let intermediateStopCount = 0;
+        let nextStopName = '';
+
+        for (const item of stopsWithIndex) {
+            if (item.index === -1) continue;
+
+            // Stop is upcoming if it lies ahead of the bus (with 5-point grace threshold ~100m for current stop)
+            if (item.index >= busIdx - 5) {
+                const distMeters = measurePolylineDistanceMeters(coordinates, busIdx, item.index);
+                const dwellTimeSec = intermediateStopCount * 45; // 45 seconds boarding dwell per intermediate stop
+                const travelTimeSec = (distMeters / speedMps) + dwellTimeSec;
+                const minutes = Math.max(1, Math.round(travelTimeSec / 60));
+
+                if (!nextStopName) {
+                    nextStopName = item.stop.name;
+                }
+
+                upcomingETAs.push({
+                    stopName: item.stop.name,
+                    minutes: minutes,
+                    distanceKm: (distMeters / 1000).toFixed(1),
+                    lat: item.stop.lat,
+                    lng: item.stop.lng
+                });
+
+                intermediateStopCount++;
+            }
+        }
+
+        // If all stops appear behind (e.g. bus is at end of route), keep the last stop
+        if (upcomingETAs.length === 0 && orderedStops.length > 0) {
+            const lastStop = orderedStops[orderedStops.length - 1];
+            upcomingETAs.push({
+                stopName: lastStop.name,
+                minutes: 1,
+                distanceKm: '0.1',
+                lat: lastStop.lat,
+                lng: lastStop.lng
+            });
+            nextStopName = lastStop.name;
+        }
+
+        return {
+            etas: upcomingETAs,
+            nextStopName: nextStopName || (upcomingETAs[0] ? upcomingETAs[0].stopName : ''),
+            busPolylineIndex: busIdx
+        };
+    }
+
+    // Fallback if coordinates are not available: sequential stops model
+    let cumulativeMins = 0;
+    let prevLat = busLat;
+    let prevLng = busLng;
+    const fallbackETAs = [];
+
+    for (let i = 0; i < orderedStops.length; i++) {
+        const stop = orderedStops[i];
+        if (!stop.lat || !stop.lng) continue;
+        const dM = haversineDistMeters(prevLat, prevLng, stop.lat, stop.lng);
+        const roadDistKm = (dM * 1.35) / 1000.0;
+        const legMins = Math.max(1, Math.round((roadDistKm / speedKmh) * 60));
+        cumulativeMins += legMins;
+        if (i > 0) cumulativeMins += 1; // 1 min dwell
+
+        fallbackETAs.push({
+            stopName: stop.name,
+            minutes: cumulativeMins,
+            distanceKm: roadDistKm.toFixed(1),
+            lat: stop.lat,
+            lng: stop.lng
+        });
+        prevLat = stop.lat;
+        prevLng = stop.lng;
+    }
+
+    return {
+        etas: fallbackETAs,
+        nextStopName: fallbackETAs[0] ? fallbackETAs[0].stopName : '',
+        busPolylineIndex: 0
+    };
+}
+
 module.exports = {
     getRoadPolylineForStops,
     snapPointsToGoogleRoads,
-    decodePolyline
+    decodePolyline,
+    haversineDistMeters,
+    findNearestCoordIndex,
+    measurePolylineDistanceMeters,
+    queryOSRMPointToPoint,
+    calculateAccurateETA,
+    computeRouteProgressAndETAs
 };
