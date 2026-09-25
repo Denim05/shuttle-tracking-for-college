@@ -59,12 +59,26 @@ class SocketService with ChangeNotifier {
     }
   }
 
+  // ─── Event Callbacks Registry ──────────────────────────────────────────
+  final Map<String, List<Function(dynamic)>> _registeredListeners = {};
+
   // ─── Init ────────────────────────────────────────────────────────────────
 
   void initSocket() {
-    if (_socket != null && _socket!.connected) {
-      debugPrint('⚠️ Socket already connected — reusing.');
-      return;
+    if (_socket != null) {
+      if (_socket!.connected) {
+        debugPrint('⚠️ Socket already connected — reusing.');
+        return;
+      }
+      if (_status == SocketStatus.connecting) {
+        debugPrint('⚠️ Socket connection already in progress — reusing.');
+        return;
+      }
+      // If socket exists but disconnected, connect directly
+      try {
+        _socket!.connect();
+        return;
+      } catch (_) {}
     }
 
     _setStatus(SocketStatus.connecting);
@@ -87,6 +101,8 @@ class SocketService with ChangeNotifier {
           .enableForceNew()
           .build(),
     );
+
+    _bindAllListeners();
 
     _socket!
       ..on('connect',           _onConnect)
@@ -114,6 +130,28 @@ class SocketService with ChangeNotifier {
         });
   }
 
+  void _bindAllListeners() {
+    if (_socket == null) return;
+    for (final event in _registeredListeners.keys) {
+      _socket!.off(event);
+      _socket!.on(event, (data) {
+        if (event == 'busLocationUpdate') {
+          lastDataReceived.value = DateTime.now();
+        }
+        final list = _registeredListeners[event];
+        if (list != null) {
+          for (final cb in List<Function(dynamic)>.from(list)) {
+            try {
+              cb(data);
+            } catch (e) {
+              debugPrint('Error in socket callback for $event: $e');
+            }
+          }
+        }
+      });
+    }
+  }
+
   // ─── SOS Internal Handler ────────────────────────────────────────────────
 
   void _onSOSAlertInternal(dynamic data) {
@@ -137,6 +175,7 @@ class SocketService with ChangeNotifier {
     connectionStatus.value = true;
     _setStatus(SocketStatus.connected);
     debugPrint('✅ SISTecChalo: Socket connected (id: ${_socket?.id})');
+    _bindAllListeners();
     pingServer(); // measure initial latency
   }
 
@@ -144,6 +183,7 @@ class SocketService with ChangeNotifier {
     connectionStatus.value = true;
     _setStatus(SocketStatus.connected);
     debugPrint('♻️ SISTecChalo: Socket reconnected');
+    _bindAllListeners();
     pingServer();
   }
 
@@ -183,18 +223,34 @@ class SocketService with ChangeNotifier {
     _socket?.emit('ping');
   }
 
-  // ─── Listener Registration (idempotent) ─────────────────────────────────
+  // ─── Listener Registration (idempotent & persistent) ────────────────────
 
   void _on(String event, Function(dynamic) callback) {
+    final list = _registeredListeners.putIfAbsent(event, () => []);
+    list.clear();
+    list.add(callback);
     _socket?.off(event);
-    _socket?.on(event, callback);
+    _socket?.on(event, (data) {
+      try {
+        callback(data);
+      } catch (e) {
+        debugPrint('Error in socket callback for $event: $e');
+      }
+    });
   }
 
   void listenToBusUpdates(Function(dynamic) callback) {
+    final list = _registeredListeners.putIfAbsent('busLocationUpdate', () => []);
+    list.clear();
+    list.add(callback);
     _socket?.off('busLocationUpdate');
     _socket?.on('busLocationUpdate', (data) {
       lastDataReceived.value = DateTime.now();
-      callback(data);
+      try {
+        callback(data);
+      } catch (e) {
+        debugPrint('Error in busLocationUpdate callback: $e');
+      }
     });
   }
 
@@ -233,7 +289,10 @@ class SocketService with ChangeNotifier {
   void listenToRouteUpdated(Function(dynamic) callback) => _on('routeUpdated', callback);
   void listenToRouteDeleted(Function(dynamic) callback) => _on('routeDeleted', callback);
 
-  void off(String event) => _socket?.off(event);
+  void off(String event) {
+    _registeredListeners.remove(event);
+    _socket?.off(event);
+  }
 
   // ─── Emit Methods ────────────────────────────────────────────────────────
 

@@ -17,6 +17,7 @@ import '../models/user_model.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fleet_radar_screen.dart';
 import 'schedule_screen.dart';
@@ -68,17 +69,21 @@ class _UserDashboardState extends State<UserDashboard> {
   RouteModel? _resolveTargetRoute(AuthService auth, BusStore busStore, String? savedRouteId) {
     RouteModel? target;
     if (auth.currentUser?.routeId != null) {
-      final matched = _routes.where((r) => r.id == auth.currentUser!.routeId);
+      final matched = _routes.where((r) => r.id.trim() == auth.currentUser!.routeId!.trim());
       if (matched.isNotEmpty) target = matched.first;
     }
-    if (target == null && savedRouteId != null) {
-      final matched = _routes.where((r) => r.id == savedRouteId);
+    if (target == null && savedRouteId != null && !auth.isGuest) {
+      final matched = _routes.where((r) => r.id.trim() == savedRouteId.trim());
       if (matched.isNotEmpty) target = matched.first;
     }
     if (target == null && busStore.allBuses.isNotEmpty) {
-      final onlineBuses = busStore.allBuses.where((b) => b.status != 'Offline').toList();
+      final onlineBuses = busStore.allBuses.where((b) => b.status.toLowerCase().trim() != 'offline').toList();
       if (onlineBuses.isNotEmpty) {
-        final matched = _routes.where((r) => r.id == onlineBuses.first.routeId);
+        final online = onlineBuses.first;
+        final matched = _routes.where((r) =>
+          (r.id.isNotEmpty && r.id.trim() == online.routeId.trim()) ||
+          (r.name.isNotEmpty && r.name.trim().toLowerCase() == online.routeName.trim().toLowerCase())
+        );
         if (matched.isNotEmpty) target = matched.first;
       }
     }
@@ -94,8 +99,12 @@ class _UserDashboardState extends State<UserDashboard> {
 
     // ── ⚡ STEP 1: INSTANT LOCAL DISK CACHE RESTORATION (0-5ms) ───────────
     try {
-      final cachedRouteData = await ApiService.getPersisted(routeEndpoint.replaceAll('/', '_'));
-      final cachedBusData = await ApiService.getPersisted(busEndpoint.replaceAll('/', '_'));
+      final cachedRouteData = await ApiService.getPersisted(routeEndpoint.replaceAll('/', '_')) ??
+                              await ApiService.getPersisted('routes') ??
+                              await ApiService.getPersisted('guest_routes');
+      final cachedBusData = await ApiService.getPersisted(busEndpoint.replaceAll('/', '_')) ??
+                            await ApiService.getPersisted('buses') ??
+                            await ApiService.getPersisted('guest_buses');
 
       if (cachedRouteData is List && cachedRouteData.isNotEmpty && mounted) {
         _routes = cachedRouteData.map((r) => RouteModel.fromJson(r)).toList();
@@ -108,6 +117,12 @@ class _UserDashboardState extends State<UserDashboard> {
           const storage = FlutterSecureStorage();
           savedRouteId = await storage.read(key: 'last_selected_route_id');
         } catch (_) {}
+        if (savedRouteId == null) {
+          try {
+            final prefs = await SharedPreferences.getInstance();
+            savedRouteId = prefs.getString('last_selected_route_id');
+          } catch (_) {}
+        }
 
         if (mounted) {
           setState(() {
@@ -123,12 +138,29 @@ class _UserDashboardState extends State<UserDashboard> {
 
     // ── ⚡ STEP 2: FRESH NETWORK REVALIDATION (STALE-WHILE-REVALIDATE) ─────
     try {
-      // Parallel concurrent API requests with compression & persistent caching
-      final List<dynamic> results = await Future.wait([
-        _apiService.get(routeEndpoint, requiresAuth: !auth.isGuest, useCache: true, persistCache: true),
-        _apiService.get(busEndpoint, requiresAuth: !auth.isGuest, persistCache: true),
-        if (!auth.isGuest) _apiService.get('notifications') else Future.value([]),
-      ]);
+      // Resilient parallel requests: a failure in notifications or a single endpoint
+      // will NEVER prevent routes and buses from loading!
+      final routeFuture = _apiService
+          .get(routeEndpoint, requiresAuth: !auth.isGuest, useCache: true, persistCache: true)
+          .catchError((_) => _apiService.get('guest/routes', requiresAuth: false, useCache: true, persistCache: true))
+          .catchError((e) {
+            debugPrint('⚠️ Route fetch error: $e');
+            return null;
+          });
+
+      final busFuture = _apiService
+          .get(busEndpoint, requiresAuth: false, persistCache: true)
+          .catchError((_) => _apiService.get('guest/buses', requiresAuth: false, persistCache: true))
+          .catchError((e) {
+            debugPrint('⚠️ Bus fetch error: $e');
+            return null;
+          });
+
+      final notifFuture = (!auth.isGuest)
+          ? _apiService.get('notifications').catchError((e) => [])
+          : Future.value([]);
+
+      final List<dynamic> results = await Future.wait([routeFuture, busFuture, notifFuture]);
 
       if (!mounted) return;
 
@@ -136,11 +168,11 @@ class _UserDashboardState extends State<UserDashboard> {
       final dynamic busData = results[1];
       final dynamic notifData = results.length > 2 ? results[2] : [];
 
-      if (routeData is List) {
+      if (routeData is List && routeData.isNotEmpty) {
         _routes = routeData.map((r) => RouteModel.fromJson(r)).toList();
       }
 
-      if (busData is List) {
+      if (busData is List && busData.isNotEmpty) {
         busStore.seedBuses(busData);
       }
 
@@ -154,6 +186,12 @@ class _UserDashboardState extends State<UserDashboard> {
         const storage = FlutterSecureStorage();
         savedRouteId = await storage.read(key: 'last_selected_route_id');
       } catch (_) {}
+      if (savedRouteId == null) {
+        try {
+          final prefs = await SharedPreferences.getInstance();
+          savedRouteId = prefs.getString('last_selected_route_id');
+        } catch (_) {}
+      }
 
       final targetRoute = _resolveTargetRoute(auth, busStore, savedRouteId);
 
@@ -288,63 +326,78 @@ class _UserDashboardState extends State<UserDashboard> {
     } catch (_) {}
   }
 
-  void _updateActiveBus(BusStore busStore) {
-    if (_selectedRoute == null) {
-      _activeBus = null;
-      return;
+  Bus? _resolveActiveBus(BusStore busStore, RouteModel? route) {
+    if (route == null) {
+      final online = busStore.activeBuses;
+      return online.isNotEmpty ? online.first : null;
     }
-    
-    final busesOnRoute = busStore.allBuses.where((b) => b.routeId == _selectedRoute!.id).toList();
-    
-    if (busesOnRoute.isEmpty) {
-      _activeBus = null;
-    } else {
-      busesOnRoute.sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
-      _activeBus = busesOnRoute.first;
+
+    final selId = route.id.trim();
+    final selName = route.name.trim().toLowerCase();
+
+    // 1. Search for live/online buses on this route
+    final onlineBuses = busStore.allBuses.where((b) {
+      if (b.status.toLowerCase().trim() == 'offline') return false;
+      final rId = b.routeId.trim();
+      final rName = b.routeName.trim().toLowerCase();
+      return (rId.isNotEmpty && rId == selId) ||
+             (rName.isNotEmpty && rName == selName);
+    }).toList();
+
+    if (onlineBuses.isNotEmpty) {
+      onlineBuses.sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
+      return onlineBuses.first;
     }
+
+    // 2. Fallback to any buses on this route (even if offline)
+    final anyBuses = busStore.allBuses.where((b) {
+      final rId = b.routeId.trim();
+      final rName = b.routeName.trim().toLowerCase();
+      return (rId.isNotEmpty && rId == selId) ||
+             (rName.isNotEmpty && rName == selName);
+    }).toList();
+
+    if (anyBuses.isNotEmpty) {
+      anyBuses.sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
+      return anyBuses.first;
+    }
+
+    return null;
   }
 
+  void _updateActiveBus(BusStore busStore) {
+    _activeBus = _resolveActiveBus(busStore, _selectedRoute);
+  }
 
   @override
   Widget build(BuildContext context) {
-    final auth = Provider.of<AuthService>(context, listen: false);
-    final socketService = Provider.of<SocketService>(context, listen: false);
-    
-    return Consumer<BusStore>(
-      builder: (context, busStore, _) {
-        // Compute active bus inline — always fresh on every BusStore rebuild
-        if (_selectedRoute != null) {
-          final busesOnRoute = busStore.allBuses
-              .where((b) => b.routeId == _selectedRoute!.id)
-              .toList();
-          if (busesOnRoute.isEmpty) {
-            _activeBus = null;
-          } else {
-            busesOnRoute.sort((a, b) => b.lastUpdated.compareTo(a.lastUpdated));
-            _activeBus = busesOnRoute.first;
-          }
-        } else {
-          _activeBus = null;
-        }
+    final auth     = Provider.of<AuthService>(context, listen: false);
+    final busStore = Provider.of<BusStore>(context, listen: false);
 
-        return Scaffold(
-          backgroundColor: AppColors.bg,
-          body: ValueListenableBuilder<bool>(
-            valueListenable: socketService.connectionStatus,
-            builder: (context, isConnected, child) {
-              return Stack(
-                children: [
-                  child!,
-                  if (_showDebugOverlay) _buildDebugOverlay(busStore),
-                  if (_currentIndex == 0) _buildFloatingHeader(busStore),
-                ],
-              );
-            },
-            child: _getViewForIndex(auth, _currentIndex, busStore),
+    _activeBus = _resolveActiveBus(busStore, _selectedRoute);
+
+    return Scaffold(
+      backgroundColor: AppColors.bg,
+      body: Stack(
+        children: [
+          IndexedStack(
+            index: _currentIndex,
+            children: [
+              _isLoading
+                  ? Container(
+                      color: AppColors.bg,
+                      child: Center(child: _buildShimmerLoader()),
+                    )
+                  : _buildTrackingTab(),
+              _buildAlertsTab(),          // has own Consumer<BusStore>
+              _buildProfileTab(auth),     // has own Consumer<AuthService>
+            ],
           ),
-          bottomNavigationBar: _buildModernBottomNav(),
-        );
-      },
+          if (_showDebugOverlay) _buildDebugOverlay(busStore),
+          if (_currentIndex == 0) _buildFloatingHeader(busStore),
+        ],
+      ),
+      bottomNavigationBar: _buildModernBottomNav(), // Selector<BusStore,int>
     );
   }
 
@@ -587,163 +640,244 @@ class _UserDashboardState extends State<UserDashboard> {
       );
     }
 
-  Widget _getViewForIndex(AuthService auth, int index, BusStore busStore) {
-    switch (index) {
-      case 1: return _buildAlertsTab();
-      case 2: return _buildProfileTab(auth);
-      default:
-        if (_isLoading) {
-          return Container(
-            color: AppColors.bg,
-            child: Center(child: _buildShimmerLoader()),
-          );
-        }
-        return _buildTrackingTab(busStore);
-    }
-  }
+  Widget _buildTrackingTab() {
+    final auth = Provider.of<AuthService>(context, listen: false);
 
-  Widget _buildTrackingTab(BusStore busStore) {
-    return Stack(
-      children: [
-        BusMap(
-          buses: busStore.allBuses.where((b) => 
-            b.routeId == _selectedRoute?.id && 
-            b.status != 'Offline'
-          ).toList(),
-          selectedRoute: _selectedRoute,
-          onDriveModeChanged: (isDrive) {
-            setState(() => _isDriveMode = isDrive);
-          },
-        ),
-        DraggableScrollableSheet(
-          initialChildSize: 0.32,
-          minChildSize: 0.16,
-          maxChildSize: 0.78,
-          snap: true,
-          builder: (context, scrollController) => Container(
-            decoration: BoxDecoration(
-              color: AppColors.bgSecondary,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-              border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 1)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.6),
-                  blurRadius: 30,
-                  offset: const Offset(0, -4),
-                ),
-              ],
+    return Consumer<BusStore>(
+      builder: (context, store, _) {
+        final currentActiveBus = _resolveActiveBus(store, _selectedRoute);
+        _activeBus = currentActiveBus;
+
+        // In Guest Mode: If current route has no live bus, auto-switch to active live shuttle
+        if (auth.isGuest && (currentActiveBus == null || currentActiveBus.status.toLowerCase() == 'offline')) {
+          final liveBuses = store.activeBuses;
+          if (liveBuses.isNotEmpty) {
+            final liveBus = liveBuses.first;
+            RouteModel? matchingRoute;
+            for (final r in _routes) {
+              final rId = r.id.trim();
+              final rName = r.name.trim().toLowerCase();
+              if ((rId.isNotEmpty && rId == liveBus.routeId.trim()) ||
+                  (rName.isNotEmpty && rName == liveBus.routeName.trim().toLowerCase())) {
+                matchingRoute = r;
+                break;
+              }
+            }
+            if (matchingRoute != null && matchingRoute.id != _selectedRoute?.id) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && _selectedRoute?.id != matchingRoute?.id) {
+                  setState(() {
+                    _selectedRoute = matchingRoute;
+                    _activeBus = liveBus;
+                  });
+                }
+              });
+            }
+          }
+        }
+
+        final mapBuses = store.allBuses.where((b) {
+          if (b.status.toLowerCase().trim() == 'offline') return false;
+          if (_selectedRoute == null) return true;
+          final rId = b.routeId.trim();
+          final rName = b.routeName.trim().toLowerCase();
+          final selId = _selectedRoute!.id.trim();
+          final selName = _selectedRoute!.name.trim().toLowerCase();
+          return (rId.isNotEmpty && rId == selId) ||
+                 (rName.isNotEmpty && rName == selName);
+        }).toList();
+
+        return Stack(
+          children: [
+            BusMap(
+              buses: mapBuses,
+              selectedRoute: _selectedRoute,
+              onDriveModeChanged: (isDrive) {
+                setState(() => _isDriveMode = isDrive);
+              },
             ),
-            child: ListView(
-              controller: scrollController,
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 140),
-              children: [
-                Center(
-                  child: Container(
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF334155),
-                      borderRadius: BorderRadius.circular(2),
+            if (auth.isGuest && _selectedRoute != null)
+              _buildGuestLiveSwitchBanner(store),
+            DraggableScrollableSheet(
+              initialChildSize: 0.32,
+              minChildSize: 0.16,
+              maxChildSize: 0.78,
+              snap: true,
+              builder: (context, scrollController) => Container(
+                decoration: BoxDecoration(
+                  color: AppColors.bgSecondary,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+                  border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.08), width: 1)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.6),
+                      blurRadius: 30,
+                      offset: const Offset(0, -4),
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 24),
-                if (_selectedRoute == null) ...[
-                   Text(
-                     'OVERVIEW',
-                     style: GoogleFonts.plusJakartaSans(
-                       fontSize: 10,
-                       fontWeight: FontWeight.w900,
-                       color: AppColors.primary,
-                       letterSpacing: 2,
-                     ),
-                   ),
-                   const SizedBox(height: 8),
-                   Text(
-                     'Ready for Transit',
-                     style: GoogleFonts.plusJakartaSans(
-                       fontSize: 24,
-                       fontWeight: FontWeight.w800,
-                       color: Colors.white,
-                     ),
-                   ),
-                   const SizedBox(height: 4),
-                   Text(
-                     'Select a shuttle route to begin live GPS tracking.',
-                     style: GoogleFonts.plusJakartaSans(
-                       fontSize: 13,
-                       color: AppColors.textSecondary,
-                       height: 1.4,
-                     ),
-                   ),
-                   const SizedBox(height: 28),
-                   _buildActionCard('Active Fleet Radar', 'View all operational college buses', Icons.radar_rounded, () {
-                     Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetRadarScreen()));
-                   }),
-                   const SizedBox(height: 12),
-                   _buildActionCard('Select Route', 'Synchronize with your assigned commute line', Icons.alt_route_rounded, _showRouteSelection),
-                ] else ...[
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                _selectedRoute!.name,
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w800,
-                                  color: Colors.white,
-                                  letterSpacing: -0.2,
-                                  height: 1.25,
+                child: ListView(
+                  controller: scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 140),
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 36,
+                        height: 4,
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF334155),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (_selectedRoute == null) ...[
+                      Text(
+                        'OVERVIEW',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: AppColors.primary,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Ready for Transit',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Select a shuttle route to begin live GPS tracking.',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 13,
+                          color: AppColors.textSecondary,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 28),
+                      _buildActionCard('Active Fleet Radar', 'View all operational college buses', Icons.radar_rounded, () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const FleetRadarScreen()));
+                      }),
+                      const SizedBox(height: 12),
+                      _buildActionCard('Select Route', 'Synchronize with your assigned commute line', Icons.alt_route_rounded, _showRouteSelection),
+                    ] else ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _selectedRoute!.name,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: -0.2,
+                                    height: 1.25,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.visible,
                                 ),
-                                maxLines: 2,
-                                overflow: TextOverflow.visible,
-                              ),
-                              const SizedBox(height: 8),
-                              Wrap(
-                                spacing: 8,
-                                runSpacing: 6,
-                                crossAxisAlignment: WrapCrossAlignment.center,
-                                children: [
-                                  if (_activeBus != null && _activeBus!.status != 'Offline') ...[
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 8,
+                                  runSpacing: 6,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    if (currentActiveBus != null && currentActiveBus.status.toLowerCase() != 'offline') ...[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.accentGreen.withValues(alpha: 0.14),
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: const BoxDecoration(
+                                                color: AppColors.accentGreen,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.3, 1.3)),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'LIVE',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.accentGreen,
+                                                letterSpacing: 1.0,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ] else ...[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.surfaceLight,
+                                          borderRadius: BorderRadius.circular(20),
+                                          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                                        ),
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Container(
+                                              width: 6,
+                                              height: 6,
+                                              decoration: const BoxDecoration(
+                                                color: AppColors.textMuted,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              'OFFLINE',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                fontSize: 9.5,
+                                                fontWeight: FontWeight.w800,
+                                                color: AppColors.textMuted,
+                                                letterSpacing: 1.0,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                    // Manager Assigned Bus Number Pill
                                     Container(
                                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                       decoration: BoxDecoration(
-                                        color: AppColors.accentGreen.withValues(alpha: 0.14),
+                                        color: AppColors.surfaceLight,
                                         borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                                       ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Container(
-                                            width: 6,
-                                            height: 6,
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.accentGreen,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.3, 1.3)),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            'LIVE',
-                                            style: GoogleFonts.plusJakartaSans(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.accentGreen,
-                                              letterSpacing: 1.0,
-                                            ),
-                                          ),
-                                        ],
+                                      child: Text(
+                                        _getAssignedBusLabel(store),
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: AppColors.primaryLight,
+                                          letterSpacing: 0.8,
+                                        ),
                                       ),
                                     ),
-                                  ] else ...[
+                                    // Current Day & Shift Tag
                                     Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
                                         color: AppColors.surfaceLight,
                                         borderRadius: BorderRadius.circular(20),
@@ -752,142 +886,201 @@ class _UserDashboardState extends State<UserDashboard> {
                                       child: Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Container(
-                                            width: 6,
-                                            height: 6,
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.textMuted,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
+                                          const Icon(Icons.schedule_rounded, color: AppColors.textMuted, size: 11),
+                                          const SizedBox(width: 4),
                                           Text(
-                                            'OFFLINE',
+                                            '${_getCurrentDayLabel()} • ${_getAssignedShiftLabel()}',
                                             style: GoogleFonts.plusJakartaSans(
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w800,
-                                              color: AppColors.textMuted,
-                                              letterSpacing: 1.0,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w700,
+                                              color: AppColors.textSecondary,
+                                              letterSpacing: 0.5,
                                             ),
                                           ),
                                         ],
                                       ),
                                     ),
                                   ],
-                                  // Manager Assigned Bus Number Pill
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surfaceLight,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Realtime telemetry status pill
+                          ValueListenableBuilder<DateTime?>(
+                            valueListenable: Provider.of<SocketService>(context, listen: false).lastDataReceived,
+                            builder: (context, lastPacket, _) {
+                              final isRecent = lastPacket != null && 
+                                  DateTime.now().difference(lastPacket).inSeconds < 15;
+                              return AnimatedContainer(
+                                duration: const Duration(milliseconds: 300),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: isRecent ? AppColors.accentGreen.withValues(alpha: 0.14) : AppColors.surfaceLight,
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: isRecent ? AppColors.accentGreen.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06),
+                                  ),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      isRecent ? Icons.wifi_tethering_rounded : Icons.wifi_tethering_off_rounded,
+                                      color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
+                                      size: 13,
                                     ),
-                                    child: Text(
-                                      _getAssignedBusLabel(busStore),
+                                    const SizedBox(width: 5),
+                                    Text(
+                                      isRecent ? 'CONNECTED' : 'STANDBY',
                                       style: GoogleFonts.plusJakartaSans(
+                                        color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
                                         fontSize: 9.5,
                                         fontWeight: FontWeight.w800,
-                                        color: AppColors.primaryLight,
                                         letterSpacing: 0.8,
                                       ),
                                     ),
-                                  ),
-                                  // Current Day & Shift Tag
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.surfaceLight,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        const Icon(Icons.schedule_rounded, color: AppColors.textMuted, size: 11),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          '${_getCurrentDayLabel()} • ${_getAssignedShiftLabel()}',
-                                          style: GoogleFonts.plusJakartaSans(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w700,
-                                            color: AppColors.textSecondary,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        // Realtime telemetry status pill
-                        ValueListenableBuilder<DateTime?>(
-                          valueListenable: Provider.of<SocketService>(context, listen: false).lastDataReceived,
-                          builder: (context, lastPacket, _) {
-                            final isRecent = lastPacket != null && 
-                                DateTime.now().difference(lastPacket).inSeconds < 15;
-                            return AnimatedContainer(
-                              duration: const Duration(milliseconds: 300),
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: isRecent ? AppColors.accentGreen.withValues(alpha: 0.14) : AppColors.surfaceLight,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(
-                                  color: isRecent ? AppColors.accentGreen.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06),
+                                  ],
                                 ),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(
-                                    isRecent ? Icons.wifi_tethering_rounded : Icons.wifi_tethering_off_rounded,
-                                    color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
-                                    size: 13,
-                                  ),
-                                  const SizedBox(width: 5),
-                                  Text(
-                                    isRecent ? 'CONNECTED' : 'STANDBY',
-                                    style: GoogleFonts.plusJakartaSans(
-                                      color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 0.8,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 20),
-                    _buildHeroTransitCard(busStore),
-                    const SizedBox(height: 14),
-                    _buildQuickActionsRow(),
-                    const SizedBox(height: 24),
-                    if (_activeBus != null && _activeBus!.status != 'Offline') ...[
-                      LinearTrackingView(
-                        bus: _activeBus!, 
-                        route: _selectedRoute!,
-                        shiftDirection: _shiftTimelineDirection,
+                              );
+                            },
+                          ),
+                        ],
                       ),
+
+                      const SizedBox(height: 20),
+                      _buildHeroTransitCard(store),
+                      const SizedBox(height: 14),
+                      _buildQuickActionsRow(),
                       const SizedBox(height: 24),
-                      _buildStopsList(),
-                    ] else
-                      _buildStopsList(),
+                      if (currentActiveBus != null && currentActiveBus.status.toLowerCase() != 'offline') ...[
+                        LinearTrackingView(
+                          bus: currentActiveBus, 
+                          route: _selectedRoute!,
+                          shiftDirection: _shiftTimelineDirection,
+                        ),
+                        const SizedBox(height: 24),
+                        _buildStopsList(),
+                      ] else
+                        _buildStopsList(),
+                    ],
                   ],
-                ],
+                ),
               ),
             ),
-          ),
-        ],
-      );
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildGuestLiveSwitchBanner(BusStore store) {
+    final liveBuses = store.activeBuses;
+    if (liveBuses.isEmpty) return const SizedBox.shrink();
+
+    Bus? otherLiveBus;
+    for (final b in liveBuses) {
+      final rId = b.routeId.trim();
+      final rName = b.routeName.trim().toLowerCase();
+      final selId = _selectedRoute?.id.trim() ?? '';
+      final selName = _selectedRoute?.name.trim().toLowerCase() ?? '';
+      if (rId != selId && rName != selName) {
+        otherLiveBus = b;
+        break;
+      }
     }
+
+    if (otherLiveBus == null) return const SizedBox.shrink();
+
+    RouteModel? matchingRoute;
+    for (final r in _routes) {
+      final rId = r.id.trim();
+      final rName = r.name.trim().toLowerCase();
+      if ((rId.isNotEmpty && rId == otherLiveBus.routeId.trim()) ||
+          (rName.isNotEmpty && rName == otherLiveBus.routeName.trim().toLowerCase())) {
+        matchingRoute = r;
+        break;
+      }
+    }
+
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topPadding + 74,
+      left: 20,
+      right: 20,
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.mediumImpact();
+          if (matchingRoute != null) {
+            setState(() {
+              _selectedRoute = matchingRoute;
+              _activeBus = otherLiveBus;
+            });
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.5)),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.accentGreen.withValues(alpha: 0.2),
+                blurRadius: 16,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: const BoxDecoration(
+                  color: AppColors.accentGreen,
+                  shape: BoxShape.circle,
+                ),
+              ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 600.ms, begin: const Offset(0.7, 0.7), end: const Offset(1.4, 1.4)),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Live Shuttle: ${otherLiveBus.routeName} (${otherLiveBus.displayBusNumber})',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.accentGreen.withValues(alpha: 0.18),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'TRACK NOW',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.accentGreen,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ).animate().fadeIn(duration: 250.ms).slideY(begin: -0.2),
+    );
+  }
 
   String _getAssignedBusLabel(BusStore busStore) {
     if (_selectedShiftFilter != null) {
@@ -1200,7 +1393,14 @@ class _UserDashboardState extends State<UserDashboard> {
       etaUnit = 'MIN';
     } else if (isLive) {
       if (_activeBus!.etas.isNotEmpty) {
-        etaDisplay = '${_activeBus!.etas.first.minutes}';
+        // Resolve ETA to user's assigned pickup stop, or next upcoming stop
+        final matchedEta = hasPickup
+            ? _activeBus!.etas.firstWhere(
+                (e) => e.stopName.toLowerCase().trim() == pickupName.toLowerCase().trim(),
+                orElse: () => _activeBus!.etas.first,
+              )
+            : _activeBus!.etas.first;
+        etaDisplay = '${matchedEta.minutes}';
         etaUnit = 'MIN';
       }
     }
@@ -1666,10 +1866,13 @@ class _UserDashboardState extends State<UserDashboard> {
   Widget _buildAlertsTab() {
     return Consumer<BusStore>(
       builder: (context, busStore, _) {
-        // Mark all read when tab is open
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (busStore.unreadCount > 0) busStore.markAllRead();
-        });
+        // Mark all read when alerts tab is visible — guarded so we only
+        // schedule once per dirty unread cycle, not on every bus GPS tick.
+        if (_currentIndex == 1 && busStore.unreadCount > 0) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) busStore.markAllRead();
+          });
+        }
 
         final allAlerts = busStore.notifications;
 
@@ -1985,7 +2188,9 @@ class _UserDashboardState extends State<UserDashboard> {
           ],
         ),
       ),
-    ).animate().fadeIn(delay: (index * 40).ms).slideY(begin: 0.05);
+    );
+    // Note: .animate() removed from list items — running staggered flutter_animate
+    // inside a SliverList causes significant frame jank on mid-range devices.
   }
 
   Widget _buildProfileTab(AuthService auth) {
@@ -2410,7 +2615,7 @@ class _UserDashboardState extends State<UserDashboard> {
               ),
             ],
           ],
-        ).animate().fadeIn();
+        );
       },
     );
   }
@@ -2748,8 +2953,12 @@ class _UserDashboardState extends State<UserDashboard> {
 
   Widget _buildModernBottomNav() {
     final bottomPadding = MediaQuery.of(context).padding.bottom;
-    return Consumer<BusStore>(
-      builder: (context, busStore, _) {
+    // Selector<int>: ONLY rebuilds when the notification badge count changes.
+    // Previously Consumer<BusStore> caused the entire bottom nav (and Scaffold)
+    // to rebuild on every bus GPS update — the root cause of navigation jank.
+    return Selector<BusStore, int>(
+      selector: (_, store) => store.unreadCount,
+      builder: (context, unreadCount, _) {
         return Container(
           padding: EdgeInsets.fromLTRB(20, 10, 20, bottomPadding > 0 ? bottomPadding : 16),
           decoration: BoxDecoration(
@@ -2761,7 +2970,7 @@ class _UserDashboardState extends State<UserDashboard> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem(0, Icons.explore_rounded, 'TRACK', 0),
-              _buildNavItem(1, Icons.notifications_rounded, 'ALERTS', busStore.unreadCount),
+              _buildNavItem(1, Icons.notifications_rounded, 'ALERTS', unreadCount),
               _buildNavItem(2, Icons.person_rounded, 'PROFILE', 0),
             ],
           ),
@@ -2961,75 +3170,154 @@ class _UserDashboardState extends State<UserDashboard> {
               ),
               const SizedBox(height: 14),
               Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  itemCount: _routes.where((r) => r.name.toLowerCase().contains(searchQuery.toLowerCase())).length,
-                  itemBuilder: (context, i) {
+                child: Builder(
+                  builder: (context) {
+                    final busStore = Provider.of<BusStore>(context, listen: false);
                     final filteredRoutes = _routes.where((r) => r.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
-                    final route = filteredRoutes[i];
-                    final isSel = _selectedRoute?.id == route.id;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      decoration: BoxDecoration(
-                        color: isSel ? AppColors.primary.withValues(alpha: 0.12) : AppColors.surface,
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
-                          color: isSel ? AppColors.primary.withValues(alpha: 0.40) : Colors.white.withValues(alpha: 0.06),
-                        ),
-                      ),
-                      child: Material(
-                        color: Colors.transparent,
-                        borderRadius: BorderRadius.circular(18),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                          onTap: () async {
-                            final busStore = Provider.of<BusStore>(context, listen: false);
-                            setState(() {
-                              _selectedRoute = route;
-                              _updateActiveBus(busStore);
-                            });
-                            try {
-                              const storage = FlutterSecureStorage();
-                              await storage.write(key: 'last_selected_route_id', value: route.id);
-                            } catch (_) {}
-                            if (context.mounted) Navigator.pop(context);
-                          },
-                          leading: Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: (isSel ? AppColors.primary : AppColors.surfaceLight).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              Icons.directions_bus_rounded,
-                              color: isSel ? AppColors.primaryLight : AppColors.textMuted,
-                              size: 20,
-                            ),
-                          ),
-                          title: Text(
-                            route.name,
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                              fontSize: 14,
+                    filteredRoutes.sort((a, b) {
+                      final aLive = busStore.allBuses.any((x) =>
+                        x.status.toLowerCase().trim() != 'offline' &&
+                        ((x.routeId.isNotEmpty && x.routeId.trim() == a.id.trim()) ||
+                         (x.routeName.isNotEmpty && x.routeName.trim().toLowerCase() == a.name.trim().toLowerCase()))
+                      );
+                      final bLive = busStore.allBuses.any((x) =>
+                        x.status.toLowerCase().trim() != 'offline' &&
+                        ((x.routeId.isNotEmpty && x.routeId.trim() == b.id.trim()) ||
+                         (x.routeName.isNotEmpty && x.routeName.trim().toLowerCase() == b.name.trim().toLowerCase()))
+                      );
+                      if (aLive && !bLive) return -1;
+                      if (!aLive && bLive) return 1;
+                      return 0;
+                    });
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      itemCount: filteredRoutes.length,
+                      itemBuilder: (context, i) {
+                        final route = filteredRoutes[i];
+                        final isSel = _selectedRoute?.id == route.id;
+                        final hasLiveBus = busStore.allBuses.any((x) =>
+                          x.status.toLowerCase().trim() != 'offline' &&
+                          ((x.routeId.isNotEmpty && x.routeId.trim() == route.id.trim()) ||
+                           (x.routeName.isNotEmpty && x.routeName.trim().toLowerCase() == route.name.trim().toLowerCase()))
+                        );
+
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: isSel 
+                              ? AppColors.primary.withValues(alpha: 0.12) 
+                              : (hasLiveBus ? AppColors.accentGreen.withValues(alpha: 0.05) : AppColors.surface),
+                            borderRadius: BorderRadius.circular(18),
+                            border: Border.all(
+                              color: isSel 
+                                ? AppColors.primary.withValues(alpha: 0.40) 
+                                : (hasLiveBus ? AppColors.accentGreen.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06)),
                             ),
                           ),
-                          subtitle: Text(
-                            '${route.stops.length} STOPS • BHOPAL TRANSIT',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: isSel ? AppColors.primaryLight : AppColors.textMuted,
-                              fontWeight: FontWeight.w600,
-                              fontSize: 10,
-                              letterSpacing: 0.5,
+                          child: Material(
+                            color: Colors.transparent,
+                            borderRadius: BorderRadius.circular(18),
+                            child: ListTile(
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                              onTap: () async {
+                                final store = Provider.of<BusStore>(context, listen: false);
+                                setState(() {
+                                  _selectedRoute = route;
+                                  _updateActiveBus(store);
+                                });
+                                try {
+                                  const storage = FlutterSecureStorage();
+                                  await storage.write(key: 'last_selected_route_id', value: route.id);
+                                  final prefs = await SharedPreferences.getInstance();
+                                  await prefs.setString('last_selected_route_id', route.id);
+                                } catch (_) {}
+                                if (context.mounted) Navigator.pop(context);
+                              },
+                              leading: Container(
+                                width: 38,
+                                height: 38,
+                                decoration: BoxDecoration(
+                                  color: (isSel ? AppColors.primary : (hasLiveBus ? AppColors.accentGreen : AppColors.surfaceLight)).withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.directions_bus_rounded,
+                                  color: isSel ? AppColors.primaryLight : (hasLiveBus ? AppColors.accentGreen : AppColors.textMuted),
+                                  size: 20,
+                                ),
+                              ),
+                              title: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      route.name,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: Colors.white,
+                                        fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
+                                        fontSize: 14,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              subtitle: Text(
+                                '${route.stops.length} STOPS • BHOPAL TRANSIT',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: isSel ? AppColors.primaryLight : AppColors.textMuted,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 10,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (hasLiveBus) ...[
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.accentGreen.withValues(alpha: 0.16),
+                                        borderRadius: BorderRadius.circular(10),
+                                        border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.4)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Container(
+                                            width: 6,
+                                            height: 6,
+                                            decoration: const BoxDecoration(
+                                              color: AppColors.accentGreen,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            'LIVE',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: AppColors.accentGreen,
+                                              fontSize: 9.5,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  isSel 
+                                    ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryLight, size: 20)
+                                    : const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
+                                ],
+                              ),
                             ),
                           ),
-                          trailing: isSel 
-                            ? const Icon(Icons.check_circle_rounded, color: AppColors.primaryLight, size: 20)
-                            : const Icon(Icons.arrow_forward_ios_rounded, color: AppColors.textMuted, size: 14),
-                        ),
-                      ),
-                    ).animate().fadeIn(delay: (i * 25).ms).slideX(begin: 0.04);
+                        ).animate().fadeIn(delay: (i * 25).ms).slideX(begin: 0.04);
+                      },
+                    );
                   },
                 ),
               ),
