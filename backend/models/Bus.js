@@ -14,9 +14,14 @@ const busSchema = new mongoose.Schema({
   driverId: String, // Link to User
   occupancy: { type: String, enum: ['Low', 'Medium', 'High'], default: 'Low' },
   tripType: { type: String, enum: ['pickup', 'dropoff'], default: 'pickup' },
+  nextStop: { type: String, default: '' },
+  distanceToNextStopMeters: { type: Number, default: null },
+  reachedStops: [{ type: String }],
+  completedStops: { type: Number, default: 0 },
   etas: [{
     stopName: String,
-    minutes: Number
+    minutes: Number,
+    distanceKm: String
   }],
   lastUpdated: { type: Date, default: Date.now }
 });
