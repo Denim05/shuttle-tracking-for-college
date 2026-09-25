@@ -10,7 +10,6 @@ import '../services/auth_service.dart';
 import '../services/socket_service.dart';
 import '../services/bus_store.dart';
 import '../components/bus_map.dart';
-import '../components/linear_tracking_view.dart';
 import '../models/route_model.dart';
 import '../models/bus_model.dart';
 import '../models/user_model.dart';
@@ -977,17 +976,8 @@ class _UserDashboardState extends State<UserDashboard> {
                       _buildHeroTransitCard(store),
                       const SizedBox(height: 14),
                       _buildQuickActionsRow(),
-                      const SizedBox(height: 24),
-                      if (currentActiveBus != null && currentActiveBus.isBroadcastingLive) ...[
-                        LinearTrackingView(
-                          bus: currentActiveBus, 
-                          route: _selectedRoute!,
-                          shiftDirection: _shiftTimelineDirection,
-                        ),
-                        const SizedBox(height: 24),
-                        _buildStopsList(),
-                      ] else
-                        _buildStopsList(),
+                      const SizedBox(height: 20),
+                      _buildStopsList(),
                     ],
                   ],
                 ),
@@ -3451,8 +3441,8 @@ class _UserDashboardState extends State<UserDashboard> {
         break;
       }
     }
-    final isBusLive = activeBus != null && activeBus.status.toLowerCase() != 'offline';
-    
+    final isBusLive = activeBus != null && activeBus.isBroadcastingLive;
+
     // In morning (Shift 1 / Pickup): Stops -> Campus (regular order)
     // In 2nd shift (Shift 2+ / Dropoff): Campus -> Stops (reversed order)
     final List<Map<String, dynamic>> displayedStops = isDropoff 
@@ -3462,6 +3452,150 @@ class _UserDashboardState extends State<UserDashboard> {
 
     final String firstStopName = displayedStops.first['name']?.toString() ?? 'Origin';
     final String lastStopName = displayedStops.last['name']?.toString() ?? 'Destination';
+
+    // ── Real-Time Positioning & Telemetry Math ──────────────────────
+    int nextStopIndex = 0;
+    if (isBusLive) {
+      int? matchedIndex;
+
+      // 1. Match by bus.nextStop
+      if (activeBus.nextStop != null && activeBus.nextStop!.trim().isNotEmpty) {
+        final target = activeBus.nextStop!.trim().toLowerCase();
+        for (int i = 0; i < totalStops; i++) {
+          final sName = (displayedStops[i]['name'] ?? '').toString().trim().toLowerCase();
+          if (sName == target || sName.contains(target) || target.contains(sName)) {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 2. Match by first ETA stop
+      if (matchedIndex == null && activeBus.etas.isNotEmpty) {
+        final target = activeBus.etas.first.stopName.trim().toLowerCase();
+        for (int i = 0; i < totalStops; i++) {
+          final sName = (displayedStops[i]['name'] ?? '').toString().trim().toLowerCase();
+          if (sName == target || sName.contains(target) || target.contains(sName)) {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 3. Match by first unreached stop in order
+      if (matchedIndex == null && activeBus.reachedStops.isNotEmpty) {
+        for (int i = 0; i < totalStops; i++) {
+          final sName = (displayedStops[i]['name'] ?? '').toString().trim().toLowerCase();
+          final reached = activeBus.reachedStops.any((r) {
+            final rTrim = r.trim().toLowerCase();
+            return rTrim == sName || sName.contains(rTrim) || rTrim.contains(sName);
+          });
+          if (!reached) {
+            matchedIndex = i;
+            break;
+          }
+        }
+      }
+
+      // 4. Match by closest GPS distance
+      if (matchedIndex == null) {
+        double minDistance = double.infinity;
+        int closestIndex = 0;
+        for (int i = 0; i < totalStops; i++) {
+          final lat = (displayedStops[i]['lat'] as num?)?.toDouble();
+          final lng = (displayedStops[i]['lng'] as num?)?.toDouble();
+          if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
+            final d = Geolocator.distanceBetween(activeBus.currentLat, activeBus.currentLng, lat, lng);
+            if (d < minDistance) {
+              minDistance = d;
+              closestIndex = i;
+            }
+          }
+        }
+        matchedIndex = closestIndex;
+      }
+
+      nextStopIndex = matchedIndex.clamp(0, totalStops);
+    }
+
+    final double busSpeedKmh = (activeBus != null && activeBus.speed > 5) ? activeBus.speed : 25.0;
+    final double busSpeedMps = (busSpeedKmh * 1000) / 3600;
+
+    String formatDistance(double meters) {
+      if (meters < 1000) {
+        return '${meters.toStringAsFixed(0)} m';
+      } else {
+        return '${(meters / 1000).toStringAsFixed(1)} km';
+      }
+    }
+
+    // Distance to next upcoming stop
+    double distToNextMeters = 500;
+    int etaToNextMins = 2;
+
+    if (isBusLive && nextStopIndex < totalStops) {
+      final nextStop = displayedStops[nextStopIndex];
+      final nextLat = (nextStop['lat'] as num?)?.toDouble();
+      final nextLng = (nextStop['lng'] as num?)?.toDouble();
+
+      if (activeBus.distanceToNextStopMeters != null && activeBus.distanceToNextStopMeters! > 0) {
+        distToNextMeters = activeBus.distanceToNextStopMeters!.toDouble();
+      } else if (nextLat != null && nextLng != null && nextLat != 0.0 && nextLng != 0.0) {
+        distToNextMeters = Geolocator.distanceBetween(
+          activeBus.currentLat, activeBus.currentLng, nextLat, nextLng,
+        );
+      }
+
+      // Match ETA
+      for (final e in activeBus.etas) {
+        final eName = e.stopName.trim().toLowerCase();
+        final sName = (nextStop['name'] ?? '').toString().trim().toLowerCase();
+        if (eName == sName || sName.contains(eName) || eName.contains(sName)) {
+          etaToNextMins = e.minutes;
+          break;
+        }
+      }
+      if (etaToNextMins <= 0) {
+        etaToNextMins = math.max(1, (distToNextMeters / busSpeedMps / 60).round());
+      }
+    }
+
+    double getDistanceToStop(int index) {
+      if (!isBusLive || activeBus == null) return 0.0;
+      if (index < nextStopIndex) return 0.0;
+      if (index == nextStopIndex) return distToNextMeters;
+
+      double cumDist = distToNextMeters;
+      for (int j = nextStopIndex; j < index; j++) {
+        final aLat = (displayedStops[j]['lat'] as num?)?.toDouble();
+        final aLng = (displayedStops[j]['lng'] as num?)?.toDouble();
+        final bLat = (displayedStops[j + 1]['lat'] as num?)?.toDouble();
+        final bLng = (displayedStops[j + 1]['lng'] as num?)?.toDouble();
+        if (aLat != null && aLng != null && bLat != null && bLng != null && aLat != 0 && bLat != 0) {
+          cumDist += Geolocator.distanceBetween(aLat, aLng, bLat, bLng);
+        } else {
+          cumDist += 850;
+        }
+      }
+      return cumDist;
+    }
+
+    int getEtaMinutesToStop(int index) {
+      if (!isBusLive || activeBus == null) return 0;
+      if (index < nextStopIndex) return 0;
+      if (index == nextStopIndex) return etaToNextMins;
+
+      final sName = (displayedStops[index]['name'] ?? '').toString().trim().toLowerCase();
+      for (final e in activeBus.etas) {
+        final eName = e.stopName.trim().toLowerCase();
+        if (eName == sName || sName.contains(eName) || eName.contains(sName)) {
+          return e.minutes;
+        }
+      }
+
+      final totalDist = getDistanceToStop(index);
+      return math.max(1, (totalDist / busSpeedMps / 60).round());
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -3684,82 +3818,136 @@ class _UserDashboardState extends State<UserDashboard> {
 
         const SizedBox(height: 20),
 
-        // Stops Timeline Nodes
-        ...List.generate(totalStops, (index) {
-          final stop = displayedStops[index];
-          final stopName = stop['name']?.toString() ?? 'Stop ${index + 1}';
-          final isFirst = index == 0;
-          final isLast = index == totalStops - 1;
-          final isUserStop = userPickup.isNotEmpty &&
-              (stopName.toLowerCase().trim() == userPickup ||
-               stopName.toLowerCase().contains(userPickup) ||
-               userPickup.contains(stopName.toLowerCase().trim()));
+        // ── Vertical Stops Timeline ──────────────────────────────────
+        ..._buildVerticalTimelineNodes(
+          displayedStops: displayedStops,
+          totalStops: totalStops,
+          isBusLive: isBusLive,
+          activeBus: activeBus,
+          nextStopIndex: nextStopIndex,
+          userPickup: userPickup,
+          isDropoff: isDropoff,
+          distToNextMeters: distToNextMeters,
+          etaToNextMins: etaToNextMins,
+          formatDistance: formatDistance,
+          getDistanceToStop: getDistanceToStop,
+          getEtaMinutesToStop: getEtaMinutesToStop,
+        ),
+      ],
+    );
+  }
 
-          final liveBus = isBusLive ? activeBus : null;
-          final hasReached = liveBus != null && liveBus.reachedStops.any(
-            (s) => s.toLowerCase().trim() == stopName.toLowerCase().trim() ||
-                   stopName.toLowerCase().contains(s.toLowerCase().trim()),
-          );
+  List<Widget> _buildVerticalTimelineNodes({
+    required List<Map<String, dynamic>> displayedStops,
+    required int totalStops,
+    required bool isBusLive,
+    required Bus? activeBus,
+    required int nextStopIndex,
+    required String userPickup,
+    required bool isDropoff,
+    required double distToNextMeters,
+    required int etaToNextMins,
+    required String Function(double) formatDistance,
+    required double Function(int) getDistanceToStop,
+    required int Function(int) getEtaMinutesToStop,
+  }) {
+    final List<Widget> items = [];
 
-          BusETA? stopEta;
-          if (liveBus != null && liveBus.etas.isNotEmpty) {
-            for (final eta in liveBus.etas) {
-              if (eta.stopName.toLowerCase().trim() == stopName.toLowerCase().trim() ||
-                  stopName.toLowerCase().contains(eta.stopName.toLowerCase().trim()) ||
-                  eta.stopName.toLowerCase().contains(stopName.toLowerCase().trim())) {
-                stopEta = eta;
-                break;
-              }
+    for (int index = 0; index < totalStops; index++) {
+      // If the bus is live and approaching this stop, insert the Live Bus Node on the track
+      if (isBusLive && activeBus != null && index == nextStopIndex) {
+        final nextStopName = displayedStops[index]['name']?.toString() ?? 'Next Stop';
+        items.add(
+          _buildLiveBusTrackItem(
+            bus: activeBus,
+            nextStopName: nextStopName,
+            distMeters: distToNextMeters,
+            etaMinutes: etaToNextMins,
+            formatDistance: formatDistance,
+          ),
+        );
+      }
+
+      final stop = displayedStops[index];
+      final stopName = stop['name']?.toString() ?? 'Stop ${index + 1}';
+      final isFirst = index == 0;
+      final isLast = index == totalStops - 1;
+      final isUserStop = userPickup.isNotEmpty &&
+          (stopName.toLowerCase().trim() == userPickup ||
+           stopName.toLowerCase().contains(userPickup) ||
+           userPickup.contains(stopName.toLowerCase().trim()));
+
+      final bool hasPassed = isBusLive 
+          ? (index < nextStopIndex || (activeBus != null && activeBus.reachedStops.any((s) => s.toLowerCase().trim() == stopName.toLowerCase().trim())))
+          : false;
+
+      final bool isNextStop = isBusLive && (index == nextStopIndex);
+
+      final double distMeters = getDistanceToStop(index);
+      final int stopEtaMins = getEtaMinutesToStop(index);
+
+      Color nodeColor;
+      String subtitle;
+      IconData? nodeIcon;
+
+      if (isUserStop) {
+        nodeColor = isDropoff ? AppColors.accent : AppColors.primary;
+        subtitle = hasPassed
+            ? 'Your Assigned Stop • Passed'
+            : (isNextStop
+                ? 'Your Assigned Stop • Arriving Next (~$stopEtaMins min)'
+                : 'Your Assigned Stop • ~${formatDistance(distMeters)} away');
+        nodeIcon = isDropoff ? Icons.location_on_rounded : Icons.my_location_rounded;
+      } else if (hasPassed) {
+        nodeColor = const Color(0xFF64748B);
+        subtitle = 'Departed / Passed';
+        nodeIcon = Icons.check_rounded;
+      } else if (isNextStop) {
+        nodeColor = AppColors.accentGreen;
+        subtitle = stopEtaMins <= 1
+            ? 'Approaching Now • Next Stop' 
+            : 'Next Stop • ${formatDistance(distMeters)} away';
+        nodeIcon = Icons.navigation_rounded;
+      } else if (isFirst) {
+        nodeColor = isDropoff ? AppColors.accentGreen : AppColors.primaryLight;
+        subtitle = isDropoff ? 'Campus Terminal • Departure Origin' : 'Origin • Stop 1';
+        nodeIcon = isDropoff ? Icons.school_rounded : Icons.play_arrow_rounded;
+      } else if (isLast) {
+        nodeColor = isDropoff ? AppColors.accent : AppColors.accentGreen;
+        subtitle = isDropoff ? 'Final Terminal Drop-off' : 'Destination • SISTec Campus';
+        nodeIcon = isDropoff ? Icons.flag_rounded : Icons.school_rounded;
+      } else {
+        nodeColor = const Color(0xFF475569);
+        subtitle = isBusLive 
+            ? 'Transit Stop ${index + 1} • ${formatDistance(distMeters)} away'
+            : 'Transit Stop ${index + 1}';
+        nodeIcon = null;
+      }
+
+      items.add(
+        GestureDetector(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            if (isBusLive && !hasPassed) {
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '$stopName: ${formatDistance(distMeters)} away • ETA ~$stopEtaMins min',
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600),
+                  ),
+                  duration: const Duration(seconds: 2),
+                  behavior: SnackBarBehavior.floating,
+                  backgroundColor: AppColors.bgSecondary,
+                ),
+              );
             }
-          }
-
-          final isNextStop = liveBus != null && !hasReached && (
-            (liveBus.nextStop != null && (
-              liveBus.nextStop!.toLowerCase().trim() == stopName.toLowerCase().trim() ||
-              stopName.toLowerCase().contains(liveBus.nextStop!.toLowerCase().trim())
-            )) ||
-            (liveBus.etas.isNotEmpty && (
-              liveBus.etas.first.stopName.toLowerCase().trim() == stopName.toLowerCase().trim() ||
-              stopName.toLowerCase().contains(liveBus.etas.first.stopName.toLowerCase().trim())
-            ))
-          );
-
-          Color nodeColor;
-          String subtitle;
-          IconData? nodeIcon;
-
-          if (isUserStop) {
-            nodeColor = isDropoff ? AppColors.accent : AppColors.primary;
-            subtitle = isDropoff ? 'Your Assigned Drop-off Stop' : 'Your Assigned Pickup Stop';
-            nodeIcon = isDropoff ? Icons.location_on_rounded : Icons.my_location_rounded;
-          } else if (hasReached) {
-            nodeColor = const Color(0xFF64748B);
-            subtitle = 'Departed / Passed';
-            nodeIcon = Icons.check_rounded;
-          } else if (isNextStop) {
-            nodeColor = AppColors.accentGreen;
-            subtitle = (stopEta != null && stopEta.minutes <= 1)
-                ? 'Approaching Now • Next Stop' 
-                : 'Next Stop on Route';
-            nodeIcon = Icons.navigation_rounded;
-          } else if (isFirst) {
-            nodeColor = isDropoff ? AppColors.accentGreen : AppColors.primaryLight;
-            subtitle = isDropoff ? 'Campus Departure • SISTec Ratibad' : 'Departure Origin • Stop 1';
-            nodeIcon = isDropoff ? Icons.school_rounded : Icons.play_arrow_rounded;
-          } else if (isLast) {
-            nodeColor = isDropoff ? AppColors.accent : AppColors.accentGreen;
-            subtitle = isDropoff ? 'Final Terminal Drop-off' : 'Destination • SISTec Campus';
-            nodeIcon = isDropoff ? Icons.flag_rounded : Icons.school_rounded;
-          } else {
-            nodeColor = const Color(0xFF475569);
-            subtitle = isDropoff ? 'Transit Drop-off Stop ${index + 1}' : 'Transit Stop ${index + 1}';
-            nodeIcon = null;
-          }
-
-          return IntrinsicHeight(
+          },
+          child: IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                // Vertical Rail Node Column
                 SizedBox(
                   width: 24,
                   child: Column(
@@ -3768,13 +3956,13 @@ class _UserDashboardState extends State<UserDashboard> {
                         width: (isUserStop || isFirst || isLast || isNextStop) ? 18 : 12,
                         height: (isUserStop || isFirst || isLast || isNextStop) ? 18 : 12,
                         decoration: BoxDecoration(
-                          color: (isFirst || isLast || isUserStop || isNextStop || hasReached) ? nodeColor : AppColors.surface,
-                          border: Border.all(color: nodeColor, width: isUserStop ? 3 : 2),
+                          color: (isFirst || isLast || isUserStop || isNextStop || hasPassed) ? nodeColor : AppColors.surface,
+                          border: Border.all(color: nodeColor, width: isUserStop ? 2.5 : 2),
                           shape: BoxShape.circle,
-                          boxShadow: (isUserStop || isFirst || isLast || isNextStop) ? [
+                          boxShadow: (isUserStop || isNextStop) ? [
                             BoxShadow(
-                              color: nodeColor.withValues(alpha: 0.35),
-                              blurRadius: 6,
+                              color: nodeColor.withValues(alpha: 0.4),
+                              blurRadius: 7,
                               spreadRadius: 1,
                             ),
                           ] : null,
@@ -3793,7 +3981,7 @@ class _UserDashboardState extends State<UserDashboard> {
                         Expanded(
                           child: Container(
                             width: 2,
-                            color: hasReached 
+                            color: hasPassed 
                                 ? const Color(0xFF334155) 
                                 : const Color(0xFF1E293B),
                           ),
@@ -3802,51 +3990,57 @@ class _UserDashboardState extends State<UserDashboard> {
                   ),
                 ),
                 const SizedBox(width: 14),
+                // Stop Info Card
                 Expanded(
                   child: Container(
                     margin: const EdgeInsets.only(bottom: 16),
-                    padding: isUserStop
+                    padding: (isUserStop || isNextStop)
                         ? const EdgeInsets.symmetric(horizontal: 12, vertical: 10)
-                        : (isNextStop
-                            ? const EdgeInsets.symmetric(horizontal: 10, vertical: 8)
-                            : EdgeInsets.zero),
+                        : const EdgeInsets.symmetric(vertical: 2),
                     decoration: isUserStop
                         ? BoxDecoration(
-                            color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.08),
+                            color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.10),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.35),
+                              color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.4),
                               width: 1.2,
                             ),
                           )
                         : (isNextStop
                             ? BoxDecoration(
-                                color: AppColors.accentGreen.withValues(alpha: 0.08),
-                                borderRadius: BorderRadius.circular(12),
+                                color: AppColors.accentGreen.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
-                                  color: AppColors.accentGreen.withValues(alpha: 0.3),
-                                  width: 1.0,
+                                  color: AppColors.accentGreen.withValues(alpha: 0.45),
+                                  width: 1.2,
                                 ),
                               )
                             : null),
                     child: Row(
                       children: [
+                        // Stop Name & Subtitle
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                stopName,
-                                style: GoogleFonts.plusJakartaSans(
-                                  color: isUserStop 
-                                      ? Colors.white 
-                                      : (hasReached 
-                                          ? const Color(0xFF94A3B8) 
-                                          : (isNextStop ? AppColors.accentGreen : AppColors.text)),
-                                  fontSize: 13.5,
-                                  fontWeight: (isUserStop || isNextStop) ? FontWeight.w800 : FontWeight.w600,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      stopName,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: isUserStop 
+                                            ? Colors.white 
+                                            : (hasPassed 
+                                                ? const Color(0xFF94A3B8) 
+                                                : (isNextStop ? AppColors.accentGreen : AppColors.text)),
+                                        fontSize: 13.5,
+                                        fontWeight: (isUserStop || isNextStop) ? FontWeight.w800 : FontWeight.w600,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
                               ),
                               const SizedBox(height: 2),
                               Text(
@@ -3855,15 +4049,17 @@ class _UserDashboardState extends State<UserDashboard> {
                                   color: isUserStop 
                                       ? (isDropoff ? AppColors.accent : AppColors.primaryLight) 
                                       : (isNextStop 
-                                          ? AppColors.accentGreen.withValues(alpha: 0.8) 
+                                          ? AppColors.accentGreen.withValues(alpha: 0.9) 
                                           : AppColors.textMuted),
                                   fontSize: 10,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: (isUserStop || isNextStop) ? FontWeight.w700 : FontWeight.w600,
                                 ),
                               ),
                             ],
                           ),
                         ),
+
+                        // Badges on Right
                         if (isUserStop) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -3871,7 +4067,7 @@ class _UserDashboardState extends State<UserDashboard> {
                               color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.3),
+                                color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.35),
                               ),
                             ),
                             child: Text(
@@ -3886,8 +4082,9 @@ class _UserDashboardState extends State<UserDashboard> {
                           ),
                           const SizedBox(width: 6),
                         ],
+
                         if (isBusLive) ...[
-                          if (hasReached)
+                          if (hasPassed)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                               decoration: BoxDecoration(
@@ -3911,9 +4108,9 @@ class _UserDashboardState extends State<UserDashboard> {
                                 ],
                               ),
                             )
-                          else if (isNextStop || (stopEta != null && stopEta.minutes <= 1))
+                          else if (isNextStop || stopEtaMins <= 1)
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
                                 color: AppColors.accentGreen.withValues(alpha: 0.18),
                                 borderRadius: BorderRadius.circular(8),
@@ -3932,7 +4129,7 @@ class _UserDashboardState extends State<UserDashboard> {
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
-                                    stopEta != null ? '${stopEta.minutes} MIN' : 'APPROACHING',
+                                    stopEtaMins <= 1 ? 'ARRIVING' : '$stopEtaMins MIN',
                                     style: GoogleFonts.plusJakartaSans(
                                       color: AppColors.accentGreen,
                                       fontSize: 9,
@@ -3942,16 +4139,16 @@ class _UserDashboardState extends State<UserDashboard> {
                                 ],
                               ),
                             )
-                          else if (stopEta != null)
+                          else
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
                               decoration: BoxDecoration(
-                                color: AppColors.primary.withValues(alpha: 0.15),
+                                color: AppColors.primary.withValues(alpha: 0.12),
                                 borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.3)),
+                                border: Border.all(color: AppColors.primaryLight.withValues(alpha: 0.25)),
                               ),
                               child: Text(
-                                '${stopEta.minutes} MIN',
+                                '~$stopEtaMins MIN',
                                 style: GoogleFonts.plusJakartaSans(
                                   color: AppColors.primaryLight,
                                   fontSize: 9,
@@ -3966,9 +4163,204 @@ class _UserDashboardState extends State<UserDashboard> {
                 ),
               ],
             ),
-          );
-        }),
-      ],
+          ),
+        ),
+      );
+    }
+
+    // If bus completed all stops, render arrival card at the bottom
+    if (isBusLive && activeBus != null && nextStopIndex >= totalStops) {
+      items.add(
+        _buildLiveBusTrackItem(
+          bus: activeBus,
+          nextStopName: displayedStops.last['name']?.toString() ?? 'Campus Terminal',
+          distMeters: 0,
+          etaMinutes: 0,
+          formatDistance: formatDistance,
+          isCompleted: true,
+        ),
+      );
+    }
+
+    return items;
+  }
+
+  Widget _buildLiveBusTrackItem({
+    required Bus bus,
+    required String nextStopName,
+    required double distMeters,
+    required int etaMinutes,
+    required String Function(double) formatDistance,
+    bool isCompleted = false,
+  }) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            // Left Rail vehicle marker
+            SizedBox(
+              width: 24,
+              child: Column(
+                children: [
+                  Container(
+                    width: 2.5,
+                    height: 10,
+                    color: const Color(0xFF00E5FF),
+                  ),
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFF2563EB), Color(0xFF00E5FF)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: const Color(0xFF00E5FF).withValues(alpha: 0.5),
+                          blurRadius: 10,
+                          spreadRadius: 1.5,
+                        ),
+                      ],
+                    ),
+                    child: const Center(
+                      child: Icon(Icons.directions_bus_rounded, size: 13, color: Colors.white),
+                    ),
+                  ),
+                  Expanded(
+                    child: Container(
+                      width: 2.5,
+                      color: const Color(0xFF00E5FF),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+
+            // Live In-Transit Vehicle Card
+            Expanded(
+              child: Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.4),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                      blurRadius: 14,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: const BoxDecoration(
+                                color: Color(0xFF10B981),
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Text(
+                              isCompleted 
+                                  ? 'BUS ${bus.displayBusNumber} • TRIP COMPLETED'
+                                  : 'BUS ${bus.displayBusNumber} • LIVE EN ROUTE',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF38BDF8),
+                                fontSize: 10,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.6,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00E5FF).withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.speed_rounded, size: 10, color: Color(0xFF38BDF8)),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${bus.speed > 1 ? bus.speed.toStringAsFixed(0) : '0'} km/h',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF38BDF8),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          isCompleted ? Icons.check_circle_outline_rounded : Icons.near_me_rounded, 
+                          size: 13, 
+                          color: isCompleted ? AppColors.accentGreen : const Color(0xFF38BDF8),
+                        ),
+                        const SizedBox(width: 5),
+                        Expanded(
+                          child: Text(
+                            isCompleted ? 'Arrived at $nextStopName' : 'En route to $nextStopName',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (!isCompleted) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                        '${formatDistance(distMeters)} away • ETA ~$etaMinutes min',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: const Color(0xFF94A3B8),
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
