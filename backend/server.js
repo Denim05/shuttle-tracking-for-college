@@ -52,7 +52,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
     }
 }
 
-const { sendCredentialsEmail, buildCredentialsEmailHtml } = require('./services/email_service');
+const { sendCredentialsEmail, buildCredentialsEmailHtml, sendPasswordResetEmail } = require('./services/email_service');
 
 // ── HELPER FUNCTIONS FOR STABILITY & SANITIZATION ────────────────────────────
 const safeTrim = (val) => (val !== null && val !== undefined) ? val.toString().trim() : '';
@@ -889,6 +889,121 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 /**
+ * @api {post} /api/auth/forgot-password Send Temporary Password to Registered Email
+ */
+app.post('/api/auth/forgot-password', async (req, res) => {
+    const rawIdentifier = (req.body.identifier || req.body.email || req.body.username || '').toString().trim();
+    const providedEmail = (req.body.email || '').toString().trim();
+
+    if (!rawIdentifier && !providedEmail) {
+        return res.status(400).json({ error: 'Please provide your registered Email or Enrollment Number.' });
+    }
+
+    console.log(`🔑 [Auth] Forgot password requested for: "${rawIdentifier || providedEmail}"`);
+
+    try {
+        const query = rawIdentifier.includes('@') 
+            ? { email: { $regex: new RegExp(`^${rawIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
+            : { username: { $regex: new RegExp(`^${rawIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } };
+
+        // Search collections in priority order: Student, User, Driver, Manager, Admin
+        let user = await Student.findOne(query);
+        let role = 'user';
+
+        if (!user) {
+            user = await User.findOne(query);
+            if (user) role = 'user';
+        }
+        if (!user) {
+            user = await Driver.findOne(query);
+            if (user) role = 'driver';
+        }
+        if (!user) {
+            user = await Manager.findOne(query);
+            if (user) role = 'manager';
+        }
+        if (!user) {
+            user = await Admin.findOne(query);
+            if (user) role = 'admin';
+        }
+
+        // Fallback: If queried by username but user provided email in separate field
+        if (!user && providedEmail && providedEmail.includes('@')) {
+            const emailQuery = { email: { $regex: new RegExp(`^${providedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } };
+            user = await Student.findOne(emailQuery) || await User.findOne(emailQuery) || await Driver.findOne(emailQuery) || await Manager.findOne(emailQuery) || await Admin.findOne(emailQuery);
+            if (user) {
+                if (user.constructor.modelName === 'Driver') role = 'driver';
+                else if (user.constructor.modelName === 'Manager') role = 'manager';
+                else if (user.constructor.modelName === 'Admin') role = 'admin';
+                else role = 'user';
+            }
+        }
+
+        if (!user) {
+            return res.status(404).json({ error: 'No account found matching the provided details.' });
+        }
+
+        // Determine destination email
+        let destinationEmail = (user.email && user.email.includes('@')) ? user.email.trim() : null;
+        if (!destinationEmail && providedEmail && providedEmail.includes('@')) {
+            destinationEmail = providedEmail.trim();
+            user.email = destinationEmail;
+        }
+
+        if (!destinationEmail) {
+            return res.status(400).json({ 
+                error: 'No email address registered for this account. Please contact the SISTec Transport Desk.',
+                needsEmailSetup: true,
+                username: user.username
+            });
+        }
+
+        // Generate clean, secure temporary password (e.g. SGI#8429)
+        const randNum = Math.floor(1000 + Math.random() * 9000);
+        const tempPassword = `SGI#${randNum}`;
+
+        // Hash temporary password with Argon2id and set mustChangePassword = true
+        user.password = await secureHashPassword(tempPassword);
+        user.mustChangePassword = true;
+        await user.save();
+
+        console.log(`✅ [Auth] Temporary password generated for ${user.username} (${role}): ${tempPassword}`);
+
+        // Dispatch Email
+        const emailResult = await sendPasswordResetEmail(
+            destinationEmail,
+            user.name || user.username,
+            user.username,
+            tempPassword,
+            role
+        );
+
+        // Mask email for user privacy (e.g., d***e@gmail.com)
+        const parts = destinationEmail.split('@');
+        const namePart = parts[0];
+        const maskedName = namePart.length > 2 
+            ? `${namePart[0]}***${namePart[namePart.length - 1]}`
+            : `${namePart[0]}***`;
+        const maskedEmail = `${maskedName}@${parts[1]}`;
+
+        return res.json({
+            success: true,
+            message: `A temporary password has been sent to ${maskedEmail}.`,
+            username: user.username,
+            email: maskedEmail,
+            role: role,
+            // Include tempPassword in debug fallback if real email delivery failed or preview exists
+            tempPassword: emailResult.previewUrl ? tempPassword : (process.env.NODE_ENV !== 'production' ? tempPassword : undefined),
+            previewUrl: emailResult.previewUrl
+        });
+
+    } catch (err) {
+        console.error('❌ Forgot password error:', err);
+        return res.status(500).json({ error: 'Failed to process password recovery. Please try again.' });
+    }
+});
+
+/**
  * @api {post} /api/auth/force-change-password Mandatory First-Time Password Reset
  */
 app.post('/api/auth/force-change-password', async (req, res) => {
@@ -1021,6 +1136,7 @@ const sanitizeRouteForWire = (r) => {
         stops: r.stops,
         // Strip redundant MongoDB _ids and ensure coordinates format is clean
         coordinates: (r.coordinates || [])
+            .filter(c => c != null && typeof c === 'object')
             .map(c => ({
                 latitude: c.latitude != null ? c.latitude : c.lat,
                 longitude: c.longitude != null ? c.longitude : c.lng
@@ -3104,7 +3220,9 @@ io.on('connection', (socket) => {
             const speed = data.speed !== undefined ? Number(data.speed) : (bus.speed || 0);
             const heading = data.heading !== undefined ? Number(data.heading) : (bus.heading || 0);
 
-            process.stdout.write(`📍 [LIVE] Bus: ${bus.busNumber} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Speed: ${speed.toFixed(1)} KM/H\r`);
+            const gpsAccuracy = data.gpsAccuracy !== undefined ? Number(data.gpsAccuracy) : null;
+
+            process.stdout.write(`📍 [LIVE] Bus: ${bus.busNumber} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Speed: ${speed.toFixed(1)} KM/H${gpsAccuracy != null ? ` | GPS: ±${gpsAccuracy.toFixed(0)}m` : ''}\r`);
 
             // ── DUAL TRIP DIRECTION: 'pickup' (Stop -> College) vs 'dropoff' (College -> Stop) ──
             const tripType = (data.tripType === 'dropoff' || data.tripType === 'evening') ? 'dropoff' : 'pickup';
@@ -3279,9 +3397,14 @@ io.on('connection', (socket) => {
             }
 
             const resolvedNextStop = nextStopName || data.nextStop || (etas[0] ? etas[0].stopName : '');
-            const resolvedDistMeters = data.distanceToNextStopMeters !== undefined 
-                ? Number(data.distanceToNextStopMeters) 
-                : (etas[0] && etas[0].distanceKm ? Math.round(parseFloat(etas[0].distanceKm) * 1000) : null);
+            // Prefer server-computed road distance from polyline engine over client straight-line
+            const resolvedDistMeters = (etas[0] && etas[0].distanceKm)
+                ? Math.round(parseFloat(etas[0].distanceKm) * 1000)
+                : (data.distanceToNextStopMeters !== undefined ? Number(data.distanceToNextStopMeters) : null);
+            // Final destination distance from driver broadcast
+            const finalDistMeters = data.distanceToFinalStopMeters !== undefined
+                ? Number(data.distanceToFinalStopMeters)
+                : null;
 
             bus.nextStop = resolvedNextStop;
             bus.distanceToNextStopMeters = resolvedDistMeters;
@@ -3305,9 +3428,11 @@ io.on('connection', (socket) => {
             if (bus.driverId) busPayload.driverId = bus.driverId.toString();
             busPayload.nextStop = resolvedNextStop;
             busPayload.distanceToNextStopMeters = resolvedDistMeters;
+            busPayload.distanceToFinalStopMeters = finalDistMeters;
             busPayload.reachedStops = bus.reachedStops || [];
             busPayload.completedStops = bus.completedStops || (bus.reachedStops ? bus.reachedStops.length : 0);
             busPayload.etas = etas;
+            busPayload.gpsAccuracy = gpsAccuracy;
             busPayload.lastUpdated = bus.lastUpdated;
 
             io.emit('busLocationUpdate', busPayload);
@@ -3401,6 +3526,168 @@ app.post('/api/manager/geocode-stops', async (req, res) => {
     }
 });
 
+// ─── MANAGER TIMETABLE UPLOAD & AUTO-INGESTION ENGINE ─────────────────────────
+const multer = require('multer');
+const uploadTimetable = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 25 * 1024 * 1024 }
+});
+
+const {
+    syncOfficialRatibadRoster,
+    syncRosterToDatabase,
+    parseExcelToRoster,
+    previewTimetable
+} = require('./timetable_importer');
+
+/**
+ * POST /api/manager/preview-timetable
+ * Pre-flight preview of uploaded timetable (.pdf, .xlsx, .xls, .csv, .json).
+ * Extracts routes, bus numbers, timings, drivers, and stops with coordinates WITHOUT saving to DB.
+ * Allows the manager to review and make edits in the UI before deployment.
+ */
+app.post('/api/manager/preview-timetable', optionalAuth, uploadTimetable.single('file'), async (req, res) => {
+    try {
+        console.log('🔍 [Timetable Engine] Generating pre-flight timetable preview...');
+        const buffer = req.file ? req.file.buffer : null;
+        const filename = req.file ? req.file.originalname : 'Institutional Master Timetable';
+
+        const previewData = await previewTimetable(buffer, filename);
+        res.json(previewData);
+    } catch (err) {
+        console.error('❌ Timetable preview generation failed:', err);
+        res.status(500).json({ error: err.message || 'Failed to generate timetable preview.' });
+    }
+});
+
+/**
+ * POST /api/manager/apply-timetable
+ * Commits the finalized (and optionally edited) roster directly into MongoDB.
+ * Updates Routes, Buses, Driver assignments, and broadcasts live WebSocket events to all apps.
+ */
+app.post('/api/manager/apply-timetable', optionalAuth, async (req, res) => {
+    try {
+        const routesToApply = req.body && Array.isArray(req.body.routes) ? req.body.routes : [];
+        if (routesToApply.length === 0) {
+            return res.status(400).json({ error: 'No routes provided in apply request.' });
+        }
+
+        console.log(`🚀 [Timetable Engine] Deploying ${routesToApply.length} routes live to the entire fleet...`);
+        const synced = await syncRosterToDatabase(routesToApply, io);
+        invalidateRoutesCache();
+
+        // Broadcast to all connected clients across the entire college
+        io.emit('routesUpdated', synced);
+        io.emit('busesUpdated');
+        io.emit('timetableUpdated', { count: synced.length, timestamp: new Date() });
+
+        res.json({
+            success: true,
+            count: synced.length,
+            routes: synced,
+            message: `Successfully published all ${synced.length} routes & buses to the entire app network!`
+        });
+    } catch (err) {
+        console.error('❌ Apply timetable failed:', err);
+        res.status(500).json({ error: err.message || 'Failed to deploy timetable changes.' });
+    }
+});
+
+/**
+ * POST /api/manager/upload-timetable
+ * Direct upload & sync fallback.
+ */
+app.post('/api/manager/upload-timetable', optionalAuth, uploadTimetable.single('file'), async (req, res) => {
+    try {
+        console.log('📥 [Timetable Engine] Received timetable sync request...');
+        let rosterEntries = [];
+
+        if (req.file) {
+            const originalName = req.file.originalname.toLowerCase();
+            console.log(`📄 Processing uploaded timetable file: ${req.file.originalname} (${req.file.size} bytes)`);
+
+            if (originalName.endsWith('.pdf')) {
+                const { parsePdfToRoster } = require('./timetable_importer');
+                rosterEntries = await parsePdfToRoster(req.file.buffer);
+            } else if (originalName.endsWith('.xlsx') || originalName.endsWith('.xls')) {
+                rosterEntries = parseExcelToRoster(req.file.buffer);
+            } else if (originalName.endsWith('.json')) {
+                rosterEntries = JSON.parse(req.file.buffer.toString('utf8'));
+            } else if (originalName.endsWith('.csv')) {
+                const csvStr = req.file.buffer.toString('utf8');
+                const rows = csvStr.split('\n').map(r => r.split(','));
+                rosterEntries = rows.filter(r => r.length > 1).map((r, i) => ({
+                    busNo: String(r[0] || i + 1).trim(),
+                    routeName: String(r[1] || `Route ${i + 1}`).trim(),
+                    stops: (r[2] || '').split(';').map(s => ({ name: s.trim(), time: '08:00 AM' }))
+                }));
+            } else {
+                return res.status(400).json({ error: 'Unsupported file format. Please upload a PDF, Excel (.xlsx, .xls), CSV, or JSON file.' });
+            }
+        } else if (req.body && req.body.routes && Array.isArray(req.body.routes)) {
+            rosterEntries = req.body.routes;
+        } else {
+            console.log('ℹ️ No file uploaded; falling back to official institutional Ratibad 9:00 AM roster.');
+            const synced = await syncOfficialRatibadRoster(io);
+            invalidateRoutesCache();
+            return res.json({
+                success: true,
+                count: synced.length,
+                routes: synced,
+                message: `Successfully synchronized ${synced.length} official routes and buses from institutional timetable!`
+            });
+        }
+
+        if (!rosterEntries || rosterEntries.length === 0) {
+            return res.status(400).json({ error: 'No valid routes or buses detected in the uploaded file.' });
+        }
+
+        console.log(`🚌 Parsed ${rosterEntries.length} routes from file. Syncing database with strict coordinate preservation...`);
+        const synced = await syncRosterToDatabase(rosterEntries, io);
+        invalidateRoutesCache();
+
+        io.emit('routesUpdated', synced);
+        io.emit('busesUpdated');
+        io.emit('timetableUpdated', { count: synced.length, timestamp: new Date() });
+
+        res.json({
+            success: true,
+            count: synced.length,
+            routes: synced,
+            message: `Successfully synchronized ${synced.length} bus routes from timetable!`
+        });
+    } catch (err) {
+        console.error('❌ Timetable upload failed:', err);
+        res.status(500).json({ error: err.message || 'Failed to process and synchronize timetable.' });
+    }
+});
+
+/**
+ * POST /api/manager/sync-official-timetable
+ * Instant 1-tap synchronization of the official institutional Ratibad 9:00 AM timetable (37 Buses).
+ */
+app.post('/api/manager/sync-official-timetable', optionalAuth, async (req, res) => {
+    try {
+        console.log('🔄 [Manager API] 1-Tap Official Ratibad Roster Sync initiated...');
+        const synced = await syncOfficialRatibadRoster(io);
+        invalidateRoutesCache();
+
+        io.emit('routesUpdated', synced);
+        io.emit('busesUpdated');
+        io.emit('timetableUpdated', { count: synced.length, timestamp: new Date() });
+
+        res.json({
+            success: true,
+            count: synced.length,
+            routes: synced,
+            message: `Successfully synchronized all ${synced.length} official SISTec buses and routes!`
+        });
+    } catch (err) {
+        console.error('❌ Official timetable sync failed:', err);
+        res.status(500).json({ error: err.message || 'Failed to sync official timetable.' });
+    }
+});
+
 // --- UPDATE ROUTE STOPS & AUTOMATIC GEOCODING ---
 app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
     try {
@@ -3477,7 +3764,8 @@ app.get('/api/eta', async (req, res) => {
             return res.json({ eta: null, message: 'Stop coordinates not yet configured', stopName: stop.name });
         }
 
-        const speed = bus.speed > 5 ? bus.speed : 30; // default 30 km/h
+        // Use actual broadcast speed with production floor (matches road_routing_service)
+        const speed = bus.speed >= 8 ? Math.min(bus.speed, 60) : 25;
         const minutes = await calculateETA(bus.currentLat, bus.currentLng, stop.lat, stop.lng, speed, route);
 
         res.json({

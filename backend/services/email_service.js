@@ -325,14 +325,185 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
             sandboxProvider: 'Ethereal Sandbox (Real inbox delivery failed)'
         };
     } catch (_fallbackErr) {
-        return { 
-            success: false, 
-            error: deliveryErrors.join(' | ') 
-        };
+        console.error('Failed to create Ethereal fallback account:', _fallbackErr.message);
     }
+
+    return { success: false, error: deliveryErrors.join(' | ') };
+}
+
+/**
+ * Builds the HTML template for Password Reset with Temporary Password
+ */
+function buildPasswordResetEmailHtml({ name, username, temporaryPassword, role = 'user' }) {
+    const isStudent = role === 'student' || role === 'user';
+    const roleBadge = isStudent ? 'STUDENT / USER' : `${role.toUpperCase()}`;
+    const year = new Date().getFullYear();
+
+    return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SISTec Chalo - Password Reset</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #EDF2F7; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; color: #1E293B; line-height: 1.6;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background-color: #EDF2F7; padding: 36px 12px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width: 580px; width: 100%; background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 14px; overflow: hidden; box-shadow: 0 4px 18px rgba(15, 23, 42, 0.06);">
+                    <tr>
+                        <td style="background-color: #0C2340; padding: 32px 30px 26px 30px; text-align: left; border-bottom: 4px solid #2563EB;">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                <tr>
+                                    <td>
+                                        <div style="font-size: 10px; font-weight: 800; letter-spacing: 1.5px; text-transform: uppercase; color: #93C5FD; margin-bottom: 4px;">
+                                            Sagar Group of Institutions • Bhopal
+                                        </div>
+                                        <div style="font-size: 24px; font-weight: 900; color: #FFFFFF; letter-spacing: -0.5px;">
+                                            SISTec<span style="color: #38BDF8;"> Chalo</span>
+                                        </div>
+                                    </td>
+                                    <td align="right" valign="middle">
+                                        <div style="display: inline-block; background-color: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 9999px; padding: 5px 14px; font-size: 10px; font-weight: 800; color: #38BDF8; letter-spacing: 1px;">
+                                            ${roleBadge}
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding: 32px 32px 28px 32px;">
+                            <div style="font-size: 19px; font-weight: 800; color: #0F172A; margin-bottom: 12px;">
+                                Hello, ${name || username}
+                            </div>
+                            <p style="margin: 0 0 20px 0; font-size: 14px; color: #475569; line-height: 1.65;">
+                                A password reset request was initiated for your <strong>SISTec Chalo</strong> account. You have been issued a temporary password to regain access.
+                            </p>
+                            <div style="background-color: #F8FAFC; border: 1.5px solid #CBD5E1; border-radius: 12px; padding: 22px; margin-bottom: 24px;">
+                                <div style="font-size: 11px; font-weight: 800; color: #1E40AF; text-transform: uppercase; letter-spacing: 1.2px; margin-bottom: 14px;">
+                                    Temporary Credentials
+                                </div>
+                                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0">
+                                    <tr>
+                                        <td style="padding: 6px 0; font-size: 13px; color: #64748B; width: 140px;">Account ID:</td>
+                                        <td style="padding: 6px 0; font-size: 14px; font-weight: 700; color: #0F172A; font-family: monospace;">${username}</td>
+                                    </tr>
+                                    <tr>
+                                        <td style="padding: 6px 0; font-size: 13px; color: #64748B;">Temporary Password:</td>
+                                        <td style="padding: 6px 0; font-size: 16px; font-weight: 800; color: #2563EB; font-family: monospace; letter-spacing: 1.5px;">${temporaryPassword}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div style="background-color: #FEF3C7; border-left: 4px solid #F59E0B; padding: 12px 16px; border-radius: 6px; margin-bottom: 24px;">
+                                <div style="font-size: 12.5px; color: #92400E; font-weight: 600;">
+                                    Important: When prompted in the app, please set your new personal password immediately.
+                                </div>
+                            </div>
+                            <p style="font-size: 12px; color: #94A3B8; margin: 0;">
+                                If you did not request this password reset, please report it to the SISTec Transport Desk.
+                            </p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="background-color: #F1F5F9; padding: 18px 30px; text-align: center; border-top: 1px solid #E2E8F0; font-size: 11px; color: #64748B;">
+                            © ${year} Sagar Group of Institutions (SISTec), Bhopal • SISTec Chalo Smart Transit
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+    `;
+}
+
+/**
+ * Sends Password Reset Email with Temporary Password
+ */
+async function sendPasswordResetEmail(email, name, username, temporaryPassword, role = 'user') {
+    if (!email || !email.includes('@')) {
+        return { success: false, error: 'Invalid recipient email address' };
+    }
+
+    const htmlContent = buildPasswordResetEmailHtml({ name, username, temporaryPassword, role });
+    const subject = `SISTec Chalo: Temporary Password for Account Recovery (${username})`;
+    const deliveryErrors = [];
+
+    // 1. Try Brevo
+    const brevoApiKey = process.env.BREVO_API_KEY || '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';
+    if (brevoApiKey) {
+        try {
+            const response = await fetch('https://api.brevo.com/v3/smtp/email', {
+                method: 'POST',
+                headers: {
+                    'accept': 'application/json',
+                    'api-key': brevoApiKey.trim(),
+                    'content-type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sender: { name: 'SISTec Chalo Transport', email: 'denimhajare@gmail.com' },
+                    to: [{ email: email.trim(), name: name || username }],
+                    subject: subject,
+                    htmlContent: htmlContent,
+                    textContent: `Dear ${name || username},\n\nYour temporary password for SISTec Chalo is: ${temporaryPassword}\n\nPlease enter this temporary password in the app and set your new password.\n\nSISTec Chalo Team`
+                })
+            });
+
+            if (response.ok) {
+                const resData = await response.json();
+                console.log(`✅ [Brevo API Sent Reset] Email delivered to ${email}. MessageId: ${resData.messageId}`);
+                return { success: true, provider: 'Brevo API', messageId: resData.messageId };
+            } else {
+                const errJson = await response.json().catch(() => ({ message: response.statusText }));
+                deliveryErrors.push(`Brevo: ${errJson.message || response.statusText}`);
+            }
+        } catch (err) {
+            deliveryErrors.push(`Brevo: ${err.message}`);
+        }
+    }
+
+    // 2. Try SMTP
+    const user = (process.env.SMTP_USER && process.env.SMTP_USER.trim().length > 0) ? process.env.SMTP_USER.trim() : 'denimhajare@gmail.com';
+    const rawPass = (process.env.SMTP_PASS && process.env.SMTP_PASS.trim().length > 0) ? process.env.SMTP_PASS.trim() : 'ydxpebcwzefkalmy';
+    const cleanPass = rawPass.replace(/\s+/g, '');
+
+    if (user && cleanPass) {
+        try {
+            const host = process.env.SMTP_HOST || 'smtp.gmail.com';
+            const port = parseInt(process.env.SMTP_PORT) || 587;
+            const isGmail = host.includes('gmail.com') || user.includes('@gmail.com');
+
+            const transporter = nodemailer.createTransport(isGmail
+                ? { service: 'gmail', auth: { user: user.trim(), pass: cleanPass } }
+                : { host: host.trim(), port: port, secure: port === 465, auth: { user: user.trim(), pass: cleanPass }, tls: { rejectUnauthorized: false } }
+            );
+
+            const info = await transporter.sendMail({
+                from: `"SISTec Chalo" <${user.trim()}>`,
+                to: email.trim(),
+                subject: subject,
+                html: htmlContent,
+                text: `Dear ${name || username},\n\nYour temporary password for SISTec Chalo is: ${temporaryPassword}\n\nPlease enter this temporary password in the app and set your new password.\n\nSISTec Chalo Team`
+            });
+
+            console.log(`✅ [SMTP Sent Reset] Email delivered to ${email}. MessageId: ${info.messageId}`);
+            return { success: true, provider: isGmail ? 'Gmail SMTP' : 'Custom SMTP', messageId: info.messageId };
+        } catch (smtpErr) {
+            deliveryErrors.push(`SMTP: ${smtpErr.message}`);
+        }
+    }
+
+    console.warn(`⚠️ [Password Reset Email Fallback] Errors: ${deliveryErrors.join(' | ')}`);
+    return { success: false, error: deliveryErrors.join(' | ') };
 }
 
 module.exports = {
     sendCredentialsEmail,
-    buildCredentialsEmailHtml
+    buildCredentialsEmailHtml,
+    sendPasswordResetEmail,
+    buildPasswordResetEmailHtml
 };
+
