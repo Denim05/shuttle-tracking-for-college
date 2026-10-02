@@ -456,7 +456,8 @@ async function calculateAccurateETA(busLat, busLng, stopLat, stopLng, currentSpe
 
         if (stopNearest.index >= busNearest.index) {
             const roadDistMeters = measurePolylineDistanceMeters(route.coordinates, busNearest.index, stopNearest.index);
-            const speedKmh = (currentSpeed && currentSpeed >= 12) ? Math.min(currentSpeed, 50) : 28;
+            // Use actual broadcast speed with a floor of 8 km/h (crawling traffic)
+            const speedKmh = (currentSpeed && currentSpeed >= 8) ? Math.min(currentSpeed, 60) : 25;
             const speedMps = (speedKmh * 1000) / 3600;
             const travelSec = roadDistMeters / speedMps;
             return Math.max(1, Math.round(travelSec / 60));
@@ -467,14 +468,23 @@ async function calculateAccurateETA(busLat, busLng, stopLat, stopLng, currentSpe
     try {
         const osrmResult = await queryOSRMPointToPoint(busLat, busLng, stopLat, stopLng);
         if (osrmResult && osrmResult.minutes) {
+            // Blend OSRM free-flow duration with actual speed for traffic-aware ETA
+            if (currentSpeed && currentSpeed >= 8 && osrmResult.distanceMeters) {
+                const actualSpeedMps = (Math.min(currentSpeed, 60) * 1000) / 3600;
+                const actualSec = osrmResult.distanceMeters / actualSpeedMps;
+                // Weighted: 60% actual-speed-based, 40% OSRM free-flow
+                const blended = (actualSec * 0.6) + (osrmResult.durationSeconds * 0.4);
+                return Math.max(1, Math.round(blended / 60));
+            }
             return osrmResult.minutes;
         }
     } catch (_) {}
 
-    // 3. Fallback: Calibrated Bhopal urban road curvature model (1.35x Haversine)
+    // 3. Fallback: Calibrated Indian mixed road curvature model (1.5x Haversine)
+    //    Indian roads have winding/detour ratios of 1.4-1.6× straight-line distance
     const directDistM = haversineDistMeters(busLat, busLng, stopLat, stopLng);
-    const roadDistKm = (directDistM * 1.35) / 1000.0;
-    const speedKmh = (currentSpeed && currentSpeed >= 12) ? Math.min(currentSpeed, 50) : 28;
+    const roadDistKm = (directDistM * 1.5) / 1000.0;
+    const speedKmh = (currentSpeed && currentSpeed >= 8) ? Math.min(currentSpeed, 60) : 25;
     return Math.max(1, Math.round((roadDistKm / speedKmh) * 60));
 }
 
@@ -486,7 +496,8 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
     if (!stops || stops.length === 0) return { etas: [], currentStopIndex: 0, nextStopName: '' };
 
     const orderedStops = tripType === 'dropoff' ? [...stops].reverse() : [...stops];
-    const speedKmh = (currentSpeed && currentSpeed >= 12) ? Math.min(currentSpeed, 50) : 28;
+    // Use actual broadcast speed with 8 km/h floor (crawling traffic) and 60 km/h ceiling
+    const speedKmh = (currentSpeed && currentSpeed >= 8) ? Math.min(currentSpeed, 60) : 25;
     const speedMps = (speedKmh * 1000) / 3600;
 
     // If we have a high-resolution road polyline
@@ -511,7 +522,7 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
             // Stop is upcoming if it lies ahead of the bus (with 5-point grace threshold ~100m for current stop)
             if (item.index >= busIdx - 5) {
                 const distMeters = measurePolylineDistanceMeters(coordinates, busIdx, item.index);
-                const dwellTimeSec = intermediateStopCount * 45; // 45 seconds boarding dwell per intermediate stop
+                const dwellTimeSec = intermediateStopCount * 30; // 30 seconds boarding dwell per intermediate stop
                 const travelTimeSec = (distMeters / speedMps) + dwellTimeSec;
                 const minutes = Math.max(1, Math.round(travelTimeSec / 60));
 
@@ -561,10 +572,10 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
         const stop = orderedStops[i];
         if (!stop.lat || !stop.lng) continue;
         const dM = haversineDistMeters(prevLat, prevLng, stop.lat, stop.lng);
-        const roadDistKm = (dM * 1.35) / 1000.0;
+        const roadDistKm = (dM * 1.5) / 1000.0; // 1.5× for Indian road curvature
         const legMins = Math.max(1, Math.round((roadDistKm / speedKmh) * 60));
         cumulativeMins += legMins;
-        if (i > 0) cumulativeMins += 1; // 1 min dwell
+        if (i > 0) cumulativeMins += 0.5; // 30s dwell per stop
 
         fallbackETAs.push({
             stopName: stop.name,
