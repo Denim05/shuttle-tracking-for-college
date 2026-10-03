@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
 import '../constants/constants.dart';
 import '../utils/timetable_resolver.dart';
+import '../widgets/quick_bus_assignment_dialog.dart';
 
 class FleetMaintenanceScreen extends StatefulWidget {
   final bool nested;
@@ -264,7 +265,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
-                              value: ['On-time', 'Delayed', 'Offline', 'Maintenance'].contains(selectedStatus) ? selectedStatus : 'On-time',
+                              initialValue: ['On-time', 'Delayed', 'Offline', 'Maintenance'].contains(selectedStatus) ? selectedStatus : 'On-time',
                               dropdownColor: const Color(0xFF242424),
                               style: const TextStyle(color: Colors.white),
                               decoration: InputDecoration(
@@ -305,13 +306,34 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                                       );
                                     }
                                   } catch (e) {
-                                    ScaffoldMessenger.of(ctx).showSnackBar(
-                                      SnackBar(content: Text('Failed to update bus details', style: GoogleFonts.plusJakartaSans())),
-                                    );
+                                    if (context.mounted) {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        SnackBar(content: Text('Failed to update bus details', style: GoogleFonts.plusJakartaSans())),
+                                      );
+                                    }
                                   }
                                 },
                                 child: Text('Save Changes', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                               ),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: const Color(0xFFFBBF24),
+                                side: const BorderSide(color: Color(0xFFF59E0B)),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                minimumSize: const Size(double.infinity, 48),
+                              ),
+                              icon: const Icon(Icons.swap_horiz_rounded, size: 20),
+                              label: Text('⚡ Reassign to Different Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13.5)),
+                              onPressed: () {
+                                Navigator.pop(ctx);
+                                QuickBusAssignmentDialog.show(
+                                  context,
+                                  initialBusNumber: numController.text.trim().isNotEmpty ? numController.text.trim() : initialName,
+                                  onAssigned: _fetchFleetStatus,
+                                );
+                              },
                             ),
                           ],
                         ),
@@ -784,12 +806,28 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                               ],
                             ),
                           ),
-                          const SizedBox(height: 6),
-                          IconButton(
-                            constraints: const BoxConstraints(),
-                            padding: const EdgeInsets.all(4),
-                            icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 18),
-                            onPressed: () => _confirmDeleteBus(bus['_id'], assignedBusLabel),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(4),
+                                tooltip: 'Quick Reassign Route',
+                                icon: const Icon(Icons.swap_horiz_rounded, color: Color(0xFFFBBF24), size: 19),
+                                onPressed: () => QuickBusAssignmentDialog.show(
+                                  context,
+                                  initialBusNumber: assignedBusLabel,
+                                  onAssigned: _fetchFleetStatus,
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              IconButton(
+                                constraints: const BoxConstraints(),
+                                padding: const EdgeInsets.all(4),
+                                icon: const Icon(Icons.delete_outline_rounded, color: Colors.white24, size: 18),
+                                onPressed: () => _confirmDeleteBus(bus['_id'], assignedBusLabel),
+                              ),
+                            ],
                           ),
                         ],
                       ),
