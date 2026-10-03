@@ -102,8 +102,15 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
           // If initial route id was passed, ensure full object is selected
           if (_selectedRoute != null) {
             final targetId = _selectedRoute!['_id']?.toString();
+            final targetName = (_selectedRoute!['name'] ?? _selectedRoute!['routeName'] ?? '').toString().toLowerCase();
             final match = _routes.firstWhere(
-              (r) => r is Map && r['_id']?.toString() == targetId,
+              (r) {
+                if (r is! Map) return false;
+                if (targetId != null && targetId.isNotEmpty && r['_id']?.toString() == targetId) return true;
+                final rName = (r['name'] ?? r['routeName'] ?? '').toString().toLowerCase();
+                if (targetName.isNotEmpty && (rName.contains(targetName) || targetName.contains(rName))) return true;
+                return false;
+              },
               orElse: () => _selectedRoute!,
             );
             if (match is Map) _selectedRoute = Map<String, dynamic>.from(match);

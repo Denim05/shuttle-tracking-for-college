@@ -47,6 +47,7 @@ class _GuestDashboardState extends State<GuestDashboard>
   String? _pinnedStop;
   String _tripDirection = (DateTime.now().hour < 12) ? 'pickup' : 'dropoff';
   bool _isRefreshing = false;
+  bool _isSwapBannerDismissed = false;
 
   @override
   void initState() {
@@ -430,6 +431,7 @@ class _GuestDashboardState extends State<GuestDashboard>
                 children: [
                   _buildTopAppBar(busStore),
                   _buildGuestNoticeBanner(),
+                  _buildGuestSwapBanner(busStore, activeBus),
                   Expanded(
                     child: _isLoading
                         ? _buildShimmerLoading()
@@ -703,6 +705,193 @@ class _GuestDashboardState extends State<GuestDashboard>
               ),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Live Bus Swap Alert Banner ─────────────────────────────────────────────
+
+  Widget _buildGuestSwapBanner(BusStore busStore, Bus? activeBus) {
+    if (_selectedRoute == null || _isSwapBannerDismissed) {
+      return const SizedBox.shrink();
+    }
+
+    final routeName = _selectedRoute!.name;
+    String defaultBus = '';
+    final defaultEntry = TimetableResolver.lookupEntry(routeName: routeName);
+    if (defaultEntry != null) {
+      defaultBus = defaultEntry.displayBusLabel;
+    } else {
+      final match = RegExp(r'^(Bus\s*[^-\:]+)', caseSensitive: false).firstMatch(routeName);
+      if (match != null) defaultBus = match.group(1)!.trim();
+    }
+
+    bool isSwap = false;
+    String assignedBusNum = '';
+    String officialPlate = '';
+    String driverName = '';
+    String? driverPhone;
+    String situationReason = 'Emergency Substitution';
+
+    if (activeBus != null && activeBus.isBroadcastingLive) {
+      final activeBusNo = activeBus.displayBusNumber.toUpperCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final defaultClean = defaultBus.toUpperCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+      final defaultDigits = defaultClean.replaceAll(RegExp(r'\D'), '');
+      final activeDigits = activeBusNo.replaceAll(RegExp(r'\D'), '');
+
+      if (defaultDigits.isNotEmpty && activeDigits.isNotEmpty && defaultDigits != activeDigits) {
+        isSwap = true;
+        assignedBusNum = activeBus.displayBusNumber;
+        officialPlate = activeBus.officialVehicleNo;
+        driverName = activeBus.assignedDriverName;
+        driverPhone = activeBus.assignedDriverPhone;
+      }
+    }
+
+    if (!isSwap && busStore.notifications.isNotEmpty) {
+      for (final notif in busStore.notifications) {
+        final msg = notif.message;
+        if (msg.contains('⚡ Bus Update') && msg.contains(routeName)) {
+          isSwap = true;
+          final match = RegExp(r'Bus Update:\s*([A-Za-z0-9\-\s]+?)\s+has been assigned to\s+([^.\(]+)', caseSensitive: false).firstMatch(msg);
+          if (match != null) assignedBusNum = match.group(1)!.trim();
+          final reasonMatch = RegExp(r'\(([^)]+)\)', caseSensitive: false).firstMatch(msg);
+          if (reasonMatch != null) situationReason = reasonMatch.group(1)!.trim();
+          final entry = TimetableResolver.lookupEntry(routeName: routeName, busNumber: assignedBusNum);
+          if (entry != null) {
+            driverName = entry.driverName;
+            driverPhone = entry.driverPhone;
+            officialPlate = entry.vehicleNo;
+          }
+          break;
+        }
+      }
+    }
+
+    if (!isSwap) return const SizedBox.shrink();
+
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFF231604), Color(0xFF181002)],
+        ),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.5), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF59E0B),
+                  borderRadius: BorderRadius.circular(5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.bolt_rounded, color: Colors.black, size: 12),
+                    const SizedBox(width: 2),
+                    Text(
+                      'ROUTE NOTICE',
+                      style: GoogleFonts.outfit(
+                        color: Colors.black,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 9,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  situationReason,
+                  style: GoogleFonts.inter(
+                    color: const Color(0xFFFBBF24),
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              InkWell(
+                onTap: () => setState(() => _isSwapBannerDismissed = true),
+                child: const Icon(Icons.close_rounded, color: Colors.white38, size: 17),
+              ),
+            ],
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'Bus $assignedBusNum${officialPlate.isNotEmpty ? ' ($officialPlate)' : ''} is operating on ${defaultBus.isNotEmpty ? defaultBus : 'this route'} today.',
+            style: GoogleFonts.inter(
+              color: Colors.white,
+              fontWeight: FontWeight.w700,
+              fontSize: 12.5,
+            ),
+          ),
+          if (driverName.isNotEmpty || (driverPhone != null && driverPhone.isNotEmpty)) ...[
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                if (driverName.isNotEmpty)
+                  Expanded(
+                    child: Text(
+                      'Driver: $driverName',
+                      style: GoogleFonts.inter(color: Colors.white60, fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                if (driverPhone != null && driverPhone.isNotEmpty)
+                  InkWell(
+                    onTap: () async {
+                      final uri = Uri.parse('tel:$driverPhone');
+                      if (await canLaunchUrl(uri)) await launchUrl(uri);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.18),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF34D399), size: 12),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Call Driver',
+                            style: GoogleFonts.inter(
+                              color: const Color(0xFF34D399),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 10.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

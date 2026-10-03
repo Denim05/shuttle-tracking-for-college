@@ -54,7 +54,6 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
   String _shiftTimelineDirection = (DateTime.now().hour < 12) ? 'pickup' : 'dropoff';
   int _currentIndex = 0;
   bool _showDebugOverlay = false;
-  int _tapCounter = 0;
   
   bool _isSosActive = false;
 
@@ -62,6 +61,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
   int? _etaMinutes;          // ETA to user's assigned pickup stop
   bool _etaLoading = false;
   bool _delaySubscribed = false; // Whether user subscribed to delay alerts
+  bool _isSwapBannerDismissed = false; // User dismissed active bus swap alert banner
 
   @override
   void initState() {
@@ -506,6 +506,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     final prevRouteId = _selectedRoute?.id;
     setState(() {
       _selectedRoute = route;
+      _isSwapBannerDismissed = false;
       if (liveBus != null) {
         _activeBus = liveBus;
       } else {
@@ -566,6 +567,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
             ),
             if (_showDebugOverlay) _buildDebugOverlay(busStore),
             if (_currentIndex == 0) _buildFloatingHeader(busStore),
+            if (_currentIndex == 0) _buildLiveBusSwapAlertBanner(busStore),
           ],
         ),
         bottomNavigationBar: _buildModernBottomNav(), // Selector<BusStore,int>
@@ -1052,13 +1054,27 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                                   overflow: TextOverflow.ellipsis,
                                 ),
                                 const SizedBox(height: 3),
-                                Text(
-                                  '${_getAssignedShiftLabel()} • ${_selectedRoute!.stops.length} Stops',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w600,
-                                    color: AppColors.textMuted,
-                                    letterSpacing: 0.2,
+                                GestureDetector(
+                                  onTap: () => _showShiftAllocationModal(store),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Flexible(
+                                        child: Text(
+                                          '${_getAssignedShiftLabel()} • ${_selectedRoute!.stops.length} Stops',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: AppColors.textMuted,
+                                            letterSpacing: 0.2,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Icon(Icons.arrow_drop_down_rounded, color: AppColors.textMuted, size: 16),
+                                    ],
                                   ),
                                 ),
                               ],
@@ -1238,6 +1254,235 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     );
   }
 
+  Widget _buildLiveBusSwapAlertBanner(BusStore busStore) {
+    if (_isDriveMode || _selectedRoute == null || _isSwapBannerDismissed) {
+      return const SizedBox.shrink();
+    }
+
+    final routeName = _selectedRoute!.name;
+    String defaultBus = '';
+    final defaultEntry = TimetableResolver.lookupEntry(routeName: routeName);
+    if (defaultEntry != null) {
+      defaultBus = defaultEntry.displayBusLabel;
+    } else {
+      final match = RegExp(r'^(Bus\s*[^-\:]+)', caseSensitive: false).firstMatch(routeName);
+      if (match != null) defaultBus = match.group(1)!.trim();
+    }
+
+    bool isSwap = false;
+    String assignedBusNum = '';
+    String officialPlate = '';
+    String driverName = '';
+    String? driverPhone;
+    String situationReason = 'Emergency Substitution';
+
+    // 1. Check if active bus running on this route differs from default bus
+    final activeBus = _activeBus;
+    if (activeBus != null && activeBus.isBroadcastingLive) {
+      final activeBusNo = activeBus.displayBusNumber.toUpperCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+      final defaultClean = defaultBus.toUpperCase().replaceAll(RegExp(r'\s+'), ' ').trim();
+
+      final defaultDigits = defaultClean.replaceAll(RegExp(r'\D'), '');
+      final activeDigits = activeBusNo.replaceAll(RegExp(r'\D'), '');
+
+      if (defaultDigits.isNotEmpty && activeDigits.isNotEmpty && defaultDigits != activeDigits) {
+        isSwap = true;
+        assignedBusNum = activeBus.displayBusNumber;
+        officialPlate = activeBus.officialVehicleNo;
+        driverName = activeBus.assignedDriverName;
+        driverPhone = activeBus.assignedDriverPhone;
+      }
+    }
+
+    // 2. Also check if there is an active swap notification in busStore
+    if (!isSwap && busStore.notifications.isNotEmpty) {
+      for (final notif in busStore.notifications) {
+        final msg = notif.message;
+        if (msg.contains('⚡ Bus Update') && msg.contains(routeName)) {
+          isSwap = true;
+          final match = RegExp(r'Bus Update:\s*([A-Za-z0-9\-\s]+?)\s+has been assigned to\s+([^.\(]+)', caseSensitive: false).firstMatch(msg);
+          if (match != null) {
+            assignedBusNum = match.group(1)!.trim();
+          }
+          final reasonMatch = RegExp(r'\(([^)]+)\)', caseSensitive: false).firstMatch(msg);
+          if (reasonMatch != null) {
+            situationReason = reasonMatch.group(1)!.trim();
+          }
+          final entry = TimetableResolver.lookupEntry(routeName: routeName, busNumber: assignedBusNum);
+          if (entry != null) {
+            driverName = entry.driverName;
+            driverPhone = entry.driverPhone;
+            officialPlate = entry.vehicleNo;
+          }
+          break;
+        }
+      }
+    }
+
+    if (!isSwap) return const SizedBox.shrink();
+
+    final topPadding = MediaQuery.of(context).padding.top;
+
+    return Positioned(
+      top: topPadding + 78,
+      left: 16,
+      right: 16,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(14, 10, 10, 10),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(
+              colors: [Color(0xFF231604), Color(0xFF181002)],
+            ),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(
+              color: const Color(0xFFF59E0B).withValues(alpha: 0.6),
+              width: 1.3,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFFF59E0B).withValues(alpha: 0.25),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header Row: Badge + Title + Dismiss Button
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF59E0B),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.bolt_rounded, color: Colors.black, size: 13),
+                        const SizedBox(width: 3),
+                        Text(
+                          'LIVE ROUTE NOTICE',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.black,
+                            fontWeight: FontWeight.w900,
+                            fontSize: 9.5,
+                            letterSpacing: 0.6,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      situationReason,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFFFBBF24),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 11,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  InkWell(
+                    borderRadius: BorderRadius.circular(12),
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => _isSwapBannerDismissed = true);
+                    },
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close_rounded, color: Colors.white54, size: 18),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+
+              // Swap details
+              Text(
+                'Bus $assignedBusNum${officialPlate.isNotEmpty ? ' ($officialPlate)' : ''} is operating on ${defaultBus.isNotEmpty ? defaultBus : 'this route'} today.',
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  height: 1.25,
+                ),
+              ),
+              const SizedBox(height: 4),
+
+              // Driver & Action Row
+              Row(
+                children: [
+                  if (driverName.isNotEmpty) ...[
+                    const Icon(Icons.person_rounded, size: 13, color: Colors.white60),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        'Driver: $driverName',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.white70,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                  if (driverPhone != null && driverPhone.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(10),
+                      onTap: () async {
+                        final uri = Uri.parse('tel:$driverPhone');
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF10B981).withValues(alpha: 0.5),
+                          ),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.phone_in_talk_rounded, color: Color(0xFF34D399), size: 13),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Call Driver',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF34D399),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.15);
+  }
+
   String _getAssignedBusLabel(BusStore busStore) {
     if (_selectedShiftFilter != null) {
       return TimetableResolver.resolveAssignedBusNumber(
@@ -1284,7 +1529,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     HapticFeedback.mediumImpact();
     final routeName = _selectedRoute?.name ?? 'SISTec Transit Route';
     final availableShifts = TimetableResolver.getShiftsForRoute(routeName);
-    final currentDay = TimetableResolver.getCurrentDayLabel();
+    final currentDay = _getCurrentDayLabel();
 
     showModalBottomSheet(
       context: context,
@@ -2077,10 +2322,10 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
             icon: Icons.calendar_month_rounded,
             label: 'Schedule',
             color: AppColors.primary,
-            onTap: _selectedRoute != null
-                ? () => Navigator.push(context, MaterialPageRoute(
-                      builder: (_) => ScheduleScreen(route: _selectedRoute!)))
-                : null,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => ScheduleScreen(route: _selectedRoute)),
+            ),
           ),
         ),
         const SizedBox(width: 8),
