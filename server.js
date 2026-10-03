@@ -2934,23 +2934,133 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
     }
 });
 
-// ─── MANAGER: UPDATE BUS NUMBER / BASIC FIELDS ───────────────────────────────
+// ─── MANAGER: UPDATE BUS NUMBER / BASIC FIELDS / QUICK ROUTE REASSIGN ────────
 // PATCH /api/manager/buses/:id
-// Body: { busNumber, occupancy }
+// Body: { busNumber, occupancy, routeId, routeName, routeColor, name, shift }
 app.patch('/api/manager/buses/:id', authMiddleware, async (req, res) => {
     try {
         const allowed = {};
         if (req.body.busNumber)  allowed.busNumber  = req.body.busNumber.trim();
         if (req.body.occupancy)  allowed.occupancy  = req.body.occupancy;
+        if (req.body.routeId)    allowed.routeId    = req.body.routeId.trim();
+        if (req.body.routeName)  allowed.routeName  = req.body.routeName.trim();
+        if (req.body.routeColor) allowed.routeColor = req.body.routeColor.trim();
+        if (req.body.name)       allowed.name       = req.body.name.trim();
+        if (req.body.shift)      allowed.shift      = req.body.shift.trim();
         allowed.lastUpdated = new Date();
 
         const updated = await Bus.findByIdAndUpdate(req.params.id, allowed, { new: true });
         if (!updated) return res.status(404).json({ error: 'Bus not found' });
         io.emit('busUpdate', updated);
+        io.emit('busUpdated', updated);
+        broadcastStats();
         res.json(updated);
     } catch (err) {
         console.error('Bus patch error:', err);
         res.status(500).json({ error: 'Failed to update bus' });
+    }
+});
+
+// ─── MANAGER: INSTANT / EMERGENCY BUS-TO-ROUTE REASSIGNMENT ─────────────────
+// POST /api/manager/buses/quick-assign
+// Body: { busNumber, busId, routeId, routeName, routeColor, notifyUsers, reason }
+app.post('/api/manager/buses/quick-assign', authMiddleware, async (req, res) => {
+    try {
+        const { busNumber, busId, routeId, routeName, routeColor, notifyUsers, reason } = req.body;
+        if (!routeId) {
+            return res.status(400).json({ error: 'Target Route ID is required' });
+        }
+        if (!busNumber && !busId) {
+            return res.status(400).json({ error: 'Bus Number or Bus ID is required' });
+        }
+
+        // 1. Fetch Target Route
+        let targetRoute = null;
+        if (isValidId(routeId)) {
+            targetRoute = await Route.findById(routeId);
+        } else {
+            targetRoute = await Route.findOne({ name: new RegExp('^' + routeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+        }
+
+        const effectiveRouteName = targetRoute ? targetRoute.name : (routeName || 'Assigned Route');
+        const effectiveRouteColor = targetRoute ? (targetRoute.color || '#2563EB') : (routeColor || '#2563EB');
+        const effectiveRouteId = targetRoute ? targetRoute._id.toString() : routeId;
+
+        // 2. Find or Create Bus
+        let bus = null;
+        if (busId && isValidId(busId)) {
+            bus = await Bus.findById(busId);
+        }
+
+        if (!bus && busNumber) {
+            const cleanBusNum = busNumber.trim();
+            const numDigits = cleanBusNum.replace(/\D/g, '');
+            bus = await Bus.findOne({
+                $or: [
+                    { busNumber: cleanBusNum },
+                    { busNumber: new RegExp('^Bus\\s*0?' + numDigits + '$', 'i') },
+                    { name: new RegExp('Bus\\s*0?' + numDigits + '\\b', 'i') }
+                ]
+            });
+        }
+
+        const formattedBusNum = bus ? bus.busNumber : (busNumber || 'Bus').trim();
+        const busDisplayName = `${formattedBusNum} - ${effectiveRouteName}`;
+
+        if (!bus) {
+            bus = new Bus({
+                busNumber: formattedBusNum,
+                name: busDisplayName,
+                routeId: effectiveRouteId,
+                routeName: effectiveRouteName,
+                routeColor: effectiveRouteColor,
+                status: 'On-time',
+                lastUpdated: new Date()
+            });
+            await bus.save();
+            io.emit('busCreated', bus);
+        } else {
+            bus.routeId = effectiveRouteId;
+            bus.routeName = effectiveRouteName;
+            bus.routeColor = effectiveRouteColor;
+            bus.name = busDisplayName;
+            bus.lastUpdated = new Date();
+            await bus.save();
+        }
+
+        // 3. Emit Real-time Socket Updates
+        io.emit('busUpdate', bus);
+        io.emit('busUpdated', bus);
+        io.emit('busesUpdated');
+        broadcastStats();
+
+        // 4. Create Notification if requested
+        if (notifyUsers !== false) {
+            try {
+                const noticeMsg = `⚡ Bus Update: ${formattedBusNum} has been assigned to ${effectiveRouteName}${reason ? ' (' + reason + ')' : ''}.`;
+                const notif = new Notification({
+                    message: noticeMsg,
+                    type: 'info',
+                    targetAudience: 'All',
+                    createdBy: req.user ? (req.user.name || 'Manager') : 'Manager',
+                    createdAt: new Date()
+                });
+                await notif.save();
+                io.emit('notification', notif);
+            } catch (notifErr) {
+                console.error('Failed to create notification on bus assign:', notifErr.message);
+            }
+        }
+
+        res.json({
+            success: true,
+            message: `Successfully assigned ${formattedBusNum} to ${effectiveRouteName}`,
+            bus,
+            route: targetRoute
+        });
+    } catch (err) {
+        console.error('Quick assign bus error:', err);
+        res.status(500).json({ error: 'Failed to assign bus to route: ' + err.message });
     }
 });
 
