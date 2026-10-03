@@ -106,6 +106,64 @@ class MapMath {
 
     return (bestProgressDist / totalDist).clamp(0.0, 1.0);
   }
+
+  /// Estimates road distance from straight-line Haversine distance.
+  /// Indian mixed roads (urban + highway) typically have 1.4–1.6× straight-line ratio.
+  /// Default factor: 1.5 (calibrated for Bhopal/Indian mixed terrain).
+  static double estimateRoadDistance(LatLng p1, LatLng p2, {double roadFactor = 1.5}) {
+    return distance(p1, p2) * roadFactor;
+  }
+
+  /// Calculates distance along a polyline from the bus position to a target stop.
+  /// Returns actual road distance in meters if polyline coordinates are available,
+  /// otherwise falls back to estimated road distance (1.5× Haversine).
+  static double distanceAlongRoute(LatLng busPos, LatLng stopPos, List<LatLng> route) {
+    if (route.isEmpty || route.length < 2) {
+      return estimateRoadDistance(busPos, stopPos);
+    }
+
+    // Find nearest point on route for bus and stop
+    double minBusDist = double.infinity;
+    int busIdx = 0;
+    double minStopDist = double.infinity;
+    int stopIdx = 0;
+
+    for (int i = 0; i < route.length; i++) {
+      final dBus = distance(busPos, route[i]);
+      if (dBus < minBusDist) {
+        minBusDist = dBus;
+        busIdx = i;
+      }
+      final dStop = distance(stopPos, route[i]);
+      if (dStop < minStopDist) {
+        minStopDist = dStop;
+        stopIdx = i;
+      }
+    }
+
+    // If stop is behind bus on the route, use estimated distance
+    if (stopIdx <= busIdx) {
+      return estimateRoadDistance(busPos, stopPos);
+    }
+
+    // Sum polyline segments between bus and stop positions
+    double totalDist = 0;
+    for (int i = busIdx; i < stopIdx; i++) {
+      totalDist += distance(route[i], route[i + 1]);
+    }
+    return totalDist;
+  }
+
+  /// Calculate ETA in minutes given road distance (meters) and speed (km/h).
+  /// Uses production speed floor of 8 km/h and ceiling of 60 km/h.
+  static int calculateRoadETA(double roadDistanceMeters, double speedKmH) {
+    final clampedSpeed = speedKmH.clamp(8.0, 60.0);
+    // If speed is too low (< 5 km/h), use default 25 km/h
+    final effectiveSpeed = speedKmH < 5 ? 25.0 : clampedSpeed;
+    final speedMps = (effectiveSpeed * 1000) / 3600;
+    final travelSec = roadDistanceMeters / speedMps;
+    return (travelSec / 60).round().clamp(1, 999);
+  }
 }
 
 /// Tween for smooth interpolation of LatLng coordinates

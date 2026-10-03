@@ -1,7 +1,7 @@
 name: sistecchalo
 description: "A new Flutter project."
 publish_to: "none"
-version: 1.0.5+20
+version: 1.0.6+21
 
 
 
@@ -42,14 +42,20 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/logo.png"
+  image_path: "assets/app_icon new.png"
 
 flutter_native_splash:
-  color: "#0F1528"
-  image: "assets/logo.png"
+  color: "#0F0F11"
+  color_dark: "#0F0F11"
+  image: "assets/splash_icon.png"
+  image_dark: "assets/splash_icon.png"
   android_12:
-    image: "assets/logo.png"
-    icon_background_color: "#0F1528"
+    image: "assets/splash_icon.png"
+    image_dark: "assets/splash_icon.png"
+    icon_background_color: "#0F0F11"
+    icon_background_color_dark: "#0F0F11"
+    color: "#0F0F11"
+    color_dark: "#0F0F11"
 
 flutter:
   uses-material-design: true

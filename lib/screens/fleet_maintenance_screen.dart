@@ -611,7 +611,10 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                 busName: bus['name'],
                 routeName: routeName,
               );
-              final busDetails = TimetableResolver.resolveBusDetails(routeName: routeName);
+              final busDetails = TimetableResolver.resolveBusDetails(
+                routeName: routeName,
+                busNo: bus['busNumber']?.toString() ?? bus['name']?.toString(),
+              );
               final String cleanPlate = busDetails?.vehicleNo ?? (bus['busNumber']?.toString() ?? 'N/A');
 
               return GestureDetector(
@@ -713,6 +716,27 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                                 ),
                               ],
                             ),
+                            if (busDetails != null) ...[
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  const Icon(Icons.person_outline_rounded, size: 11, color: Colors.cyanAccent),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      '${busDetails.driverName} • ${busDetails.morningDeparture} Shift',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: Colors.white38,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
                           ],
                         ),
                       ),

@@ -51,28 +51,45 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     final entry = _schedules.where(
       (s) => s['stopName'].toString().toLowerCase() == stopName.toLowerCase(),
     ).toList();
-    if (entry.isEmpty) return _defaultTimes;
-    final times = entry.first['times'];
-    if (times == null || (times as List).isEmpty) return _defaultTimes;
-    return List<String>.from(times);
+    if (entry.isNotEmpty) {
+      final times = entry.first['times'];
+      if (times != null && (times as List).isNotEmpty) {
+        return List<String>.from(times);
+      }
+    }
+
+    final scheduled = TimetableResolver.getScheduledTimeForStop(widget.route.name, stopName);
+    if (scheduled != null && scheduled.isNotEmpty) {
+      return [scheduled, '04:30 PM'];
+    }
+
+    return _defaultTimes;
+  }
+
+  int _parseHour(String t) {
+    final clean = t.replaceAll(RegExp(r'[^0-9:]'), '');
+    int h = int.tryParse(clean.split(':').first) ?? 12;
+    if (t.toUpperCase().contains('PM') && h < 12) h += 12;
+    if (t.toUpperCase().contains('AM') && h == 12) h = 0;
+    return h;
   }
 
   Color _timeColor(String t) {
-    final h = int.tryParse(t.split(':').first) ?? 12;
+    final h = _parseHour(t);
     if (h < 12) return AppColors.warning;
     if (h < 17) return AppColors.primaryLight;
     return AppColors.accentPurple;
   }
 
   String _period(String t) {
-    final h = int.tryParse(t.split(':').first) ?? 12;
-    if (h < 12) return 'Morning Slot';
-    if (h < 17) return 'Afternoon Slot';
-    return 'Evening Slot';
+    final h = _parseHour(t);
+    if (h < 12) return 'Morning Roster (9:00 AM Shift)';
+    if (h < 17) return 'Afternoon Return';
+    return 'Evening Return';
   }
 
   IconData _periodIcon(String t) {
-    final h = int.tryParse(t.split(':').first) ?? 12;
+    final h = _parseHour(t);
     if (h < 12) return Icons.wb_sunny_rounded;
     if (h < 17) return Icons.light_mode_rounded;
     return Icons.nightlight_round;
@@ -193,18 +210,27 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             child: Row(
                               children: [
                                 Container(
-                                  width: 44, height: 44,
+                                  width: 46, height: 46,
+                                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                                   decoration: BoxDecoration(
                                     color: AppColors.primary.withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                                   ),
                                   child: Center(
-                                    child: Text(
-                                      entry.busNumber,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: AppColors.primaryLight,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w900,
+                                    child: FittedBox(
+                                      fit: BoxFit.scaleDown,
+                                      child: Text(
+                                        entry.busNumber.length > 8 && entry.busNumber.contains(' ')
+                                            ? entry.busNumber.split(' ').last
+                                            : entry.busNumber,
+                                        maxLines: 1,
+                                        textScaler: TextScaler.noScaling,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: AppColors.primaryLight,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w900,
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -256,7 +282,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                                         ),
                                       ),
                                       Text(
-                                        'Driver: ${entry.driverName} • Reg: ${entry.vehicleNo}',
+                                        'Driver: ${entry.driverName} • Tel: ${entry.driverPhone}',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: AppColors.primaryLight,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Registration: ${entry.vehicleNo}',
                                         style: GoogleFonts.plusJakartaSans(
                                           color: AppColors.textSecondary,
                                           fontSize: 10,
@@ -269,7 +303,47 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                               ],
                             ),
                           )),
-                          const SizedBox(height: 6),
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 14),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                            decoration: BoxDecoration(
+                              color: AppColors.surfaceLight,
+                              borderRadius: BorderRadius.circular(14),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.support_agent_rounded, size: 20, color: AppColors.primaryLight),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'TRANSPORT INCHARGE HELPLINE (RATIBAD)',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: AppColors.textMuted,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        'Vaibhav Pathak: 7024256904 • Ramswroop: 9669660990',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: Colors.white,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 4),
                           Row(
                             children: [
                               Text(

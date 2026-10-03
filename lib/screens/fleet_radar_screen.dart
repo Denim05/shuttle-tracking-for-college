@@ -628,12 +628,28 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                     children: [
                       Row(
                         children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: routeColor.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              bus.displayBusNumber,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                                fontSize: 9.5,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 6),
                           Expanded(
                             child: Text(
-                              bus.routeName,
+                              '${bus.routeName} (${bus.officialVehicleNo})',
                               style: GoogleFonts.plusJakartaSans(
                                 color: AppColors.text, fontWeight: FontWeight.w700,
-                                fontSize: 13,
+                                fontSize: 12,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -679,6 +695,17 @@ class _FleetRadarScreenState extends State<FleetRadarScreen> {
                             ),
                           ),
                         ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        'Driver: ${bus.assignedDriverName} • ${bus.shiftLabel}',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
                       if (bus.etas.isNotEmpty) ...[
                         const SizedBox(height: 5),

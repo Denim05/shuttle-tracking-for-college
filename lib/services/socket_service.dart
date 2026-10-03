@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color;
 import 'package:socket_io_client/socket_io_client.dart' as io;
@@ -35,6 +36,9 @@ class SocketService with ChangeNotifier {
   int _pingStartMs = 0;
   final List<Function(dynamic)> _sosCallbacks = [];
   final Set<String> _joinedRoutes = {};
+  Timer? _watchdogTimer;
+  DateTime _lastConnectAttempt = DateTime.now();
+  DateTime? _lastReconnectAttempt;
 
   // ─── Getters ─────────────────────────────────────────────────────────────
 
@@ -66,22 +70,26 @@ class SocketService with ChangeNotifier {
   // ─── Init ────────────────────────────────────────────────────────────────
 
   void initSocket() {
+    _startWatchdog();
+
     if (_socket != null) {
       if (_socket!.connected) {
         debugPrint('⚠️ Socket already connected — reusing.');
         return;
       }
-      if (_status == SocketStatus.connecting) {
+      if (_status == SocketStatus.connecting &&
+          DateTime.now().difference(_lastConnectAttempt).inSeconds < 12) {
         debugPrint('⚠️ Socket connection already in progress — reusing.');
         return;
       }
-      // If socket exists but disconnected, connect directly
+      // If socket exists but disconnected or stuck, attempt reconnect or refresh
       try {
         _socket!.connect();
         return;
       } catch (_) {}
     }
 
+    _lastConnectAttempt = DateTime.now();
     _setStatus(SocketStatus.connecting);
     debugPrint('🔌 SISTecChalo: connecting to ${AppConstants.baseUrl}');
 
@@ -98,8 +106,8 @@ class SocketService with ChangeNotifier {
           .setReconnectionAttempts(999)
           .setReconnectionDelay(1500)
           .setReconnectionDelayMax(5000)
-          .setTimeout(15000)
-          .enableForceNew()
+          .setTimeout(12000)
+          .disableForceNew()
           .build(),
     );
 
@@ -111,14 +119,6 @@ class SocketService with ChangeNotifier {
       ..on('disconnect',        _onDisconnect)
       ..on('connect_error',     (data) {
           _onConnectError(data);
-          // Immediate background retry on error
-          Future.delayed(const Duration(seconds: 2), () {
-            if (!isConnected && _socket != null) {
-              try {
-                _socket?.connect();
-              } catch (_) {}
-            }
-          });
         })
       ..on('reconnect_attempt', (_) => _setStatus(SocketStatus.connecting))
       ..on('error',  (data) => debugPrint('❌ Socket error: $data'))
@@ -129,6 +129,21 @@ class SocketService with ChangeNotifier {
           lastPingMs.value = DateTime.now().millisecondsSinceEpoch - _pingStartMs;
           debugPrint('🏓 Ping: ${lastPingMs.value} ms');
         });
+  }
+
+  void _startWatchdog() {
+    _watchdogTimer ??= Timer.periodic(const Duration(seconds: 15), (_) {
+      final now = DateTime.now();
+      // If disconnected or stuck in connecting for >15s without resolution:
+      if (!isConnected) {
+        final connectingTooLong = _status == SocketStatus.connecting &&
+            now.difference(_lastConnectAttempt).inSeconds > 15;
+        if (connectingTooLong || _status == SocketStatus.error || _status == SocketStatus.disconnected) {
+          debugPrint('🛰️ Socket Watchdog: Detected stale/dead socket state ($_status). Self-healing...');
+          checkAndReconnect(force: true);
+        }
+      }
+    });
   }
 
   void _bindAllListeners() {
@@ -214,10 +229,28 @@ class SocketService with ChangeNotifier {
     notifyListeners();
   }
 
-  // ─── Manual Reconnect ────────────────────────────────────────────────────
+  // ─── Manual / Lifecycle Reconnect ──────────────────────────────────────
 
-  void reconnect() {
-    if (_socket == null) {
+  void checkAndReconnect({bool force = false}) {
+    final now = DateTime.now();
+    if (!force && _lastReconnectAttempt != null && now.difference(_lastReconnectAttempt!).inSeconds < 4) {
+      return; // Throttled to avoid rapid storm
+    }
+    _lastReconnectAttempt = now;
+    if (force || !isConnected) {
+      debugPrint('🔄 SISTecChalo: Reconnection triggered (force: $force, status: $_status)');
+      reconnect(force: force);
+    }
+  }
+
+  void reconnect({bool force = false}) {
+    if (force || _socket == null) {
+      try {
+        _socket?.disconnect();
+        _socket?.dispose();
+      } catch (_) {}
+      _socket = null;
+      _setStatus(SocketStatus.disconnected);
       initSocket();
     } else if (_socket!.disconnected) {
       _socket!.connect();
@@ -311,6 +344,8 @@ class SocketService with ChangeNotifier {
   void listenToBusDeleted(Function(dynamic) callback) => _on('busDeleted', callback);
   void listenToRouteCreated(Function(dynamic) callback) => _on('routeCreated', callback);
   void listenToRouteUpdated(Function(dynamic) callback) => _on('routeUpdated', callback);
+  void listenToRoutesUpdated(Function(dynamic) callback) => _on('routesUpdated', callback);
+  void listenToTimetableUpdated(Function(dynamic) callback) => _on('timetableUpdated', callback);
   void listenToRouteDeleted(Function(dynamic) callback) => _on('routeDeleted', callback);
 
   void off(String event) {
@@ -374,6 +409,7 @@ class SocketService with ChangeNotifier {
 
   @override
   void dispose() {
+    _watchdogTimer?.cancel();
     _socket?.disconnect();
     _socket?.dispose();
     connectionStatus.dispose();

@@ -64,6 +64,14 @@ class BusStore extends ChangeNotifier {
   Timer?   _purgeTimer;
   DateTime _lastUpdateTime = DateTime.now();
 
+  // ── Debounce: batch rapid socket bus-update notifications ──────────────
+  // FREEZE FIX: The driver emits GPS every 800ms. Without debouncing,
+  // notifyListeners() fires at that same rate, rebuilding every Consumer<BusStore>
+  // widget across all screens simultaneously. A 100ms debounce collapses
+  // consecutive rapid updates into a single rebuild cycle per animation frame.
+  Timer?   _notifyDebounceTimer;
+  bool     _notifyPending = false;
+
   static const int _staleSecs = 25;
   static const int _maxNotifications = 100;
 
@@ -225,6 +233,14 @@ class BusStore extends ChangeNotifier {
     _socketService.listenToBusApproach(_onBusApproach);
     _socketService.listenToNotifications(_onNotification);
     _socketService.listenToNotificationDeleted(_onNotificationDeleted);
+    _socketService.listenToRoutesUpdated((_) {
+      _cachedSortedBuses = null;
+      notifyListeners();
+    });
+    _socketService.listenToTimetableUpdated((_) {
+      _cachedSortedBuses = null;
+      notifyListeners();
+    });
   }
 
   void _onBusDeleted(dynamic data) {
@@ -286,8 +302,10 @@ class BusStore extends ChangeNotifier {
           completedStops: incoming.completedStops > 0 ? incoming.completedStops : existing.completedStops,
           nextStop: incoming.nextStop ?? existing.nextStop,
           distanceToNextStopMeters: incoming.distanceToNextStopMeters ?? existing.distanceToNextStopMeters,
+          distanceToFinalStopMeters: incoming.distanceToFinalStopMeters ?? existing.distanceToFinalStopMeters,
           etas: incoming.etas.isNotEmpty ? incoming.etas : existing.etas,
           lastUpdated: now,
+          gpsAccuracy: (incoming.gpsAccuracy != null && incoming.gpsAccuracy! > 0) ? incoming.gpsAccuracy : existing.gpsAccuracy,
         );
       } else {
         _buses[incoming.id] = incoming.copyWith(lastUpdated: now);
@@ -295,10 +313,21 @@ class BusStore extends ChangeNotifier {
       _cachedSortedBuses = null; // Invalidate cache so all getters return fresh state immediately
       _lastUpdateTime = now;
       debugPrint('🚌 BusStore: live update applied for ${incoming.busNumber ?? incoming.id} (${incoming.status}, ${incoming.speed.toInt()} km/h, pos: ${incoming.currentLat.toStringAsFixed(4)}, ${incoming.currentLng.toStringAsFixed(4)})');
-      notifyListeners();
+      _scheduleDebouncedNotify();
     } catch (e) {
       debugPrint('BusStore._onBusUpdate error: $e');
     }
+  }
+
+  /// Debounced notify: coalesces rapid GPS updates into one rebuild per 100ms.
+  void _scheduleDebouncedNotify() {
+    if (_notifyPending) return; // already queued
+    _notifyPending = true;
+    _notifyDebounceTimer?.cancel();
+    _notifyDebounceTimer = Timer(const Duration(milliseconds: 100), () {
+      _notifyPending = false;
+      if (!_approachCtrl.isClosed) notifyListeners();
+    });
   }
 
   void _onBusApproach(dynamic data) {
@@ -383,6 +412,7 @@ class BusStore extends ChangeNotifier {
   @override
   void dispose() {
     _purgeTimer?.cancel();
+    _notifyDebounceTimer?.cancel();
     _approachCtrl.close();
     super.dispose();
   }

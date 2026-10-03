@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:async';
-import 'package:flutter/foundation.dart' show debugPrint, VoidCallback;
+import 'dart:io' show gzip;
+import 'package:flutter/foundation.dart' show debugPrint, VoidCallback, kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -124,8 +125,9 @@ class ApiService {
 
   Future<Map<String, String>> _headers({bool requiresAuth = true}) async {
     final headers = <String, String>{
-      'Content-Type': 'application/json',
-      'Accept'      : 'application/json',
+      'Content-Type'   : 'application/json',
+      'Accept'         : 'application/json',
+      'Accept-Encoding': 'identity', // Requests uncompressed UTF-8 JSON to prevent encoding errors
     };
     if (requiresAuth) {
       String? token = cachedToken;
@@ -151,6 +153,26 @@ class ApiService {
   Uri _uri(String endpoint) =>
       Uri.parse('${AppConstants.apiUrl}/$endpoint');
 
+  // ─── Safe Response Body Decoder ───────────────────────────────────────────
+
+  String _decodeBody(http.Response response) {
+    try {
+      List<int> bytes = response.bodyBytes;
+      if (!kIsWeb && bytes.length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b) {
+        try {
+          bytes = gzip.decode(bytes);
+        } catch (_) {}
+      }
+      return utf8.decode(bytes, allowMalformed: true);
+    } catch (_) {
+      try {
+        return response.body;
+      } catch (_) {
+        return '';
+      }
+    }
+  }
+
   // ─── Retry Wrapper ────────────────────────────────────────────────────────
 
   Future<dynamic> _withRetry(Future<http.Response> Function() call, {bool canRetry = true}) async {
@@ -159,10 +181,12 @@ class ApiService {
       try {
         final response = await call()
             .timeout(const Duration(seconds: _timeoutSecs));
+        debugPrint('API Response: Status ${response.statusCode}, Length: ${response.bodyBytes.length} bytes');
         return _process(response);
       } on ApiException {
         rethrow; // Don't retry 4xx
       } on TimeoutException {
+        debugPrint('API Error: Timeout on attempt $attempt');
         if (!canRetry) {
           throw const ApiException(
             statusCode: 0,
@@ -180,6 +204,7 @@ class ApiService {
         }
         await Future.delayed(Duration(seconds: 1 << attempt));
       } catch (e) {
+        debugPrint('API Error: Network error on attempt $attempt: ${e.toString()}');
         if (!canRetry) {
           throw ApiException(
             statusCode: 0,
@@ -203,11 +228,15 @@ class ApiService {
   // ─── Response Processor ───────────────────────────────────────────────────
 
   dynamic _process(http.Response response) {
+    final bodyStr = _decodeBody(response);
+    debugPrint('API Process: Status ${response.statusCode}, Body: $bodyStr');
+
     if (response.statusCode >= 200 && response.statusCode < 300) {
-      if (response.body.isEmpty) return null;
+      if (bodyStr.isEmpty) return null;
       try {
-        return jsonDecode(response.body);
-      } catch (_) {
+        return jsonDecode(bodyStr);
+      } catch (e) {
+        debugPrint('API Error: Malformed JSON from server. Error: $e');
         throw const ApiException(
           statusCode: 0,
           message   : 'Server returned malformed JSON.',
@@ -217,6 +246,7 @@ class ApiService {
 
     if (response.statusCode == 401) {
       if (cachedToken != null && cachedToken!.isNotEmpty) {
+        debugPrint('API Event: 401 Unauthorized, calling onUnauthorized callback');
         onUnauthorized?.call();
       }
       throw const ApiException(
@@ -227,10 +257,13 @@ class ApiService {
 
     String message = 'Server error (${response.statusCode})';
     try {
-      final body = jsonDecode(response.body);
+      final body = jsonDecode(bodyStr);
       message = (body['error'] ?? body['message'] ?? message).toString();
-    } catch (_) {}
+    } catch (e) {
+      debugPrint("API Error: Could not parse error body. Original error: $e");
+    }
 
+    debugPrint("API Error: Final ApiException thrown: Status ${response.statusCode}, Message: $message");
     throw ApiException(statusCode: response.statusCode, message: message);
   }
 
@@ -250,6 +283,7 @@ class ApiService {
       }
     }
 
+    debugPrint('API Call: GET $endpoint');
     final data = await _withRetry(
       () async => http.get(
         _uri(endpoint),
@@ -274,6 +308,7 @@ class ApiService {
   Future<dynamic> post(String endpoint, Map<String, dynamic> body,
       {bool requiresAuth = true}) async {
     _cache.clear(); // Invalidate cache on mutations
+    debugPrint('API Call: POST $endpoint, Body: ${jsonEncode(body)}');
     return _withRetry(() async => http.post(
           _uri(endpoint),
           headers: await _headers(requiresAuth: requiresAuth),
@@ -283,6 +318,7 @@ class ApiService {
 
   Future<dynamic> put(String endpoint, Map<String, dynamic> body) async {
     _cache.clear(); // Invalidate cache on mutations
+    debugPrint('API Call: PUT $endpoint, Body: ${jsonEncode(body)}');
     return _withRetry(() async => http.put(
           _uri(endpoint),
           headers: await _headers(),
@@ -292,6 +328,7 @@ class ApiService {
 
   Future<dynamic> patch(String endpoint, Map<String, dynamic> body) async {
     _cache.clear(); // Invalidate cache on mutations
+    debugPrint('API Call: PATCH $endpoint, Body: ${jsonEncode(body)}');
     return _withRetry(() async => http.patch(
           _uri(endpoint),
           headers: await _headers(),
@@ -301,10 +338,44 @@ class ApiService {
 
   Future<dynamic> delete(String endpoint) async {
     _cache.clear(); // Invalidate cache on mutations
+    debugPrint('API Call: DELETE $endpoint');
     return _withRetry(() async => http.delete(
           _uri(endpoint),
           headers: await _headers(),
         ), canRetry: false);
+  }
+
+  /// Upload file via multipart/form-data with token authorization
+  Future<dynamic> uploadMultipart(
+    String endpoint, {
+    required List<int> bytes,
+    required String filename,
+    String fieldName = 'file',
+    Map<String, String>? fields,
+  }) async {
+    _cache.clear();
+    final uri = _uri(endpoint);
+    final request = http.MultipartRequest('POST', uri);
+
+    final hdrs = await _headers();
+    if (hdrs.containsKey('Authorization')) {
+      request.headers['Authorization'] = hdrs['Authorization']!;
+    }
+
+    if (fields != null) {
+      request.fields.addAll(fields);
+    }
+
+    request.files.add(http.MultipartFile.fromBytes(
+      fieldName,
+      bytes,
+      filename: filename,
+    ));
+
+    debugPrint('API Call: UPLOAD MULTIPART $endpoint, Filename: $filename, Field Name: $fieldName');
+    final streamedResponse = await request.send().timeout(const Duration(seconds: 45));
+    final response = await http.Response.fromStream(streamedResponse);
+    return _process(response);
   }
 }
 

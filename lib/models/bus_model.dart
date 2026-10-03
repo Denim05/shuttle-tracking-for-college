@@ -22,6 +22,8 @@ class Bus {
   final int? distanceToNextStopMeters;
   final List<BusETA> etas;
   final DateTime lastUpdated;
+  final int? distanceToFinalStopMeters;
+  final double? gpsAccuracy;
 
   Bus({
     required this.id,
@@ -45,6 +47,8 @@ class Bus {
     this.distanceToNextStopMeters,
     this.etas = const [],
     required this.lastUpdated,
+    this.distanceToFinalStopMeters,
+    this.gpsAccuracy,
   });
 
   bool get isDropoff => tripType == 'dropoff';
@@ -78,6 +82,30 @@ class Bus {
     );
   }
 
+  /// Official Timetable Entry from SISTec Ratibad institutional roster
+  TimetableRouteEntry? get timetableEntry {
+    return TimetableResolver.lookupEntry(
+      busNumber: busNumber,
+      busName: name,
+      routeName: routeName,
+    );
+  }
+
+  /// Official Vehicle Registration (e.g. "MP04 PA 3496")
+  String get officialVehicleNo {
+    return timetableEntry?.vehicleNo ?? (busNumber?.toUpperCase() ?? 'MP04 PA ----');
+  }
+
+  /// Official Assigned Driver Name from roster
+  String get assignedDriverName {
+    return timetableEntry?.driverName ?? 'Assigned Driver';
+  }
+
+  /// Official Assigned Driver Phone Number
+  String? get assignedDriverPhone {
+    return timetableEntry?.driverPhone;
+  }
+
   Bus copyWith({
     String? id,
     String? busNumber,
@@ -98,8 +126,10 @@ class Bus {
     int? completedStops,
     String? nextStop,
     int? distanceToNextStopMeters,
+    int? distanceToFinalStopMeters,
     List<BusETA>? etas,
     DateTime? lastUpdated,
+    double? gpsAccuracy,
   }) {
     return Bus(
       id: id ?? this.id,
@@ -121,8 +151,10 @@ class Bus {
       completedStops: completedStops ?? this.completedStops,
       nextStop: nextStop ?? this.nextStop,
       distanceToNextStopMeters: distanceToNextStopMeters ?? this.distanceToNextStopMeters,
+      distanceToFinalStopMeters: distanceToFinalStopMeters ?? this.distanceToFinalStopMeters,
       etas: etas ?? this.etas,
       lastUpdated: lastUpdated ?? this.lastUpdated,
+      gpsAccuracy: gpsAccuracy ?? this.gpsAccuracy,
     );
   }
 
@@ -171,6 +203,8 @@ class Bus {
           .map((e) => BusETA.fromJson(e))
           .toList(),
       lastUpdated: parseDate(json['lastUpdated']),
+      distanceToFinalStopMeters: json['distanceToFinalStopMeters'] != null ? parseInt(json['distanceToFinalStopMeters']) : null,
+      gpsAccuracy: parseDouble(json['gpsAccuracy']),
     );
   }
 }

@@ -15,6 +15,7 @@ import 'complaint_manager_screen.dart';
 import 'route_management_screen.dart';
 import 'fleet_maintenance_screen.dart';
 import 'profile_settings_screen.dart';
+import '../components/dashboard_back_scope.dart';
 
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
@@ -692,9 +693,20 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     final socketService = Provider.of<SocketService>(context);
     return DefaultTabController(
       length: 7,
-      child: Scaffold(
-        backgroundColor: const Color(0xFF121212),
-        body: ValueListenableBuilder<bool>(
+      child: Builder(
+        builder: (tabCtx) => DashboardBackScope(
+          onWillHandleBack: () {
+            final tabController = DefaultTabController.of(tabCtx);
+            if (tabController.index > 0) {
+              tabController.animateTo(0);
+              return true;
+            }
+            return false;
+          },
+          exitMessage: 'Press back again to exit SISTecChalo',
+          child: Scaffold(
+            backgroundColor: const Color(0xFF121212),
+            body: ValueListenableBuilder<bool>(
           valueListenable: socketService.connectionStatus,
           builder: (context, isConnected, child) {
             return Stack(
@@ -873,7 +885,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
           },
         ),
       ),
-    );
+    ),
+  ),
+);
   }
 
   Widget _buildAppBarAction(IconData icon, VoidCallback onTap) {

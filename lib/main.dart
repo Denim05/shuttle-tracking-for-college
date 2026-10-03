@@ -19,6 +19,7 @@ import 'screens/manager_dashboard.dart';
 import 'screens/driver_dashboard.dart';
 import 'screens/force_password_change_screen.dart';
 import 'screens/commute_setup_screen.dart';
+import 'screens/guest_dashboard.dart';
 
 
 // ─── Global Navigator Key (for SnackBars from outside Widget tree) ───────────
@@ -142,125 +143,119 @@ class AuthWrapper extends StatefulWidget {
 }
 
 class _AuthWrapperState extends State<AuthWrapper> {
-  late Future<void> _autoLoginFuture;
+  late Future<void> _initAppFuture;
 
   @override
   void initState() {
     super.initState();
-    _autoLoginFuture = Provider.of<AuthService>(context, listen: false).tryAutoLogin();
+    _initAppFuture = _initializeApp();
+  }
+
+  Future<void> _initializeApp() async {
+    // Concurrently auto-login auth check and play the full starting screen animation
+    await Future.wait([
+      Provider.of<AuthService>(context, listen: false).tryAutoLogin(),
+      Future.delayed(const Duration(milliseconds: 2300)),
+    ]);
   }
 
   @override
   Widget build(BuildContext context) {
     return FutureBuilder<void>(
-      future: _autoLoginFuture,
+      future: _initAppFuture,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const _SplashScreen();
-        }
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 400),
+          switchInCurve: Curves.easeIn,
+          switchOutCurve: Curves.easeOut,
+          child: (snapshot.connectionState == ConnectionState.waiting)
+              ? const _SplashScreen(key: ValueKey('splash_screen'))
+              : Consumer<AuthService>(
+                  key: const ValueKey('authenticated_content'),
+                  builder: (context, auth, _) {
+                    if (!auth.isAuthenticated) return const LoginScreen();
 
-        return Consumer<AuthService>(
-          builder: (context, auth, _) {
-            if (!auth.isAuthenticated) return const LoginScreen();
+                    // Mandatory First-Time Password Reset Enforcement (Students with temporary passwords)
+                    if (auth.currentUser?.role == 'user' && auth.currentUser?.mustChangePassword == true && !auth.isGuest) {
+                      return const ForcePasswordChangeScreen();
+                    }
 
-            // Mandatory First-Time Password Reset Enforcement (Students with temporary passwords)
-            if (auth.currentUser?.role == 'user' && auth.currentUser?.mustChangePassword == true && !auth.isGuest) {
-              return const ForcePasswordChangeScreen();
-            }
+                    // Mandatory Local Commute & Nearest Stop Setup (for student commuters)
+                    if (auth.currentUser?.role == 'user' && !auth.isGuest && auth.currentUser?.isCommuteConfigured != true) {
+                      return const CommuteSetupScreen(isInitialSetup: true);
+                    }
 
-            // Mandatory Local Commute & Nearest Stop Setup (for student commuters)
-            if (auth.currentUser?.role == 'user' && !auth.isGuest && auth.currentUser?.isCommuteConfigured != true) {
-              return const CommuteSetupScreen(isInitialSetup: true);
-            }
-
-            switch (auth.currentUser?.role) {
-              case 'admin':
-                return const AdminDashboard();
-              case 'manager':
-                return const ManagerDashboard();
-              case 'driver':
-                return const DriverDashboard();
-              case 'user':
-              case 'guest':
-              default:
-                return const UserDashboard();
-            }
-          },
+                    switch (auth.currentUser?.role) {
+                      case 'admin':
+                        return const AdminDashboard();
+                      case 'manager':
+                        return const ManagerDashboard();
+                      case 'driver':
+                        return const DriverDashboard();
+                      case 'guest':
+                        return const GuestDashboard();
+                      case 'user':
+                      default:
+                        return const UserDashboard();
+                    }
+                  },
+                ),
         );
       },
     );
   }
 }
 
-// ─── Splash Screen ─────────────────────────────────────────────────────────────
+// ─── Splash Screen (Branded Opening Animation) ───────────────────────────────
 
-class _SplashScreen extends StatelessWidget {
-  const _SplashScreen();
+class _SplashScreen extends StatefulWidget {
+  const _SplashScreen({super.key});
+
+  @override
+  State<_SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<_SplashScreen> {
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    precacheImage(const AssetImage('assets/splash-animated.gif'), context);
+    precacheImage(const AssetImage('assets/splash-1080x2400.png'), context);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0B0F17),
-      body: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Background ambient radial glow
-          Positioned(
-            child: Container(
-              width: 320,
-              height: 320,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: RadialGradient(
-                  colors: [
-                    const Color(0xFF2D5BFF).withValues(alpha: 0.25),
-                    Colors.transparent,
-                  ],
-                ),
+      backgroundColor: const Color(0xFF0F0F11),
+      body: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: const SystemUiOverlayStyle(
+          statusBarColor: Colors.transparent,
+          statusBarIconBrightness: Brightness.light,
+          systemNavigationBarColor: Color(0xFF0F0F11),
+          systemNavigationBarIconBrightness: Brightness.light,
+        ),
+        child: SizedBox.expand(
+          child: Stack(
+            fit: StackFit.expand,
+            alignment: Alignment.center,
+            children: [
+              // High-resolution static starting screen background
+              Image.asset(
+                'assets/splash-1080x2400.png',
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
               ),
-            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 2.seconds, begin: const Offset(0.8, 0.8), end: const Offset(1.2, 1.2)),
+
+              // Animated liquid reveal starting screen GIF
+              Image.asset(
+                'assets/splash-animated.gif',
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              ),
+            ],
           ),
-          
-          Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'SISTecChalo',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 34,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
-                ).animate().fadeIn(delay: 200.ms),
-                
-                const SizedBox(height: 6),
-                
-                Text(
-                  'REAL-TIME BUS TELEMETRY',
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: const Color(0xFF00F0FF),
-                    letterSpacing: 3,
-                  ),
-                ).animate().fadeIn(delay: 400.ms),
-                
-                const SizedBox(height: 48),
-                
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2.5,
-                    color: Color(0xFF00F0FF),
-                  ),
-                ).animate().fadeIn(delay: 600.ms),
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

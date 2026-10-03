@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show ImageFilter;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -27,6 +28,8 @@ import '../main.dart';
 import 'package:flutter/services.dart';
 import '../theme/app_theme.dart';
 import '../utils/timetable_resolver.dart';
+import '../components/dashboard_back_scope.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../components/update_dialog.dart';
 
 class UserDashboard extends StatefulWidget {
@@ -82,7 +85,10 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
+    if (state == AppLifecycleState.resumed) {
+      Provider.of<SocketService>(context, listen: false).checkAndReconnect();
+      _fetchData();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
       _syncOngoingLockscreenNotification();
     }
   }
@@ -100,11 +106,18 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
 
     if (liveBus != null) {
       final targetStop = liveBus.nextStop ?? (_selectedRoute?.stops.first['name']?.toString() ?? 'Next Stop');
+      // Use road-distance-adjusted values for accurate notification
       final distM = liveBus.distanceToNextStopMeters ?? 650;
       final distStr = distM < 1000 ? '$distM m' : '${(distM / 1000).toStringAsFixed(1)} km';
-      final speedKmh = liveBus.speed > 5 ? liveBus.speed : 25.0;
-      final speedMps = (speedKmh * 1000) / 3600;
-      final etaMins = math.max(1, (distM / speedMps / 60).round());
+      // Prefer server-computed ETA from driver broadcast (polyline-based)
+      int etaMins;
+      if (liveBus.etas.isNotEmpty) {
+        etaMins = liveBus.etas.first.minutes;
+      } else {
+        final speedKmh = liveBus.speed > 5 ? liveBus.speed : 25.0;
+        final speedMps = (speedKmh * 1000) / 3600;
+        etaMins = math.max(1, (distM / speedMps / 60).round());
+      }
 
       NotificationService().updateLiveTrackingNotification(
         busNumber: liveBus.displayBusNumber,
@@ -140,19 +153,31 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     final stopLng = (pickupStop['lng'] as num).toDouble();
     if (stopLat == 0.0 || stopLng == 0.0) return;
 
-    final distMeters = Geolocator.distanceBetween(bus.currentLat, bus.currentLng, stopLat, stopLng);
-    final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
-    final speedMps = (speedKmh * 1000) / 3600;
-    final etaMins = math.max(1, (distMeters / speedMps / 60).round());
+    // Use road-distance estimation (1.5× Haversine for Indian roads) for accurate proximity
+    final straightDistMeters = Geolocator.distanceBetween(bus.currentLat, bus.currentLng, stopLat, stopLng);
+    final roadDistMeters = straightDistMeters * 1.5;
+    // Prefer server-computed ETA from bus.etas matching this stop
+    int etaMins;
+    final matchedEta = bus.etas.where(
+      (e) => e.stopName.toLowerCase().trim() == userPickup.toLowerCase().trim() ||
+             e.stopName.toLowerCase().trim() == (pickupStop['name']?.toString() ?? '').toLowerCase().trim(),
+    );
+    if (matchedEta.isNotEmpty) {
+      etaMins = matchedEta.first.minutes;
+    } else {
+      final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+      final speedMps = (speedKmh * 1000) / 3600;
+      etaMins = math.max(1, (roadDistMeters / speedMps / 60).round());
+    }
 
-    // Trigger alert if within 600m or <= 2 minutes
-    if (distMeters <= 600 || etaMins <= 2) {
+    // Trigger alert if within 800m road distance or ≤ 2 minutes
+    if (roadDistMeters <= 800 || etaMins <= 2) {
       final stopName = pickupStop['name']?.toString() ?? userPickup;
       if (!_notifiedGeofenceStops.contains(stopName.toLowerCase())) {
         _notifiedGeofenceStops.add(stopName.toLowerCase());
         _lastProximityAlertTime = DateTime.now();
 
-        final distStr = distMeters < 1000 ? '${distMeters.toStringAsFixed(0)} m' : '${(distMeters / 1000).toStringAsFixed(1)} km';
+        final distStr = roadDistMeters < 1000 ? '${roadDistMeters.toStringAsFixed(0)} m' : '${(roadDistMeters / 1000).toStringAsFixed(1)} km';
         NotificationService().showProximityArrivalAlert(
           busNumber: bus.displayBusNumber,
           stopName: stopName,
@@ -505,28 +530,46 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
 
     _activeBus = _resolveActiveBus(busStore, _selectedRoute);
 
-    return Scaffold(
-      backgroundColor: AppColors.bg,
-      body: Stack(
-        children: [
-          IndexedStack(
-            index: _currentIndex,
-            children: [
-              _isLoading
-                  ? Container(
-                      color: AppColors.bg,
-                      child: Center(child: _buildShimmerLoader()),
-                    )
-                  : _buildTrackingTab(),
-              _buildAlertsTab(),          // has own Consumer<BusStore>
-              _buildProfileTab(auth),     // has own Consumer<AuthService>
-            ],
-          ),
-          if (_showDebugOverlay) _buildDebugOverlay(busStore),
-          if (_currentIndex == 0) _buildFloatingHeader(busStore),
-        ],
+    return DashboardBackScope(
+      onWillHandleBack: () {
+        if (_currentIndex != 0) {
+          setState(() => _currentIndex = 0);
+          return true;
+        }
+        if (_sheetController.isAttached && _sheetController.size > 0.40) {
+          _sheetController.animateTo(
+            0.35,
+            duration: const Duration(milliseconds: 250),
+            curve: Curves.easeOutCubic,
+          );
+          return true;
+        }
+        return false;
+      },
+      exitMessage: 'Press back again to exit SISTecChalo',
+      child: Scaffold(
+        backgroundColor: AppColors.bg,
+        body: Stack(
+          children: [
+            IndexedStack(
+              index: _currentIndex,
+              children: [
+                _isLoading
+                    ? Container(
+                        color: AppColors.bg,
+                        child: Center(child: _buildShimmerLoader()),
+                      )
+                    : _buildTrackingTab(),
+                _buildAlertsTab(),          // has own Consumer<BusStore>
+                _buildProfileTab(auth),     // has own Consumer<AuthService>
+              ],
+            ),
+            if (_showDebugOverlay) _buildDebugOverlay(busStore),
+            if (_currentIndex == 0) _buildFloatingHeader(busStore),
+          ],
+        ),
+        bottomNavigationBar: _buildModernBottomNav(), // Selector<BusStore,int>
       ),
-      bottomNavigationBar: _buildModernBottomNav(), // Selector<BusStore,int>
     );
   }
 
@@ -602,172 +645,207 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
       left: 16,
       right: 16,
       child: RepaintBoundary(
-        child: Container(
-          constraints: const BoxConstraints(minHeight: 58),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.35),
-                blurRadius: 18,
-                offset: const Offset(0, 6),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(24),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+            child: Container(
+              constraints: const BoxConstraints(minHeight: 56),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppColors.surface.withValues(alpha: 0.82),
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.45),
+                    blurRadius: 22,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
               ),
-            ],
-          ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                const SizedBox(width: 4),
-                Expanded(
-                  child: GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      _tapCounter++;
-                      if (_tapCounter >= 3) {
-                        setState(() => _showDebugOverlay = !_showDebugOverlay);
-                        _tapCounter = 0;
-                      }
-                      Future.delayed(1.seconds, () => _tapCounter = 0);
-                    },
-                    child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'SISTEC SHUTTLE',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.textMuted,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                          height: 1.1,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Interactive Route Title and Live Status Indicator
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        _showRouteSelection();
+                      },
+                      child: Row(
                         children: [
-                          ValueListenableBuilder<DateTime?>(
-                            valueListenable: socketService.lastDataReceived,
-                            builder: (context, lastPacket, _) {
-                              final isRecent = lastPacket != null &&
-                                  DateTime.now().difference(lastPacket).inSeconds < 15;
-                              return Container(
-                                width: 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
-                                  shape: BoxShape.circle,
-                                ),
-                              );
-                            },
-                          ),
-                          const SizedBox(width: 6),
-                          Flexible(
-                            child: Text(
-                              _selectedRoute?.name ?? 'Tap ⇄ to select route',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: _selectedRoute != null ? Colors.white : AppColors.textMuted,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                height: 1.2,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                              maxLines: 1,
+                          Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withValues(alpha: 0.18),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: AppColors.primary.withValues(alpha: 0.35)),
                             ),
+                            child: const Icon(
+                              Icons.alt_route_rounded,
+                              color: AppColors.primaryLight,
+                              size: 17,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Row(
+                                  children: [
+                                    Text(
+                                      'SISTEC SHUTTLE',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: AppColors.textMuted,
+                                        fontSize: 9.0,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: 1.2,
+                                        height: 1.1,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    ValueListenableBuilder<DateTime?>(
+                                      valueListenable: socketService.lastDataReceived,
+                                      builder: (context, lastPacket, _) {
+                                        final isRecent = lastPacket != null &&
+                                            DateTime.now().difference(lastPacket).inSeconds < 15;
+                                        return Container(
+                                          width: 6,
+                                          height: 6,
+                                          decoration: BoxDecoration(
+                                            color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  _selectedRoute?.name ?? 'Tap to select route',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: _selectedRoute != null ? Colors.white : AppColors.textMuted,
+                                    fontSize: 13.5,
+                                    fontWeight: FontWeight.w700,
+                                    height: 1.2,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          const Icon(
+                            Icons.unfold_more_rounded,
+                            color: AppColors.textMuted,
+                            size: 17,
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: _showRouteSelection,
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.10)),
                     ),
-                    child: const Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 20),
                   ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onLongPress: () => _triggerSOS(auth),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Row(
-                          children: [
-                            const Icon(Icons.emergency_rounded, color: Colors.white, size: 18),
-                            const SizedBox(width: 10),
-                            Text(
-                              'Hold down to send Emergency SOS',
-                              style: GoogleFonts.plusJakartaSans(
-                                color: Colors.white,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 13,
+                  const SizedBox(width: 8),
+
+                  // Route Switcher Quick Action
+                  GestureDetector(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _showRouteSelection();
+                    },
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.07),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
+                      ),
+                      child: const Icon(Icons.swap_horiz_rounded, color: Colors.white, size: 20),
+                    ),
+                  ),
+
+                  const SizedBox(width: 8),
+
+                  // Emergency SOS Button (Always accessible)
+                  GestureDetector(
+                    onLongPress: () => _triggerSOS(auth),
+                    onTap: () {
+                      HapticFeedback.mediumImpact();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Row(
+                            children: [
+                              const Icon(Icons.emergency_rounded, color: Colors.white, size: 18),
+                              const SizedBox(width: 10),
+                              Text(
+                                'Hold down to send Emergency SOS',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
+                          backgroundColor: AppColors.danger,
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         ),
-                        backgroundColor: AppColors.danger,
-                        behavior: SnackBarBehavior.floating,
-                        duration: const Duration(seconds: 2),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      );
+                    },
+                    child: Container(
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: AppColors.danger.withValues(alpha: 0.14),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.danger.withValues(alpha: 0.35)),
                       ),
-                    );
-                  },
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: AppColors.danger.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: AppColors.danger.withValues(alpha: 0.25)),
-                    ),
-                    child: const Icon(Icons.emergency_rounded, color: AppColors.danger, size: 19),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => _handleLogout(context, auth),
-                  child: Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: auth.isGuest
-                          ? const Color(0xFF3B82F6).withValues(alpha: 0.15)
-                          : const Color(0xFFEF4444).withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: auth.isGuest
-                            ? const Color(0xFF3B82F6).withValues(alpha: 0.35)
-                            : const Color(0xFFEF4444).withValues(alpha: 0.25),
-                      ),
-                    ),
-                    child: Icon(
-                      auth.isGuest ? Icons.login_rounded : Icons.logout_rounded,
-                      color: auth.isGuest ? const Color(0xFF60A5FA) : const Color(0xFFF87171),
-                      size: 18,
+                      child: const Icon(Icons.emergency_rounded, color: AppColors.danger, size: 19),
                     ),
                   ),
-                ),
-              ],
+
+                  // If Guest: Provide Sign-In Shortcut
+                  if (auth.isGuest) ...[
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => _handleLogout(context, auth),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppColors.primary.withValues(alpha: 0.4)),
+                        ),
+                        child: Text(
+                          'Sign In',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: AppColors.primaryLight,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ),
           ),
-        ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.1),
-      );
-    }
+        ),
+      ).animate().fadeIn(duration: 300.ms).slideY(begin: -0.1),
+    );
+  }
 
   Widget _buildTrackingTab() {
     // Listen to AuthService so that if the user changes their pickup stop
@@ -849,10 +927,11 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
               _buildGuestLiveSwitchBanner(store),
             DraggableScrollableSheet(
               controller: _sheetController,
-              initialChildSize: 0.28,
-              minChildSize: 0.14,
-              maxChildSize: 0.82,
+              initialChildSize: 0.35,
+              minChildSize: 0.16,
+              maxChildSize: 0.88,
               snap: true,
+              snapSizes: const [0.16, 0.35, 0.88],
               builder: (context, scrollController) => Container(
                 decoration: BoxDecoration(
                   color: AppColors.bgSecondary,
@@ -917,9 +996,45 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                       _buildActionCard('Select Route', 'Synchronize with your assigned commute line', Icons.alt_route_rounded, _showRouteSelection),
                     ] else ...[
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
+                          // Bus Line Badge
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: const Color(0xFF2563EB).withValues(alpha: 0.35),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.directions_bus_rounded, size: 14, color: Colors.white),
+                                const SizedBox(width: 5),
+                                Text(
+                                  _getAssignedBusLabel(store),
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w900,
+                                    color: Colors.white,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          // Route Title & Schedule Metadata
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -927,136 +1042,30 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                                 Text(
                                   _selectedRoute!.name,
                                   style: GoogleFonts.plusJakartaSans(
-                                    fontSize: 18,
+                                    fontSize: 16.5,
                                     fontWeight: FontWeight.w800,
                                     color: Colors.white,
-                                    letterSpacing: -0.2,
-                                    height: 1.25,
+                                    letterSpacing: -0.3,
+                                    height: 1.2,
                                   ),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.visible,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(height: 8),
-                                Wrap(
-                                  spacing: 8,
-                                  runSpacing: 6,
-                                  crossAxisAlignment: WrapCrossAlignment.center,
-                                  children: [
-                                    if (currentActiveBus != null && currentActiveBus.isBroadcastingLive) ...[
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.accentGreen.withValues(alpha: 0.14),
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Container(
-                                              width: 6,
-                                              height: 6,
-                                              decoration: const BoxDecoration(
-                                                color: AppColors.accentGreen,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.3, 1.3)),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              'LIVE',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.accentGreen,
-                                                letterSpacing: 1.0,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ] else ...[
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                        decoration: BoxDecoration(
-                                          color: AppColors.surfaceLight,
-                                          borderRadius: BorderRadius.circular(20),
-                                          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            Container(
-                                              width: 6,
-                                              height: 6,
-                                              decoration: const BoxDecoration(
-                                                color: AppColors.textMuted,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 6),
-                                            Text(
-                                              'OFFLINE',
-                                              style: GoogleFonts.plusJakartaSans(
-                                                fontSize: 9.5,
-                                                fontWeight: FontWeight.w800,
-                                                color: AppColors.textMuted,
-                                                letterSpacing: 1.0,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                    // Manager Assigned Bus Number Pill
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceLight,
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
-                                      ),
-                                      child: Text(
-                                        _getAssignedBusLabel(store),
-                                        style: GoogleFonts.plusJakartaSans(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w800,
-                                          color: AppColors.primaryLight,
-                                          letterSpacing: 0.8,
-                                        ),
-                                      ),
-                                    ),
-                                    // Current Day & Shift Tag
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(
-                                        color: AppColors.surfaceLight,
-                                        borderRadius: BorderRadius.circular(20),
-                                        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          const Icon(Icons.schedule_rounded, color: AppColors.textMuted, size: 11),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            '${_getCurrentDayLabel()} • ${_getAssignedShiftLabel()}',
-                                            style: GoogleFonts.plusJakartaSans(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w700,
-                                              color: AppColors.textSecondary,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
+                                const SizedBox(height: 3),
+                                Text(
+                                  '${_getAssignedShiftLabel()} • ${_selectedRoute!.stops.length} Stops',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textMuted,
+                                    letterSpacing: 0.2,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(width: 12),
-                          // Realtime telemetry status pill
+                          const SizedBox(width: 8),
+                          // Live vs Scheduled Single Status Pill
                           ValueListenableBuilder<DateTime?>(
                             valueListenable: Provider.of<SocketService>(context, listen: false).lastDataReceived,
                             builder: (context, lastPacket, _) {
@@ -1066,25 +1075,32 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                                   DateTime.now().difference(lastPacket).inSeconds < 25;
                               return AnimatedContainer(
                                 duration: const Duration(milliseconds: 300),
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
                                 decoration: BoxDecoration(
-                                  color: isRecent ? AppColors.accentGreen.withValues(alpha: 0.14) : AppColors.surfaceLight,
-                                  borderRadius: BorderRadius.circular(14),
+                                  color: isRecent 
+                                      ? AppColors.accentGreen.withValues(alpha: 0.15) 
+                                      : Colors.white.withValues(alpha: 0.05),
+                                  borderRadius: BorderRadius.circular(20),
                                   border: Border.all(
-                                    color: isRecent ? AppColors.accentGreen.withValues(alpha: 0.3) : Colors.white.withValues(alpha: 0.06),
+                                    color: isRecent 
+                                        ? AppColors.accentGreen.withValues(alpha: 0.4) 
+                                        : Colors.white.withValues(alpha: 0.08),
                                   ),
                                 ),
                                 child: Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Icon(
-                                      isRecent ? Icons.wifi_tethering_rounded : Icons.wifi_tethering_off_rounded,
-                                      color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
-                                      size: 13,
+                                    Container(
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
+                                        shape: BoxShape.circle,
+                                      ),
                                     ),
                                     const SizedBox(width: 5),
                                     Text(
-                                      isRecent ? 'CONNECTED' : 'STANDBY',
+                                      isRecent ? 'LIVE' : 'SCHEDULED',
                                       style: GoogleFonts.plusJakartaSans(
                                         color: isRecent ? AppColors.accentGreen : AppColors.textMuted,
                                         fontSize: 9.5,
@@ -1245,22 +1261,19 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
   }
 
   String _getAssignedShiftLabel() {
+    final isLive = _activeBus != null && _activeBus!.isBroadcastingLive;
     if (_selectedShiftFilter != null) {
       return TimetableResolver.resolveShiftLabel(
         explicitShift: _selectedShiftFilter,
         routeName: _selectedRoute?.name,
+        direction: _shiftTimelineDirection,
       );
     }
-    if (_activeBus != null) {
-      return _activeBus!.shiftLabel;
-    }
-    if (_selectedRoute != null) {
-      return TimetableResolver.resolveShiftLabel(
-        routeName: _selectedRoute!.name,
-        currentHour: DateTime.now().hour,
-      );
-    }
-    return TimetableResolver.resolveShiftLabel();
+    return TimetableResolver.resolveRealtimeShiftLabel(
+      routeName: _selectedRoute?.name,
+      direction: _shiftTimelineDirection,
+      isLive: isLive,
+    );
   }
 
   String _getCurrentDayLabel() {
@@ -1551,13 +1564,15 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
             orElse: () => <String, dynamic>{},
           );
           if (stop.isNotEmpty && stop['lat'] != null && stop['lng'] != null) {
-            final distM = Geolocator.distanceBetween(
+            // Use road-distance estimation (1.5× Haversine for Indian mixed roads)
+            final straightDistM = Geolocator.distanceBetween(
               bus.currentLat, bus.currentLng,
               (stop['lat'] as num).toDouble(), (stop['lng'] as num).toDouble(),
             );
+            final roadDistM = straightDistM * 1.5;
             final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
             final speedMps = (speedKmh * 1000) / 3600;
-            mins = math.max(1, (distM / speedMps / 60).round());
+            mins = math.max(1, (roadDistM / speedMps / 60).round());
           }
         }
       } else {
@@ -1570,13 +1585,14 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
         } else if (bus.nextStop != null && bus.nextStop!.isNotEmpty) {
           targetStopLabel = bus.nextStop!.toUpperCase();
           if (bus.distanceToNextStopMeters != null && bus.distanceToNextStopMeters! > 0) {
+            // distanceToNextStopMeters is already road-adjusted from driver broadcast
             final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
             final speedMps = (speedKmh * 1000) / 3600;
             mins = math.max(1, (bus.distanceToNextStopMeters! / speedMps / 60).round());
           }
         }
 
-        // If still not resolved, determine from route stops
+        // If still not resolved, determine from route stops with road factor
         if (mins == null && _selectedRoute != null && _selectedRoute!.stops.isNotEmpty) {
           final unreached = _selectedRoute!.stops.where((s) {
             final sName = (s['name'] ?? '').toString();
@@ -1585,13 +1601,15 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
           final candidateStop = unreached.isNotEmpty ? unreached.first : _selectedRoute!.stops.first;
           targetStopLabel = (candidateStop['name'] ?? 'CAMPUS TERMINAL').toString().toUpperCase();
           if (candidateStop['lat'] != null && candidateStop['lng'] != null) {
-            final distM = Geolocator.distanceBetween(
+            // Road-distance estimation (1.5× for Indian mixed roads)
+            final straightDistM = Geolocator.distanceBetween(
               bus.currentLat, bus.currentLng,
               (candidateStop['lat'] as num).toDouble(), (candidateStop['lng'] as num).toDouble(),
             );
+            final roadDistM = straightDistM * 1.5;
             final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
             final speedMps = (speedKmh * 1000) / 3600;
-            mins = math.max(1, (distM / speedMps / 60).round());
+            mins = math.max(1, (roadDistM / speedMps / 60).round());
           }
         }
       }
@@ -1626,220 +1644,254 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
           color: isLive ? AppColors.primary.withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.08),
           width: isLive ? 1.5 : 1.0,
         ),
-        boxShadow: AppShadows.card,
+        boxShadow: [
+          BoxShadow(
+            color: (isLive ? AppColors.primary : Colors.black).withValues(alpha: isLive ? 0.15 : 0.4),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Header: Status chip + Manager Bus Pill + Shift + Refresh action
+          // Main Hero Metrics Section
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 0),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 14),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 Expanded(
-                  child: Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    crossAxisAlignment: WrapCrossAlignment.center,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (isLive) ...[
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              etaDisplay,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontSize: 42,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: -1.5,
+                                height: 1.0,
+                              ),
+                            ),
+                            if (etaUnit.isNotEmpty) ...[
+                              const SizedBox(width: 6),
+                              Text(
+                                etaUnit,
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.primaryLight,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              decoration: const BoxDecoration(
+                                color: AppColors.accentGreen,
+                                shape: BoxShape.circle,
+                              ),
+                            ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.3, 1.3)),
+                            const SizedBox(width: 6),
+                            Flexible(
+                              child: Text(
+                                'Approaching ${targetStopLabel.toLowerCase()}',
+                                style: GoogleFonts.plusJakartaSans(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.accentGreen,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(alpha: 0.12),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.schedule_rounded,
+                                color: AppColors.primaryLight,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Builder(
+                                builder: (context) {
+                                  final shifts = TimetableResolver.getShiftsForRoute(_selectedRoute?.name);
+                                  final entry = shifts.isNotEmpty ? shifts.first : TimetableResolver.masterFleet[1];
+                                  final isDropoffDir = _shiftTimelineDirection == 'dropoff';
+                                  final rawDepTime = isDropoffDir ? entry.returnDeparture : entry.morningDeparture;
+                                  final depTime = rawDepTime.startsWith('0') ? rawDepTime.substring(1) : rawDepTime;
+                                  final depTitle = isDropoffDir ? 'Return Departure • $depTime' : 'Morning Departure • $depTime';
+                                  final depSub = isDropoffDir 
+                                      ? 'Campus departure scheduled at $depTime'
+                                      : 'Morning pickup scheduled at $depTime';
+                                  return Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        depTitle,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 14.5,
+                                          fontWeight: FontWeight.w800,
+                                          color: Colors.white,
+                                          letterSpacing: -0.3,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        depSub,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w500,
+                                          color: AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                // Right Side Widget: Speedometer or Refresh
+                if (isLive) ...[
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
-                          color: isLive 
-                              ? AppColors.accentGreen.withValues(alpha: 0.12)
-                              : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(20),
-                          border: Border.all(
-                            color: isLive ? AppColors.accentGreen.withValues(alpha: 0.35) : Colors.white.withValues(alpha: 0.08),
-                          ),
+                          color: AppColors.bgSecondary,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: isLive ? AppColors.accentGreen : AppColors.textMuted,
-                                shape: BoxShape.circle,
+                            const Icon(Icons.speed_rounded, color: AppColors.accent, size: 15),
+                            const SizedBox(width: 6),
+                            Text(
+                              '${bus.speed.toInt()}',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w900,
                               ),
                             ),
-                            const SizedBox(width: 5),
+                            const SizedBox(width: 3),
                             Text(
-                              isLive ? 'LIVE' : 'SCHEDULED',
+                              'KM/H',
                               style: GoogleFonts.plusJakartaSans(
-                                fontSize: 9,
+                                color: AppColors.textMuted,
+                                fontSize: 9.5,
                                 fontWeight: FontWeight.w800,
-                                color: isLive ? AppColors.accentGreen : AppColors.textMuted,
-                                letterSpacing: 0.8,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      GestureDetector(
-                        onTap: () => _showShiftAllocationModal(busStore),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                          decoration: BoxDecoration(
-                            color: AppColors.surfaceLight,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: AppColors.primary.withValues(alpha: 0.3)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(Icons.directions_bus_rounded, size: 11, color: isLive ? AppColors.accentGreen : AppColors.primaryLight),
-                              const SizedBox(width: 4),
-                              Text(
-                                _getAssignedBusLabel(busStore),
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                  color: isLive ? AppColors.accentGreen : AppColors.primaryLight,
-                                  letterSpacing: 0.5,
+                      if (hasPickup) ...[
+                        const SizedBox(height: 6),
+                        GestureDetector(
+                          onTap: () {
+                            HapticFeedback.lightImpact();
+                            _fetchETA();
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.refresh_rounded, color: AppColors.primaryLight, size: 12),
+                                const SizedBox(width: 4),
+                                Text(
+                                  'Update ETA',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: AppColors.primaryLight,
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                      GestureDetector(
-                        onTap: () => _showShiftAllocationModal(busStore),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-                          decoration: BoxDecoration(
-                            color: AppColors.bgSecondary,
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.schedule_rounded, size: 10, color: AppColors.textMuted),
-                              const SizedBox(width: 3),
-                              Text(
-                                '${_getCurrentDayLabel()} • ${_getAssignedShiftLabel()}',
-                                style: GoogleFonts.plusJakartaSans(
-                                  fontSize: 8.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textSecondary,
-                                  letterSpacing: 0.3,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                      ],
                     ],
                   ),
-                ),
-                if (hasPickup && isLive)
-                  GestureDetector(
-                    onTap: () {
-                      HapticFeedback.lightImpact();
-                      _fetchETA();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.refresh_rounded, color: AppColors.primaryLight, size: 16),
+                ] else ...[
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppColors.bgSecondary,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
                     ),
-                  ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 14),
-
-          // Main Hero Metrics: ETA Big Bold Typography + Speed Chip
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.baseline,
-              textBaseline: TextBaseline.alphabetic,
-              children: [
-                Text(
-                  etaDisplay,
-                  style: GoogleFonts.plusJakartaSans(
-                    fontSize: 42,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -1.5,
-                    height: 1.0,
-                  ),
-                ),
-                if (etaUnit.isNotEmpty) ...[
-                  const SizedBox(width: 6),
-                  Text(
-                    etaUnit,
-                    style: GoogleFonts.plusJakartaSans(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primaryLight,
-                      letterSpacing: 0.5,
+                    child: Text(
+                      'STANDBY',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.textMuted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                   ),
                 ],
-                const Spacer(),
-                // Velocity Chip
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                  decoration: BoxDecoration(
-                    color: AppColors.bgSecondary,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.speed_rounded, color: AppColors.accent, size: 15),
-                      const SizedBox(width: 6),
-                      Text(
-                        isLive ? '${bus.speed.toInt()}' : '--',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        'KM/H',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: AppColors.textMuted,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ],
             ),
           ),
 
-          const SizedBox(height: 12),
-
           // Assigned Stop Sub-Card inside Hero
           Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppColors.bgSecondary,
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
               ),
               child: Row(
                 children: [
                   Container(
-                    width: 30,
-                    height: 30,
+                    width: 34,
+                    height: 34,
                     decoration: BoxDecoration(
                       color: hasPickup 
                           ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))
@@ -1851,12 +1903,12 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                           ? (_shiftTimelineDirection == 'dropoff' ? Icons.departure_board_rounded : Icons.my_location_rounded) 
                           : (isLive ? Icons.near_me_rounded : Icons.location_on_rounded),
                       color: hasPickup 
-                          ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primary) 
+                          ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primaryLight) 
                           : (isLive ? AppColors.accentGreen : AppColors.primaryLight),
-                      size: 15,
+                      size: 17,
                     ),
                   ),
-                  const SizedBox(width: 10),
+                  const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1865,17 +1917,17 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                           targetStopHeader,
                           style: GoogleFonts.plusJakartaSans(
                             color: (isLive && !hasPickup) ? AppColors.accentGreen : AppColors.textMuted,
-                            fontSize: 8.5,
+                            fontSize: 9.0,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
                           ),
                         ),
-                        const SizedBox(height: 1),
+                        const SizedBox(height: 2),
                         Text(
                           targetStopLabel,
                           style: GoogleFonts.plusJakartaSans(
                             color: Colors.white,
-                            fontSize: 12.5,
+                            fontSize: 13.5,
                             fontWeight: FontWeight.w700,
                           ),
                           maxLines: 1,
@@ -1886,35 +1938,38 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                   ),
                   if (hasPickup)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primary).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(6),
+                        color: (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primary).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primaryLight).withValues(alpha: 0.3),
+                        ),
                       ),
                       child: Text(
                         _shiftTimelineDirection == 'dropoff' ? 'MY DROP-OFF' : 'MY STOP',
                         style: GoogleFonts.plusJakartaSans(
                           color: _shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primaryLight,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w900,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
                         ),
                       ),
                     )
                   else if (isLive && bus.etas.isNotEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: AppColors.accentGreen.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
                       ),
                       child: Text(
                         'LIVE',
                         style: GoogleFonts.plusJakartaSans(
                           color: AppColors.accentGreen,
-                          fontSize: 8,
-                          fontWeight: FontWeight.w900,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -1922,6 +1977,92 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                 ],
               ),
             ),
+          ),
+          // Official Vehicle & Driver Information Bar from Institutional Roster
+          Builder(
+            builder: (context) {
+              final busDetail = TimetableResolver.resolveBusDetails(
+                routeName: _selectedRoute?.name,
+                busNo: bus?.busNumber,
+              );
+              if (busDetail == null) return const SizedBox.shrink();
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.03),
+                  borderRadius: const BorderRadius.vertical(bottom: Radius.circular(24)),
+                  border: Border(top: BorderSide(color: Colors.white.withValues(alpha: 0.05))),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(5),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(Icons.directions_bus_rounded, size: 13, color: AppColors.primaryLight),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      busDetail.vehicleNo,
+                      style: GoogleFonts.plusJakartaSans(
+                        color: Colors.white,
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 4,
+                      height: 4,
+                      decoration: const BoxDecoration(color: Color(0xFF64748B), shape: BoxShape.circle),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Driver: ${busDetail.driverName}',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: AppColors.textMuted,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (busDetail.driverPhone.isNotEmpty)
+                      GestureDetector(
+                        onTap: () => _makePhoneCall(busDetail.driverPhone),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentGreen.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.phone_rounded, size: 10, color: AppColors.accentGreen),
+                              const SizedBox(width: 4),
+                              Text(
+                                'CALL',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.accentGreen,
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -1934,7 +2075,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
         Expanded(
           child: _buildQuickAction(
             icon: Icons.calendar_month_rounded,
-            label: 'SCHEDULE',
+            label: 'Schedule',
             color: AppColors.primary,
             onTap: _selectedRoute != null
                 ? () => Navigator.push(context, MaterialPageRoute(
@@ -1942,22 +2083,31 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                 : null,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         Expanded(
           child: _buildQuickAction(
             icon: _delaySubscribed
                 ? Icons.notifications_active_rounded
                 : Icons.notifications_none_rounded,
-            label: _delaySubscribed ? 'SUBSCRIBED' : 'DELAY ALERT',
+            label: _delaySubscribed ? 'Subscribed' : 'Alerts',
             color: _delaySubscribed ? AppColors.accentGreen : AppColors.warning,
             onTap: _delaySubscribed || _selectedRoute == null ? null : _subscribeToDelay,
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
+        Expanded(
+          child: _buildQuickAction(
+            icon: Icons.headset_mic_rounded,
+            label: 'Helpline',
+            color: AppColors.accent,
+            onTap: () => _showTransportHelpSheet(context),
+          ),
+        ),
+        const SizedBox(width: 8),
         Expanded(
           child: _buildQuickAction(
             icon: Icons.report_problem_rounded,
-            label: 'REPORT',
+            label: 'Report',
             color: AppColors.danger,
             onTap: () => Navigator.push(context, MaterialPageRoute(
                   builder: (_) => ComplaintScreen(
@@ -1967,6 +2117,222 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
           ),
         ),
       ],
+    );
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final clean = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (clean.isEmpty) return;
+    final uri = Uri.parse('tel:$clean');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      debugPrint('Could not initiate call to $clean: $e');
+    }
+  }
+
+  void _showTransportHelpSheet(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    final busDetail = TimetableResolver.resolveBusDetails(
+      routeName: _selectedRoute?.name,
+      busNo: _activeBus?.busNumber,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgSecondary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.headset_mic_rounded, color: AppColors.primaryLight, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SISTec Transport Helpdesk',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Ratibad Campus • 09:00 AM Shift Roster',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                if (busDetail != null) ...[
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryLight.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.person_rounded, color: AppColors.primaryLight, size: 18),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                busDetail.driverName,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                'Driver • ${busDetail.displayBusLabel} (${busDetail.vehicleNo})',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (busDetail.driverPhone.isNotEmpty)
+                          ElevatedButton.icon(
+                            onPressed: () => _makePhoneCall(busDetail.driverPhone),
+                            icon: const Icon(Icons.phone_rounded, size: 14),
+                            label: const Text('Call'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentGreen,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                              textStyle: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+                Text(
+                  'COLLEGE TRANSPORT INCHARGES',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...TimetableResolver.transportIncharges.map((incharge) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.shield_outlined, color: AppColors.accent, size: 18),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                incharge.name,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                incharge.designation,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () => _makePhoneCall(incharge.phone),
+                          icon: const Icon(Icons.phone_rounded, size: 14),
+                          label: const Text('Call'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            textStyle: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1984,46 +2350,48 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
           onTap();
         }
       },
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 8),
         decoration: BoxDecoration(
           color: disabled
               ? Colors.white.withValues(alpha: 0.02)
-              : AppColors.surface,
-          borderRadius: BorderRadius.circular(16),
+              : color.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(18),
           border: Border.all(
             color: disabled
                 ? Colors.white.withValues(alpha: 0.03)
-                : Colors.white.withValues(alpha: 0.06),
+                : color.withValues(alpha: 0.20),
+            width: 1.0,
           ),
         ),
         child: Column(
           children: [
             Container(
-              width: 32,
-              height: 32,
+              width: 36,
+              height: 36,
               decoration: BoxDecoration(
                 color: disabled
                     ? Colors.white.withValues(alpha: 0.04)
-                    : color.withValues(alpha: 0.12),
-                shape: BoxShape.circle,
+                    : color.withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(
                 icon,
                 color: disabled ? AppColors.textDisabled : color,
-                size: 16,
+                size: 18,
               ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             FittedBox(
               fit: BoxFit.scaleDown,
               child: Text(
                 label,
                 style: GoogleFonts.plusJakartaSans(
-                  color: disabled ? AppColors.textDisabled : AppColors.textSecondary,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
+                  color: disabled ? AppColors.textDisabled : Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.2,
                 ),
                 maxLines: 1,
               ),
@@ -3403,7 +3771,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                 child: Builder(
                   builder: (context) {
                     final busStore = Provider.of<BusStore>(context, listen: false);
-                    final filteredRoutes = _routes.where((r) => r.name.toLowerCase().contains(searchQuery.toLowerCase())).toList();
+                    final filteredRoutes = _routes.where((r) => r.matches(searchQuery)).toList();
                     filteredRoutes.sort((a, b) {
                       final aLive = busStore.allBuses.any((x) =>
                         x.status.toLowerCase().trim() != 'offline' &&
@@ -3461,27 +3829,59 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                                 if (context.mounted) Navigator.pop(context);
                               },
                               leading: Container(
-                                width: 38,
-                                height: 38,
+                                width: 44,
+                                height: 44,
                                 decoration: BoxDecoration(
                                   color: (isSel ? AppColors.primary : (hasLiveBus ? AppColors.accentGreen : AppColors.surfaceLight)).withValues(alpha: 0.15),
                                   borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: (isSel ? AppColors.primaryLight : (hasLiveBus ? AppColors.accentGreen : Colors.white.withValues(alpha: 0.1))),
+                                    width: 1.0,
+                                  ),
                                 ),
-                                child: Icon(
-                                  Icons.directions_bus_rounded,
-                                  color: isSel ? AppColors.primaryLight : (hasLiveBus ? AppColors.accentGreen : AppColors.textMuted),
-                                  size: 20,
+                                child: Center(
+                                  child: route.busNumber.isNotEmpty
+                                      ? Text(
+                                          route.busNumber.replaceAll('BUS ', '').replaceAll('Bus ', ''),
+                                          style: GoogleFonts.plusJakartaSans(
+                                            color: isSel ? AppColors.primaryLight : (hasLiveBus ? AppColors.accentGreen : Colors.white),
+                                            fontWeight: FontWeight.w900,
+                                            fontSize: 11,
+                                          ),
+                                        )
+                                      : Icon(
+                                          Icons.directions_bus_rounded,
+                                          color: isSel ? AppColors.primaryLight : (hasLiveBus ? AppColors.accentGreen : AppColors.textMuted),
+                                          size: 20,
+                                        ),
                                 ),
                               ),
                               title: Row(
                                 children: [
+                                  if (route.busNumber.isNotEmpty)
+                                    Container(
+                                      margin: const EdgeInsets.only(right: 6),
+                                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.primary.withValues(alpha: 0.2),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                      child: Text(
+                                        route.busNumber,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: AppColors.primaryLight,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ),
                                   Expanded(
                                     child: Text(
-                                      route.name,
+                                      route.corridorName,
                                       style: GoogleFonts.plusJakartaSans(
                                         color: Colors.white,
                                         fontWeight: isSel ? FontWeight.w800 : FontWeight.w600,
-                                        fontSize: 14,
+                                        fontSize: 13.5,
                                       ),
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
@@ -3490,7 +3890,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                                 ],
                               ),
                               subtitle: Text(
-                                '${route.stops.length} STOPS • BHOPAL TRANSIT',
+                                '${route.stops.length} STOPS • 09:00 AM ROSTER',
                                 style: GoogleFonts.plusJakartaSans(
                                   color: isSel ? AppColors.primaryLight : AppColors.textMuted,
                                   fontWeight: FontWeight.w600,
@@ -3560,7 +3960,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     }
 
     final auth = Provider.of<AuthService>(context, listen: false);
-    final busStore = Provider.of<BusStore>(context);
+    final busStore = Provider.of<BusStore>(context, listen: false);
     final userPickup = auth.currentUser?.pickupPoint?.toLowerCase().trim() ?? '';
     final isDropoff = _shiftTimelineDirection == 'dropoff';
 
@@ -3736,66 +4136,84 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Header & Shift Switcher
+        // ── Section Header ──
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
               children: [
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    isDropoff ? Icons.departure_board_rounded : Icons.route_rounded,
-                    color: isDropoff ? AppColors.accent : AppColors.primaryLight,
-                    size: 14,
+                Text(
+                  'Route & Stops',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: -0.3,
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  'ROUTE TIMELINE',
-                  style: GoogleFonts.plusJakartaSans(
-                    color: AppColors.textMuted,
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceLight,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                  ),
+                  child: Text(
+                    '$totalStops stops',
+                    style: GoogleFonts.plusJakartaSans(
+                      color: AppColors.textMuted,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ),
               ],
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceLight,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-              ),
-              child: Text(
-                '$totalStops STOPS',
-                style: GoogleFonts.plusJakartaSans(
-                  color: isDropoff ? AppColors.accent : AppColors.primaryLight,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
+            if (isBusLive)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppColors.accentGreen.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.accentGreen.withValues(alpha: 0.3)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 6,
+                      height: 6,
+                      decoration: const BoxDecoration(
+                        color: AppColors.accentGreen,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 5),
+                    Text(
+                      'LIVE PROGRESS',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: AppColors.accentGreen,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
           ],
         ),
-        
-        const SizedBox(height: 14),
 
-        // Interactive Shift Direction Segmented Toggle Bar
+        const SizedBox(height: 12),
+
+        // ── iOS Style Segmented Shift Pill Switcher ──
         Container(
-          padding: const EdgeInsets.all(4),
+          padding: const EdgeInsets.all(3),
           decoration: BoxDecoration(
-            color: AppColors.bgSecondary,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Row(
             children: [
@@ -3807,14 +4225,22 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                     setState(() => _shiftTimelineDirection = 'pickup');
                   },
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
-                      color: !isDropoff ? AppColors.primary.withValues(alpha: 0.20) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+                      color: !isDropoff ? AppColors.surface : Colors.transparent,
+                      borderRadius: BorderRadius.circular(11),
                       border: !isDropoff 
-                          ? Border.all(color: AppColors.primary.withValues(alpha: 0.40))
+                          ? Border.all(color: AppColors.primaryLight.withValues(alpha: 0.25))
                           : null,
+                      boxShadow: !isDropoff ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ] : null,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -3830,20 +4256,19 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              'MORNING SHIFT',
+                              'Morning Shift',
                               style: GoogleFonts.plusJakartaSans(
                                 color: !isDropoff ? Colors.white : AppColors.textMuted,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
+                                fontSize: 11,
+                                fontWeight: !isDropoff ? FontWeight.w800 : FontWeight.w600,
                               ),
                             ),
                             Text(
-                              'Stops ➔ Campus',
+                              'To Campus',
                               style: GoogleFonts.plusJakartaSans(
                                 color: !isDropoff ? AppColors.primaryLight : AppColors.textDisabled,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
@@ -3856,7 +4281,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
 
               const SizedBox(width: 4),
 
-              // 2nd Shift Tab (Campus -> Stops)
+              // Return / Afternoon Shift Tab
               Expanded(
                 child: GestureDetector(
                   onTap: () {
@@ -3864,14 +4289,22 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                     setState(() => _shiftTimelineDirection = 'dropoff');
                   },
                   child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 250),
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOutCubic,
                     padding: const EdgeInsets.symmetric(vertical: 8),
                     decoration: BoxDecoration(
-                      color: isDropoff ? AppColors.accent.withValues(alpha: 0.20) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
+                      color: isDropoff ? AppColors.surface : Colors.transparent,
+                      borderRadius: BorderRadius.circular(11),
                       border: isDropoff 
-                          ? Border.all(color: AppColors.accent.withValues(alpha: 0.45))
+                          ? Border.all(color: AppColors.accent.withValues(alpha: 0.35))
                           : null,
+                      boxShadow: isDropoff ? [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.35),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ] : null,
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -3887,20 +4320,19 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Text(
-                              '2ND SHIFT / RETURN',
+                              'Return Shift',
                               style: GoogleFonts.plusJakartaSans(
                                 color: isDropoff ? Colors.white : AppColors.textMuted,
-                                fontSize: 10,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.5,
+                                fontSize: 11,
+                                fontWeight: isDropoff ? FontWeight.w800 : FontWeight.w600,
                               ),
                             ),
                             Text(
-                              'Campus ➔ Stops',
+                              'To City / Stops',
                               style: GoogleFonts.plusJakartaSans(
                                 color: isDropoff ? AppColors.accent : AppColors.textDisabled,
-                                fontSize: 8,
-                                fontWeight: FontWeight.w700,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w600,
                               ),
                             ),
                           ],
@@ -3914,34 +4346,35 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
           ),
         ),
 
-        const SizedBox(height: 12),
-
-        // Direction Context Banner
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: (isDropoff ? AppColors.accent : AppColors.primary).withValues(alpha: 0.2),
-            ),
-          ),
+        // Elegant Direction Sub-Header Breadcrumb
+        Padding(
+          padding: const EdgeInsets.only(top: 10, bottom: 12),
           child: Row(
             children: [
               Icon(
-                isDropoff ? Icons.south_west_rounded : Icons.north_east_rounded,
-                size: 14,
+                isDropoff ? Icons.flight_takeoff_rounded : Icons.explore_rounded,
+                size: 13,
                 color: isDropoff ? AppColors.accent : AppColors.primaryLight,
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: 6),
+              Text(
+                isDropoff ? 'Campus' : firstStopName,
+                style: GoogleFonts.plusJakartaSans(
+                  color: AppColors.textMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 6),
+                child: Icon(Icons.arrow_forward_rounded, size: 11, color: AppColors.textDisabled),
+              ),
               Expanded(
                 child: Text(
-                  isDropoff 
-                      ? 'Drop-off Trip: SISTec Campus ➔ $lastStopName'
-                      : 'Pickup Trip: $firstStopName ➔ SISTec Campus',
+                  isDropoff ? lastStopName : 'SISTec Campus',
                   style: GoogleFonts.plusJakartaSans(
-                    color: Colors.white,
-                    fontSize: 10.5,
+                    color: isDropoff ? AppColors.accent : AppColors.primaryLight,
+                    fontSize: 11,
                     fontWeight: FontWeight.w700,
                   ),
                   maxLines: 1,
@@ -3952,7 +4385,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
           ),
         ),
 
-        const SizedBox(height: 20),
+        const SizedBox(height: 6),
 
         // ── Vertical Stops Timeline ──────────────────────────────────
         ..._buildVerticalTimelineNodes(
@@ -4006,6 +4439,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
 
       final stop = displayedStops[index];
       final stopName = stop['name']?.toString() ?? 'Stop ${index + 1}';
+      final schedTime = TimetableResolver.getScheduledTimeForStop(_selectedRoute?.name, stopName);
       final isFirst = index == 0;
       final isLast = index == totalStops - 1;
       final isUserStop = userPickup.isNotEmpty &&
@@ -4078,7 +4512,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
               // Seamlessly retract bottom sheet so commuter sees the map zoom
               if (_sheetController.isAttached) {
                 _sheetController.animateTo(
-                  0.28,
+                  0.35,
                   duration: const Duration(milliseconds: 350),
                   curve: Curves.easeOutCubic,
                 );
@@ -4233,6 +4667,32 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                         ),
 
                         // Badges on Right
+                        if (schedTime != null) ...[
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3.5),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.schedule_rounded, size: 10, color: AppColors.primaryLight),
+                                const SizedBox(width: 3),
+                                Text(
+                                  schedTime,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                        ],
                         if (isUserStop) ...[
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -4376,7 +4836,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
         );
         if (_sheetController.isAttached) {
           _sheetController.animateTo(
-            0.28,
+            0.35,
             duration: const Duration(milliseconds: 350),
             curve: Curves.easeOutCubic,
           );

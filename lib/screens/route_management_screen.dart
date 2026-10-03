@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:file_picker/file_picker.dart';
 import '../services/api_service.dart';
 import '../theme/app_theme.dart';
 import 'route_edit_screen.dart';
+import 'timetable_preview_screen.dart';
 
 class RouteManagementScreen extends StatefulWidget {
   final bool nested;
@@ -17,6 +19,9 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
   final ApiService _apiService = ApiService();
   List<dynamic> _routes = [];
   bool _isLoading = true;
+  bool _isSyncing = false;
+  String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void initState() {
@@ -24,10 +29,16 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
     _fetchRoutes();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchRoutes() async {
     setState(() => _isLoading = true);
     try {
-      final response = await _apiService.get('routes', useCache: true);
+      final response = await _apiService.get('routes', useCache: false);
       if (mounted) {
         setState(() {
           _routes = response is List ? response : [];
@@ -52,6 +63,417 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
       if (clean.length == 8) return Color(int.parse('0x$clean'));
     } catch (_) {}
     return AppColors.primary;
+  }
+
+  String _extractBusNumber(String name) {
+    final match = RegExp(r'^(Bus\s*[^-\:]+)', caseSensitive: false).firstMatch(name);
+    if (match != null) return match.group(1)!.trim().toUpperCase();
+    return '';
+  }
+
+  String _extractCorridorName(String name) {
+    final match = RegExp(r'^Bus\s*[^-\:]+[\-\:]\s*(.+)$', caseSensitive: false).firstMatch(name);
+    if (match != null) return match.group(1)!.trim();
+    return name;
+  }
+
+  String _cleanPillLabel(String rawBusNo) {
+    if (rawBusNo.isEmpty) return '';
+    final clean = rawBusNo.trim();
+    // If it's a vehicle plate starting with "BUS MP", format as "MP04 PA 1886" without redundant "BUS "
+    if (clean.toUpperCase().startsWith('BUS MP')) {
+      return clean.substring(3).trim();
+    }
+    // If standard "BUS 01", format nicely as "Bus 01"
+    final m = RegExp(r'^BUS\s*(.+)$', caseSensitive: false).firstMatch(clean);
+    if (m != null) {
+      return 'Bus ${m.group(1)!.trim()}';
+    }
+    return clean;
+  }
+
+  String _formatBadgeLabel(String rawBusNo, int index) {
+    if (rawBusNo.isEmpty) return '#${index + 1}';
+    final clean = rawBusNo.replaceAll(RegExp(r'BUS\s*', caseSensitive: false), '').trim();
+    
+    // Standard 1 or 2 digit bus number e.g. "01", "2", "37"
+    final numMatch = RegExp(r'^0?(\d{1,2})$').firstMatch(clean);
+    if (numMatch != null) {
+      final n = int.tryParse(numMatch.group(1)!) ?? (index + 1);
+      return n < 10 ? '0$n' : '$n';
+    }
+
+    // Special codes like "T-4", "T-6"
+    if (RegExp(r'^T-?\d+$', caseSensitive: false).hasMatch(clean)) {
+      return clean.toUpperCase();
+    }
+    
+    // Vehicle plate with 4 digits e.g. "MP04 PA 1886" -> "1886"
+    final plateDigitsMatch = RegExp(r'(\d{4})$').firstMatch(clean);
+    if (plateDigitsMatch != null) {
+      return plateDigitsMatch.group(1)!;
+    }
+    
+    // Other numeric sequence (last 4 digits)
+    final digits = clean.replaceAll(RegExp(r'\D'), '');
+    if (digits.isNotEmpty) {
+      return digits.length > 4 ? digits.substring(digits.length - 4) : digits;
+    }
+    
+    return clean.length > 4 ? clean.substring(0, 4) : clean;
+  }
+
+  List<dynamic> get _filteredRoutes {
+    if (_searchQuery.trim().isEmpty) return _routes;
+    final q = _searchQuery.toLowerCase().trim();
+    final cleanQ = q.replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+    return _routes.where((r) {
+      final name = (r['name'] ?? '').toString().toLowerCase();
+      final bus = _extractBusNumber(name).toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      if (bus.isNotEmpty && (bus.contains(cleanQ) || cleanQ.contains(bus))) return true;
+      if (name.contains(q)) return true;
+      final stops = r['stops'] is List ? (r['stops'] as List) : [];
+      for (final s in stops) {
+        if ((s['name'] ?? '').toString().toLowerCase().contains(q)) return true;
+      }
+      return false;
+    }).toList();
+  }
+
+  Future<void> _handleUploadTimetable() async {
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xlsx', 'xls', 'csv', 'json', 'pdf'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes;
+      if (bytes == null || bytes.isEmpty) {
+        if (mounted) {
+          _showToast('Selected file could not be read.', isError: true);
+        }
+        return;
+      }
+
+      setState(() => _isSyncing = true);
+      _showSyncingModal(title: 'Parsing Timetable & Stops', subtitle: file.name);
+
+      final previewResponse = await _apiService.uploadMultipart(
+        'manager/preview-timetable',
+        bytes: bytes,
+        filename: file.name,
+      );
+
+      if (mounted) {
+        Navigator.pop(context); // Close syncing modal
+        setState(() => _isSyncing = false);
+
+        final routes = previewResponse is Map && previewResponse['routes'] is List
+            ? (previewResponse['routes'] as List)
+            : <dynamic>[];
+
+        if (routes.isEmpty) {
+          _showToast('No routes detected in the uploaded file.', isError: true);
+          return;
+        }
+
+        // Open Interactive Timetable Preview & Editor Modal
+        final applied = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (context) => TimetablePreviewScreen(
+              fileName: file.name,
+              initialRoutes: routes,
+            ),
+          ),
+        );
+
+        if (applied == true) {
+          await _fetchRoutes();
+          _showToast('All routes & buses successfully deployed live!');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        if (_isSyncing) Navigator.pop(context);
+        setState(() => _isSyncing = false);
+        _showToast('Preview generation failed: $e', isError: true);
+      }
+    }
+  }
+
+  Future<void> _handleSyncOfficialRoster() async {
+    // Show choice: Instant Deploy OR Preview & Customize First
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(width: 36, height: 4, decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(2))),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: AppColors.primary.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(10)),
+                    child: const Icon(Icons.sync_rounded, color: AppColors.primaryLight, size: 22),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Ratibad 9:00 AM Timetable', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 15, color: Colors.white)),
+                        Text('37 Official Buses & Corridors', style: GoogleFonts.plusJakartaSans(fontSize: 11.5, color: AppColors.primaryLight)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                tileColor: Colors.white.withValues(alpha: 0.04),
+                leading: const Icon(Icons.preview_rounded, color: AppColors.accent, size: 24),
+                title: Text('Preview & Customize First', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: Text('Review stops, timings, adjust bus numbers, and tweak details prior to live publishing', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 11)),
+                onTap: () => Navigator.pop(ctx, 'preview'),
+              ),
+              const SizedBox(height: 8),
+              ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 10),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                tileColor: Colors.white.withValues(alpha: 0.04),
+                leading: const Icon(Icons.bolt_rounded, color: AppColors.accentGreen, size: 24),
+                title: Text('1-Tap Instant Sync', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: Text('Directly synchronize all 37 official routes into MongoDB Atlas immediately', style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 11)),
+                onTap: () => Navigator.pop(ctx, 'instant'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (choice == null) return;
+
+    if (choice == 'preview') {
+      setState(() => _isSyncing = true);
+      _showSyncingModal(title: 'Loading Official Roster', subtitle: 'Ratibad 9:00 AM (37 Buses)');
+
+      try {
+        final previewResponse = await _apiService.post('manager/preview-timetable', {});
+        if (mounted) {
+          Navigator.pop(context);
+          setState(() => _isSyncing = false);
+
+          final routes = previewResponse is Map && previewResponse['routes'] is List
+              ? (previewResponse['routes'] as List)
+              : <dynamic>[];
+
+          final applied = await Navigator.push<bool>(
+            context,
+            MaterialPageRoute(
+              builder: (context) => TimetablePreviewScreen(
+                fileName: 'Ratibad 9:00 AM Institutional Timetable',
+                initialRoutes: routes,
+              ),
+            ),
+          );
+
+          if (applied == true) {
+            await _fetchRoutes();
+            _showToast('All 37 official routes deployed live!');
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          if (_isSyncing) Navigator.pop(context);
+          setState(() => _isSyncing = false);
+          _showToast('Failed to load preview: $e', isError: true);
+        }
+      }
+    } else {
+      // 1-Tap Instant Sync
+      setState(() => _isSyncing = true);
+      _showSyncingModal(title: 'Syncing Official Timetable', subtitle: 'Ratibad 9:00 AM Roster (37 Buses)');
+
+      try {
+        final response = await _apiService.post('manager/sync-official-timetable', {});
+        if (mounted) {
+          Navigator.pop(context); // Close syncing modal
+          setState(() => _isSyncing = false);
+          await _fetchRoutes();
+          _showSyncSuccessDialog(response);
+        }
+      } catch (e) {
+        if (mounted) {
+          if (_isSyncing) Navigator.pop(context);
+          setState(() => _isSyncing = false);
+          _showToast('Sync failed: $e', isError: true);
+        }
+      }
+    }
+  }
+
+  void _showSyncingModal({required String title, required String subtitle}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => PopScope(
+        canPop: false,
+        child: AlertDialog(
+          backgroundColor: AppColors.surface,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(22),
+            side: BorderSide(color: AppColors.primary.withValues(alpha: 0.3)),
+          ),
+          content: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Center(
+                    child: CircularProgressIndicator(color: AppColors.primaryLight, strokeWidth: 3),
+                  ),
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  title,
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.plusJakartaSans(color: AppColors.primaryLight, fontSize: 12, fontWeight: FontWeight.w600),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Ingesting bus numbers, route corridors, scheduled timings, and strictly preserving all existing GPS coordinates...',
+                  style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 11),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showSyncSuccessDialog(dynamic response) {
+    final count = response is Map ? (response['count'] ?? 37) : 37;
+    final message = response is Map ? (response['message'] ?? 'Roster synced successfully!') : 'Timetable synchronized!';
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(22),
+          side: BorderSide(color: AppColors.success.withValues(alpha: 0.3)),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.success.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.check_circle_rounded, color: AppColors.success, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Timetable Updated',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              '$count Routes & Buses Synchronized!',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message.toString(),
+              style: GoogleFonts.plusJakartaSans(color: AppColors.textSecondary, fontSize: 12.5),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.bgSecondary,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.shield_outlined, color: AppColors.primaryLight, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'All existing GPS stop coordinates and turn geometry preserved 100%.',
+                      style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 11),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Done', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showToast(String msg, {bool isError = false}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg, style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w600)),
+        backgroundColor: isError ? AppColors.danger : AppColors.surface,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+    );
   }
 
   Future<void> _deleteRoute(String id, String name) async {
@@ -94,33 +516,16 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
     try {
       await _apiService.delete('manager/routes/$id');
       _fetchRoutes();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Route "$name" deleted', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
-            backgroundColor: AppColors.surface,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-          ),
-        );
-      }
+      if (mounted) _showToast('Route "$name" deleted');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete route: $e', style: GoogleFonts.plusJakartaSans()),
-            backgroundColor: AppColors.danger,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      if (mounted) _showToast('Failed to delete route: $e', isError: true);
     }
   }
 
   void _showAddRouteDialog() {
     final nameController = TextEditingController();
     final colorController = TextEditingController(text: '#2563EB');
-    
+
     showDialog(
       context: context,
       builder: (dialogCtx) => AlertDialog(
@@ -157,8 +562,8 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                 controller: nameController,
                 style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13.5),
                 decoration: InputDecoration(
-                  labelText: 'Route Name',
-                  hintText: 'e.g. Ashoka Garden Route 18',
+                  labelText: 'Route Title (e.g. Bus 38 - Route)',
+                  hintText: 'e.g. Bus 38 - Hoshangabad Route',
                   hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
                   labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
                   filled: true,
@@ -178,8 +583,9 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                 controller: colorController,
                 style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13),
                 decoration: InputDecoration(
-                  labelText: 'Color Accent (Hex)',
+                  labelText: 'Color Hex (e.g. #2563EB)',
                   hintText: '#2563EB',
+                  hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
                   labelStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
                   filled: true,
                   fillColor: AppColors.surfaceLight,
@@ -191,7 +597,6 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                     borderRadius: BorderRadius.circular(14),
                     borderSide: const BorderSide(color: AppColors.primary, width: 1.5),
                   ),
-                  prefixIcon: const Icon(Icons.palette_rounded, color: AppColors.textMuted, size: 18),
                 ),
               ),
             ],
@@ -199,7 +604,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogCtx).pop(),
+            onPressed: () => Navigator.pop(dialogCtx),
             child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
@@ -208,24 +613,27 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
               foregroundColor: Colors.white,
               elevation: 0,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
             ),
             onPressed: () async {
-              if (nameController.text.trim().isNotEmpty) {
-                try {
-                  await _apiService.post('manager/routes', {
-                    'name': nameController.text.trim(),
-                    'color': colorController.text.trim(),
-                    'stops': [],
-                  });
-                  if (dialogCtx.mounted) {
-                    Navigator.of(dialogCtx).pop();
-                  }
-                  _fetchRoutes();
-                } catch (_) {}
+              final name = nameController.text.trim();
+              if (name.isEmpty) return;
+              Navigator.pop(dialogCtx);
+              try {
+                await _apiService.post('manager/routes', {
+                  'name': name,
+                  'color': colorController.text.trim(),
+                  'stops': [
+                    {'name': 'Origin Stop', 'lat': 23.2599, 'lng': 77.4126},
+                    {'name': 'Ratibad Campus', 'lat': 23.180302, 'lng': 77.302695}
+                  ]
+                });
+                _fetchRoutes();
+                if (mounted) _showToast('Route "$name" created');
+              } catch (e) {
+                if (mounted) _showToast('Failed to create route: $e', isError: true);
               }
             },
-            child: Text('Create Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 13)),
+            child: Text('Create', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -238,6 +646,8 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
     for (final r in _routes) {
       if (r['stops'] is List) totalStopsAcrossRoutes += (r['stops'] as List).length;
     }
+
+    final filtered = _filteredRoutes;
 
     return Scaffold(
       backgroundColor: widget.nested ? Colors.transparent : AppColors.bg,
@@ -267,7 +677,7 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
               ),
               actions: [
                 IconButton(
-                  tooltip: 'Add New Route',
+                  tooltip: 'Upload Timetable',
                   icon: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
@@ -275,9 +685,9 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
                       borderRadius: BorderRadius.circular(10),
                       border: Border.all(color: AppColors.primary.withValues(alpha: 0.25)),
                     ),
-                    child: const Icon(Icons.add_rounded, color: AppColors.primaryLight, size: 18),
+                    child: const Icon(Icons.cloud_upload_rounded, color: AppColors.primaryLight, size: 18),
                   ),
-                  onPressed: _showAddRouteDialog,
+                  onPressed: _handleUploadTimetable,
                 ),
                 const SizedBox(width: 8),
               ],
@@ -291,149 +701,376 @@ class _RouteManagementScreenState extends State<RouteManagementScreen> {
         icon: const Icon(Icons.add_road_rounded, size: 18),
         label: Text('New Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800, fontSize: 12.5)),
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2))
-        : _routes.isEmpty
-          ? Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.alt_route_rounded, color: AppColors.textMuted, size: 48),
-                  const SizedBox(height: 14),
-                  Text('NO CAMPUS ROUTES FOUND', style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-                  const SizedBox(height: 16),
-                  ElevatedButton.icon(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: Text('Create First Route', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 13)),
-                    onPressed: _showAddRouteDialog,
-                  ),
-                ],
-              ),
-            )
-          : RefreshIndicator(
-              color: AppColors.primary,
-              backgroundColor: AppColors.surface,
-              onRefresh: _fetchRoutes,
-              child: ListView.builder(
-                padding: const EdgeInsets.fromLTRB(18, 14, 18, 80),
-                itemCount: _routes.length,
-                itemBuilder: (context, index) {
-                  final route = _routes[index];
-                  final color = _parseColor(route['color']);
-                  final List stops = route['stops'] is List ? (route['stops'] as List) : [];
-                  final String name = route['name'] ?? 'Transit Route';
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.surface,
-                      borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-                      boxShadow: AppShadows.card,
-                    ),
-                    child: Material(
-                      color: Colors.transparent,
-                      borderRadius: BorderRadius.circular(18),
+      body: Column(
+        children: [
+          // ── Action Bar: Upload Timetable + 1-Tap Sync ──
+          Container(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Expanded(
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(18),
-                        onTap: () async {
-                          final result = await Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => RouteEditScreen(route: route)),
-                          );
-                          if (result == true) _fetchRoutes();
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(14),
+                        onTap: _handleUploadTimetable,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          decoration: BoxDecoration(
+                            gradient: const LinearGradient(
+                              colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                            ),
+                            borderRadius: BorderRadius.circular(14),
+                            boxShadow: [
+                              BoxShadow(
+                                color: const Color(0xFF2563EB).withValues(alpha: 0.25),
+                                blurRadius: 10,
+                                offset: const Offset(0, 3),
+                              ),
+                            ],
+                          ),
                           child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              // Route Color Icon Badge
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.12),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(color: color.withValues(alpha: 0.25)),
+                              const Icon(Icons.upload_file_rounded, color: Colors.white, size: 17),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Upload Timetable',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
                                 ),
-                                child: Icon(Icons.directions_bus_filled_rounded, color: color, size: 22),
-                              ),
-                              const SizedBox(width: 14),
-                              
-                              // Route Info
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      name,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 14,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Row(
-                                      children: [
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                          decoration: BoxDecoration(
-                                            color: color.withValues(alpha: 0.12),
-                                            borderRadius: BorderRadius.circular(6),
-                                          ),
-                                          child: Text(
-                                            '${stops.length} Waypoints',
-                                            style: GoogleFonts.plusJakartaSans(
-                                              color: color,
-                                              fontSize: 9.5,
-                                              fontWeight: FontWeight.w700,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              
-                              // Edit Action
-                              IconButton(
-                                icon: const Icon(Icons.edit_note_rounded, color: AppColors.accent, size: 22),
-                                tooltip: 'Edit Waypoints',
-                                onPressed: () async {
-                                  final result = await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(builder: (context) => RouteEditScreen(route: route)),
-                                  );
-                                  if (result == true) _fetchRoutes();
-                                },
-                              ),
-
-                              // Delete Action
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline_rounded, color: AppColors.danger, size: 19),
-                                tooltip: 'Delete Route',
-                                onPressed: () => _deleteRoute(route['_id'], name),
                               ),
                             ],
                           ),
                         ),
                       ),
                     ),
-                  ).animate().fadeIn(delay: (index * 30).ms);
-                },
-              ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: InkWell(
+                        onTap: _handleSyncOfficialRoster,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: AppColors.surface,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.sync_rounded, color: AppColors.accent, size: 17),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  'Sync 37 Buses',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: AppColors.accent,
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 12,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                // Search Bar for Bus No or Corridor
+                Container(
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                  ),
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (val) => setState(() => _searchQuery = val),
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 13),
+                    decoration: InputDecoration(
+                      hintText: 'Search by Bus Number (e.g. 01, 14) or Corridor...',
+                      hintStyle: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 12),
+                      prefixIcon: const Icon(Icons.search_rounded, color: AppColors.textMuted, size: 18),
+                      suffixIcon: _searchQuery.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear, color: AppColors.textMuted, size: 16),
+                              onPressed: () {
+                                _searchController.clear();
+                                setState(() => _searchQuery = '');
+                              },
+                            )
+                          : null,
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                    ),
+                  ),
+                ),
+              ],
             ),
+          ),
+
+          // ── Routes List ──
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator(color: AppColors.primary, strokeWidth: 2))
+                : _routes.isEmpty
+                    ? Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(Icons.alt_route_rounded, color: AppColors.textMuted, size: 48),
+                            const SizedBox(height: 14),
+                            Text(
+                              'NO CAMPUS ROUTES FOUND',
+                              style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 1.5),
+                            ),
+                            const SizedBox(height: 16),
+                            ElevatedButton.icon(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.primary,
+                                foregroundColor: Colors.white,
+                                elevation: 0,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                              icon: const Icon(Icons.sync_rounded, size: 18),
+                              label: Text('Sync 37 Official Buses', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.bold, fontSize: 13)),
+                              onPressed: _handleSyncOfficialRoster,
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        color: AppColors.primary,
+                        backgroundColor: AppColors.surface,
+                        onRefresh: _fetchRoutes,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 4, 16, 80),
+                          itemCount: filtered.length,
+                          itemBuilder: (context, index) {
+                            final route = filtered[index];
+                            final color = _parseColor(route['color']);
+                            final List stops = route['stops'] is List ? (route['stops'] as List) : [];
+                            final String rawName = route['name'] ?? 'Transit Route';
+                            final String busNo = _extractBusNumber(rawName);
+                            final String corridor = _extractCorridorName(rawName);
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 10),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                                boxShadow: AppShadows.card,
+                              ),
+                              child: Material(
+                                color: Colors.transparent,
+                                borderRadius: BorderRadius.circular(16),
+                                child: InkWell(
+                                  borderRadius: BorderRadius.circular(16),
+                                  onTap: () async {
+                                    final result = await Navigator.push(
+                                      context,
+                                      MaterialPageRoute(builder: (context) => RouteEditScreen(route: route)),
+                                    );
+                                    if (result == true) _fetchRoutes();
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                                    child: Row(
+                                      children: [
+                                        // Bus No Badge - Overflow proof with flexible minHeight & no-scaling
+                                        Container(
+                                          width: 50,
+                                          constraints: const BoxConstraints(minHeight: 46),
+                                          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
+                                          decoration: BoxDecoration(
+                                            color: color.withValues(alpha: 0.12),
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: color.withValues(alpha: 0.3), width: 1.2),
+                                          ),
+                                          child: Column(
+                                            mainAxisAlignment: MainAxisAlignment.center,
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Icon(Icons.directions_bus_filled_rounded, color: color, size: 16),
+                                              const SizedBox(height: 2),
+                                              FittedBox(
+                                                fit: BoxFit.scaleDown,
+                                                child: Text(
+                                                  _formatBadgeLabel(busNo, index),
+                                                  maxLines: 1,
+                                                  textScaler: TextScaler.noScaling,
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w900,
+                                                    fontSize: 9.5,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+
+                                        // Corridor and Details
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Row(
+                                                children: [
+                                                  if (busNo.isNotEmpty)
+                                                    Flexible(
+                                                      flex: 0,
+                                                      child: Container(
+                                                        margin: const EdgeInsets.only(right: 6),
+                                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                        constraints: const BoxConstraints(maxWidth: 110),
+                                                        decoration: BoxDecoration(
+                                                          color: color.withValues(alpha: 0.2),
+                                                          borderRadius: BorderRadius.circular(5),
+                                                        ),
+                                                        child: Text(
+                                                          _cleanPillLabel(busNo),
+                                                          maxLines: 1,
+                                                          overflow: TextOverflow.ellipsis,
+                                                          textScaler: TextScaler.noScaling,
+                                                          style: GoogleFonts.plusJakartaSans(
+                                                            color: color,
+                                                            fontSize: 8.5,
+                                                            fontWeight: FontWeight.w800,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  Expanded(
+                                                    child: Text(
+                                                      corridor,
+                                                      maxLines: 1,
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        color: Colors.white,
+                                                        fontWeight: FontWeight.w700,
+                                                        fontSize: 13.5,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                              const SizedBox(height: 5),
+                                              Wrap(
+                                                spacing: 6,
+                                                runSpacing: 4,
+                                                children: [
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: Colors.white.withValues(alpha: 0.05),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Text(
+                                                      '${stops.length} Stops',
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        color: AppColors.textSecondary,
+                                                        fontSize: 9.5,
+                                                        fontWeight: FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Container(
+                                                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                                    decoration: BoxDecoration(
+                                                      color: AppColors.primary.withValues(alpha: 0.1),
+                                                      borderRadius: BorderRadius.circular(6),
+                                                    ),
+                                                    child: Text(
+                                                      '09:00 AM Shift',
+                                                      style: GoogleFonts.plusJakartaSans(
+                                                        color: AppColors.primaryLight,
+                                                        fontSize: 9.5,
+                                                        fontWeight: FontWeight.w600,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        const SizedBox(width: 4),
+
+                                        // Actions: Compact stylish action buttons preventing any horizontal overflow
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                borderRadius: BorderRadius.circular(8),
+                                                onTap: () async {
+                                                  final result = await Navigator.push(
+                                                    context,
+                                                    MaterialPageRoute(builder: (context) => RouteEditScreen(route: route)),
+                                                  );
+                                                  if (result == true) _fetchRoutes();
+                                                },
+                                                child: Container(
+                                                  width: 32,
+                                                  height: 32,
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.accent.withValues(alpha: 0.08),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(color: AppColors.accent.withValues(alpha: 0.2)),
+                                                  ),
+                                                  child: const Icon(Icons.edit_note_rounded, color: AppColors.accent, size: 18),
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 6),
+                                            Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                borderRadius: BorderRadius.circular(8),
+                                                onTap: () => _deleteRoute(route['_id'], rawName),
+                                                child: Container(
+                                                  width: 32,
+                                                  height: 32,
+                                                  decoration: BoxDecoration(
+                                                    color: AppColors.danger.withValues(alpha: 0.08),
+                                                    borderRadius: BorderRadius.circular(8),
+                                                    border: Border.all(color: AppColors.danger.withValues(alpha: 0.2)),
+                                                  ),
+                                                  child: Icon(Icons.delete_outline_rounded, color: AppColors.danger.withValues(alpha: 0.8), size: 17),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ).animate().fadeIn(duration: 250.ms, delay: (index * 20).ms);
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 }
-

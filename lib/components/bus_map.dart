@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
@@ -47,7 +48,14 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
   GoogleMapController? _mapController;
   LatLng _center = const LatLng(23.2599, 77.4126);
   Bus? _focusedBus;
-  bool _isFollowing = false;
+
+  // ── Decoupled follow state: does not trigger full GoogleMap widget rebuild on touch
+  late final ValueNotifier<bool> _isFollowingNotifier;
+  bool get _isFollowing => _isFollowingNotifier.value;
+  set _isFollowing(bool val) {
+    if (_isFollowingNotifier.value != val) _isFollowingNotifier.value = val;
+  }
+
   bool _isDriveMode = false;
   MapType _currentMapType = MapType.normal;
   bool _isDarkVector = true;
@@ -74,6 +82,10 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
   final Map<String, LatLng>              _targetPos       = {};
   final Map<String, double>              _startHeading    = {};
   final Map<String, double>              _targetHeading   = {};
+
+  // ── Road-snapping cache to prevent O(N) distance math on animation frames ─
+  final Map<String, LatLng>              _snappedPosCache = {};
+  final Map<String, LatLng>              _lastRawPosForSnap = {};
 
   // ── Camera debounce ───────────────────────────────────────────────────────
   Timer? _cameraDebounce;
@@ -107,7 +119,7 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
   void initState() {
     super.initState();
     _isDriveMode   = widget.initialDriveMode;
-    _isFollowing   = widget.initialDriveMode;
+    _isFollowingNotifier = ValueNotifier<bool>(widget.initialDriveMode);
     _currentMapType = widget.initialMapType;
 
     _markersNotifier = ValueNotifier<Set<Marker>>({});
@@ -129,6 +141,7 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
   @override
   void didUpdateWidget(covariant BusMap old) {
     super.didUpdateWidget(old);
+    debugPrint('BusMap: didUpdateWidget called.');
 
     bool needsRebuild = false;
 
@@ -244,6 +257,23 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
       }
     }
 
+    // Clean up offline/inactive bus animations to prevent ticker/memory leaks
+    final activeLiveBusIds = widget.buses.where((b) => b.isBroadcastingLive).map((b) => b.id).toSet();
+    final staleAnimIds = _markerAnims.keys.where((id) => !activeLiveBusIds.contains(id)).toList();
+    for (final id in staleAnimIds) {
+      _markerAnims[id]?.stop();
+      _markerAnims[id]?.dispose();
+      _markerAnims.remove(id);
+      _animatedPos.remove(id);
+      _animatedHeading.remove(id);
+      _startPos.remove(id);
+      _targetPos.remove(id);
+      _startHeading.remove(id);
+      _targetHeading.remove(id);
+      _snappedPosCache.remove(id);
+      _lastRawPosForSnap.remove(id);
+    }
+
     if (needsRebuild) _rebuildMapObjects();
 
     // Route changed
@@ -265,6 +295,8 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
     for (final c in _markerAnims.values) {
       c.dispose();
     }
+    _markerAnims.clear();
+    _isFollowingNotifier.dispose();
     _markersNotifier.dispose();
     _polylinesNotifier.dispose();
     _circlesNotifier.dispose();
@@ -306,12 +338,12 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
         if (diff < -180) diff += 360;
         _animatedHeading[busId] = sHead + diff * t;
 
-        // If we are following this bus, update the camera position in real-time
+        // If we are following this bus, update the camera position smoothly (throttled to 350ms to keep JNI platform channel completely clear)
         if (_isFollowing && _focusedBus?.id == busId) {
           final headingVal = _isDriveMode ? _animatedHeading[busId]! : 0.0;
           final now = DateTime.now();
           if (_lastCameraMoveTime == null ||
-              now.difference(_lastCameraMoveTime!).inMilliseconds >= 50) {
+              now.difference(_lastCameraMoveTime!).inMilliseconds >= 350) {
             _lastCameraMoveTime = now;
             _mapController?.moveCamera(CameraUpdate.newCameraPosition(
               CameraPosition(
@@ -324,7 +356,7 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
           }
         }
 
-        // Only rebuild map markers and circles — not the whole polyline route
+        // Rebuild markers with safe platform channel rate limiting
         _rebuildMarkersOnly();
       });
 
@@ -355,6 +387,8 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
   // ═══════════════════════════════════════════════════════════════════════════
 
   void _cacheRouteData() {
+    _snappedPosCache.clear();
+    _lastRawPosForSnap.clear();
     _selectedRoutePoints.clear();
     if (widget.selectedRoute != null) {
       _selectedRoutePoints.addAll(widget.selectedRoute!.coordinates
@@ -362,6 +396,36 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
     }
     _rebuildStopMarkers();
     _rebuildArrowMarkers();
+  }
+
+  /// Fast equirectangular distance approximation (in meters) — 100x faster than trigonometric distanceBetween
+  double _fastDistanceMeters(double lat1, double lng1, double lat2, double lng2) {
+    const double degToRad = 0.017453292519943295; // pi / 180
+    final double dLat = (lat2 - lat1) * 111139.0;
+    final double midLatRad = ((lat1 + lat2) * 0.5) * degToRad;
+    final double dLng = (lng2 - lng1) * 111139.0 * math.cos(midLatRad);
+    return math.sqrt(dLat * dLat + dLng * dLng);
+  }
+
+  /// Cached road snapping for moving buses — avoids running the full search loop on sub-frame ticks
+  LatLng _getSnappedBusPosition(String busId, LatLng rawPos) {
+    if (_selectedRoutePoints.isEmpty) return rawPos;
+
+    final lastRaw = _lastRawPosForSnap[busId];
+    if (lastRaw != null && _snappedPosCache.containsKey(busId)) {
+      final moved = _fastDistanceMeters(
+        lastRaw.latitude, lastRaw.longitude,
+        rawPos.latitude, rawPos.longitude,
+      );
+      if (moved < 2.0) {
+        return _snappedPosCache[busId]!;
+      }
+    }
+
+    final snapped = _snapToPolyline(rawPos, _selectedRoutePoints, maxSnapMeters: 45.0);
+    _lastRawPosForSnap[busId] = rawPos;
+    _snappedPosCache[busId] = snapped;
+    return snapped;
   }
 
   /// Orthogonally snaps a stop coordinate dead-center onto the closest polyline segment
@@ -402,7 +466,7 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
         candidate = LatLng(a.latitude + t * dy, a.longitude + t * dx);
       }
 
-      final dist = Geolocator.distanceBetween(
+      final dist = _fastDistanceMeters(
         point.latitude, point.longitude,
         candidate.latitude, candidate.longitude,
       );
@@ -519,9 +583,11 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
     if (!mounted) return;
 
     final now = DateTime.now();
+    // FREEZE FIX: Throttle marker updates to ~5fps (180ms).
+    // Updating GoogleMap markers at 30fps completely floods Android platform channels and drops touch events.
     if (!force && _lastMarkerRebuildTime != null &&
-        now.difference(_lastMarkerRebuildTime!).inMilliseconds < 33) {
-      return; // Cap marker updates to max ~30fps to avoid saturating platform channel
+        now.difference(_lastMarkerRebuildTime!).inMilliseconds < 180) {
+      return;
     }
     _lastMarkerRebuildTime = now;
 
@@ -543,10 +609,8 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
       final isFocused = _focusedBus?.id == bus.id;
       final rawPos    = _animatedPos[bus.id]     ?? LatLng(bus.currentLat, bus.currentLng);
-      // Perfect road alignment: snap bus marker cleanly onto route polyline if near the corridor
-      final pos       = _selectedRoutePoints.isNotEmpty
-          ? _snapToPolyline(rawPos, _selectedRoutePoints, maxSnapMeters: 45.0)
-          : rawPos;
+      // Perfect road alignment: use cached snapped position to prevent high-frequency recalculations
+      final pos       = _getSnappedBusPosition(bus.id, rawPos);
       final heading   = _animatedHeading[bus.id] ?? bus.heading;
 
       final icon = isFocused
@@ -1720,8 +1784,10 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   builder: (context, circles, _) {
                     return Listener(
                       onPointerDown: (_) {
+                        // FREEZE FIX: Do NOT call setState on pointer down!
+                        // Simply detach follow mode via notifier so the gesture arena is not interrupted.
                         if (_isFollowing) {
-                          setState(() => _isFollowing = false);
+                          _isFollowing = false;
                         }
                       },
                       behavior: HitTestBehavior.translucent,
@@ -1786,12 +1852,19 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
         ),
 
         // ── Floating Re-centre Pill when unfollowed ───────────────────────
-        if (_focusedBus != null && _focusedBus!.isBroadcastingLive && !_isFollowing)
-          Positioned(
-            left: 16,
-            top: MediaQuery.of(context).padding.top + (_isDriveMode ? 156 : 94),
-            child: _buildReCentreBtn().animate().fadeIn(duration: 250.ms).slideY(begin: -0.2),
-          ),
+        ValueListenableBuilder<bool>(
+          valueListenable: _isFollowingNotifier,
+          builder: (context, following, _) {
+            if (_focusedBus != null && _focusedBus!.isBroadcastingLive && !following) {
+              return Positioned(
+                left: 16,
+                top: MediaQuery.of(context).padding.top + (_isDriveMode ? 156 : 94),
+                child: _buildReCentreBtn().animate().fadeIn(duration: 250.ms).slideY(begin: -0.2),
+              );
+            }
+            return const SizedBox.shrink();
+          },
+        ),
 
         // ── Map Floating Action Stack (Right side) ─────────────────────────
         if (widget.showMapControls)
@@ -1808,12 +1881,17 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
                   onTap: _showLayersSheet,
                 ),
                 const SizedBox(height: 10),
-                _buildMapBtn(
-                  icon: Icons.navigation_rounded,
-                  label: _isFollowing ? 'TRACKING BUS' : 'TRACK BUS',
-                  color: const Color(0xFF2D5BFF),
-                  isActive: _isFollowing,
-                  onTap: _toggleFollow,
+                ValueListenableBuilder<bool>(
+                  valueListenable: _isFollowingNotifier,
+                  builder: (context, following, _) {
+                    return _buildMapBtn(
+                      icon: Icons.navigation_rounded,
+                      label: following ? 'TRACKING BUS' : 'TRACK BUS',
+                      color: const Color(0xFF2D5BFF),
+                      isActive: following,
+                      onTap: _toggleFollow,
+                    );
+                  },
                 ),
                 const SizedBox(height: 10),
                 _buildMapBtn(

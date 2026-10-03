@@ -21,6 +21,7 @@ import '../theme/app_theme.dart';
 import '../utils/timetable_resolver.dart';
 import '../components/stop_feedback_sheet.dart';
 import '../components/update_dialog.dart';
+import '../components/dashboard_back_scope.dart';
 
 class DriverDashboard extends StatefulWidget {
   const DriverDashboard({super.key});
@@ -50,13 +51,21 @@ class _DriverDashboardState extends State<DriverDashboard> {
   bool _isSosActive = false;
   Timer? _heartbeatTimer;
   Timer? _tripDurationTimer;
-  int _tripDurationSeconds = 0;
+  /// ValueNotifier replaces bare int — the timer widget rebuilds independently,
+  /// never causing a full-page setState every second.
+  final ValueNotifier<int> _tripDurationNotifier = ValueNotifier<int>(0);
   final Set<String> _reachedStopNames = <String>{};
   final ValueNotifier<DateTime?> _lastEmitTime = ValueNotifier<DateTime?>(null);
 
+  // ── GPS setState throttle ─────────────────────────────────────────────────
+  /// Timestamp of last UI setState from GPS stream — we cap rebuilds at 4/sec.
+  DateTime? _lastGpsSetState;
+  static const Duration _gpsSetStateMinInterval = Duration(milliseconds: 250);
+
   // Speed smoothing constants
-  static const double _emaAlpha = 0.3; // Exponential Moving Average factor
-  static const double _speedThresholdMps = 0.5; // min GPS speed to trust (0.5 m/s ≈ 1.8 km/h)
+  static const double _emaAlpha = 0.2; // Exponential Moving Average factor (smoother than 0.3)
+  static const double _speedThresholdMps = 1.0; // min GPS speed to trust (1.0 m/s ≈ 3.6 km/h) — rejects drift at stops
+  static const double _maxGpsAccuracyM = 50.0; // reject GPS fixes with accuracy worse than 50m
 
   @override
   void initState() {
@@ -114,6 +123,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _heartbeatTimer?.cancel();
     _tripDurationTimer?.cancel();
     _lastEmitTime.dispose();
+    _tripDurationNotifier.dispose();
     super.dispose();
   }
 
@@ -262,16 +272,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     setState(() {
       _isOnline = true;
-      _tripDurationSeconds = 0;
       _sessionDistanceKm = 0.0;
       _sessionStops = 0;
       _reachedStopNames.clear();
     });
+    // Reset the ValueNotifier — no setState needed
+    _tripDurationNotifier.value = 0;
 
     _tripDurationTimer?.cancel();
+    // FREEZE FIX: Use ValueNotifier so only the timer Text rebuilds, not the
+    // entire page. Previously this caused 1 full-page setState per second.
     _tripDurationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted && _isOnline) {
-        setState(() => _tripDurationSeconds++);
+        _tripDurationNotifier.value++;
       }
     });
 
@@ -308,55 +321,82 @@ class _DriverDashboardState extends State<DriverDashboard> {
     ).listen(
       (Position position) {
         if (!mounted) return;
-        setState(() {
-          // Session distance accumulation
-          double distMeters = 0;
-          if (_prevPosition != null) {
-            distMeters = Geolocator.distanceBetween(
-              _prevPosition!.latitude, _prevPosition!.longitude,
-              position.latitude, position.longitude,
-            );
-            // Only count movement ≥ 2m to avoid GPS drift noise
-            if (distMeters >= 2.0) {
-              _sessionDistanceKm += distMeters / 1000.0;
-            }
-          }
 
-          // Speed calculation with multi-source fallback
-          double rawSpeedKmH = 0.0;
+        // ── PRODUCTION GPS QUALITY GATE ──────────────────────────────────────
+        // Reject positions with poor accuracy — prevents phantom speeds from
+        // GPS multipath, cold starts, and indoor drift.
+        if (position.accuracy > _maxGpsAccuracyM) {
+          debugPrint('⚠️ GPS accuracy ${position.accuracy.toStringAsFixed(0)}m > ${_maxGpsAccuracyM.toStringAsFixed(0)}m threshold — skipping');
+          return;
+        }
 
-          // Source 1: GPS chip speed (most accurate when moving)
-          if (position.speed >= _speedThresholdMps) {
-            rawSpeedKmH = position.speed * 3.6; // m/s → km/h
-          }
-          // Source 2: Computed from distance/time delta (fallback)
-          else if (distMeters >= 2.0 && _prevPosition != null && _prevPositionTime != null) {
-            final elapsedSec = DateTime.now()
-                .difference(_prevPositionTime!)
-                .inMilliseconds / 1000.0;
-            if (elapsedSec > 0.5) {
-              rawSpeedKmH = (distMeters / elapsedSec) * 3.6;
-            }
-          }
+        // ── FREEZE FIX: All heavy computation happens OUTSIDE setState ───────
+        // Previously every GPS tick (800ms) ran distanceBetween + EMA inside
+        // setState, causing a full widget-tree rebuild with heavy work blocking
+        // the UI thread. Now we compute first, then setState minimally.
 
-          // Clamp to realistic bus speeds (0 to 120 km/h)
-          rawSpeedKmH = rawSpeedKmH.clamp(0.0, 120.0);
+        // Session distance accumulation with accuracy-aware gating
+        double distMeters = 0;
+        if (_prevPosition != null) {
+          distMeters = Geolocator.distanceBetween(
+            _prevPosition!.latitude, _prevPosition!.longitude,
+            position.latitude, position.longitude,
+          );
+        }
+        // Only count movement that exceeds GPS uncertainty ellipse (accuracy + 2m margin)
+        final double accuracyGate = position.accuracy + 2.0;
+        final double newDistKm = (distMeters >= accuracyGate && distMeters >= 3.0) ? distMeters / 1000.0 : 0.0;
 
-          // Exponential Moving Average smoothing
-          _smoothedSpeedKmH = (_emaAlpha * rawSpeedKmH) + ((1 - _emaAlpha) * _smoothedSpeedKmH);
-          _speedKmH = _smoothedSpeedKmH;
+        // Speed calculation with multi-source fallback
+        double rawSpeedKmH = 0.0;
+        if (position.speed >= _speedThresholdMps && position.speedAccuracy < 5.0) {
+          // Primary: GPS chipset speed (most accurate when available and reliable)
+          rawSpeedKmH = position.speed * 3.6;
+        } else if (position.speed >= _speedThresholdMps) {
+          // Secondary: GPS speed without accuracy guarantee — apply damping
+          rawSpeedKmH = position.speed * 3.6 * 0.9;
+        } else if (distMeters >= accuracyGate && _prevPosition != null && _prevPositionTime != null) {
+          // Tertiary: Position-delta derived speed (when GPS chipset reports 0)
+          final elapsedSec =
+              DateTime.now().difference(_prevPositionTime!).inMilliseconds / 1000.0;
+          if (elapsedSec > 0.8) rawSpeedKmH = (distMeters / elapsedSec) * 3.6;
+        }
+        rawSpeedKmH = rawSpeedKmH.clamp(0.0, 120.0);
 
-          // Update circular speed history buffer
-          _recentSpeeds[_recentSpeedIndex % 15] = _speedKmH;
-          _recentSpeedIndex++;
+        // Aggressive stillness detection — if both GPS speed is below threshold
+        // AND position delta is within accuracy circle, force zero
+        if (rawSpeedKmH < 4.0 && distMeters < accuracyGate) {
+          rawSpeedKmH = 0.0;
+        }
 
-          _prevPosition     = position;
-          _prevPositionTime = DateTime.now();
-          _currentPosition  = position;
+        // EMA smoothing — pure math, no UI
+        final double newSmoothed =
+            (_emaAlpha * rawSpeedKmH) + ((1 - _emaAlpha) * _smoothedSpeedKmH);
+        // Snap to zero when speed drifts below 1.5 km/h (prevents lingering 0.3, 0.7 displays)
+        final double finalSmoothed = newSmoothed < 1.5 ? 0.0 : newSmoothed;
 
-          // Automatic Stop Geofence Arrival Check (Adaptive speed-aware radius)
-          _checkAutomaticStopArrival(position);
-        });
+        // Mutate non-UI fields directly (safe outside setState)
+        _prevPosition     = position;
+        _prevPositionTime = DateTime.now();
+        _smoothedSpeedKmH = finalSmoothed;
+        _speedKmH         = finalSmoothed;
+        _recentSpeeds[_recentSpeedIndex % 15] = finalSmoothed;
+        _recentSpeedIndex++;
+        if (newDistKm > 0) _sessionDistanceKm += newDistKm;
+        _currentPosition  = position;
+
+        // Geofence check (may call setState internally if stop reached)
+        _checkAutomaticStopArrival(position);
+
+        // ── FREEZE FIX: Throttle UI setState to max 4× per second ───────────
+        // The GPS can fire faster than 4 Hz on some devices. Without throttling
+        // every tick schedules a full rebuild, saturating the raster thread.
+        final now = DateTime.now();
+        if (_lastGpsSetState == null ||
+            now.difference(_lastGpsSetState!) >= _gpsSetStateMinInterval) {
+          _lastGpsSetState = now;
+          if (mounted) setState(() {});
+        }
 
         // Emit every GPS update for smooth real-time tracking
         _emitLocation();
@@ -371,12 +411,12 @@ class _DriverDashboardState extends State<DriverDashboard> {
       desiredAccuracy: LocationAccuracy.bestForNavigation,
     ).then((pos) {
       if (mounted && _isOnline && _currentPosition == null) {
-        setState(() {
-          _currentPosition = pos;
-          _prevPosition = pos;
-          _prevPositionTime = DateTime.now();
-          _checkAutomaticStopArrival(pos);
-        });
+        // FREEZE FIX: computation first, then minimal setState
+        _currentPosition  = pos;
+        _prevPosition     = pos;
+        _prevPositionTime = DateTime.now();
+        _checkAutomaticStopArrival(pos);
+        if (mounted) setState(() {});
         _emitLocation();
       }
     }).catchError((e) {
@@ -547,6 +587,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final nextStop = _getNextStop();
     final nextStopName = nextStop?['name']?.toString();
     final distToNext = _getDistanceToNextStop();
+    final distToFinal = _getDistanceToFinalDestination();
 
     final effectiveRouteId = _selectedRoute?.id ?? (selectedBus != null ? selectedBus['routeId']?.toString() : null);
     final effectiveRouteName = _selectedRoute?.name ?? selectedBus?['routeName'] ?? 'SISTec Route';
@@ -564,6 +605,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       'currentLng': _currentPosition!.longitude,
       'heading': _currentPosition!.heading >= 0 ? _currentPosition!.heading : 0.0,
       'speed': double.parse(_speedKmH.toStringAsFixed(1)),
+      'gpsAccuracy': _currentPosition!.accuracy,
       'status': 'On-time',
       'occupancy': _currentOccupancy,
       'tripType': _selectedTripType,
@@ -571,6 +613,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       'completedStops': _reachedStopNames.length,
       'nextStop': nextStopName,
       'distanceToNextStopMeters': distToNext?.round(),
+      'distanceToFinalStopMeters': distToFinal?.round(),
       'timestamp': DateTime.now().toIso8601String(),
     });
   }
@@ -591,13 +634,34 @@ class _DriverDashboardState extends State<DriverDashboard> {
     return null;
   }
 
+  /// Returns estimated road distance to the next unreached stop.
+  /// Uses 1.5× Haversine factor (calibrated for Indian mixed road curvature)
+  /// instead of raw straight-line distance for realistic user-facing display.
   double? _getDistanceToNextStop() {
     final nextStop = _getNextStop();
     if (nextStop == null || _currentPosition == null) return null;
     final lat = (nextStop['lat'] ?? 0.0).toDouble();
     final lng = (nextStop['lng'] ?? 0.0).toDouble();
     if (lat == 0.0 || lng == 0.0) return null;
-    return Geolocator.distanceBetween(_currentPosition!.latitude, _currentPosition!.longitude, lat, lng);
+    final straightLine = Geolocator.distanceBetween(_currentPosition!.latitude, _currentPosition!.longitude, lat, lng);
+    // Apply road curvature factor (1.5× for Indian roads)
+    return straightLine * 1.5;
+  }
+
+  /// Returns estimated road distance to the final destination of the current trip.
+  /// For pickup: final stop = campus/college. For dropoff: final stop = last city stop.
+  double? _getDistanceToFinalDestination() {
+    if (_selectedRoute == null || _selectedRoute!.stops.isEmpty || _currentPosition == null) return null;
+    final isDropoff = _selectedTripType == 'dropoff';
+    final List<Map<String, dynamic>> stops = isDropoff
+        ? _selectedRoute!.stops.reversed.toList()
+        : _selectedRoute!.stops;
+    final finalStop = stops.last;
+    final lat = (finalStop['lat'] ?? 0.0).toDouble();
+    final lng = (finalStop['lng'] ?? 0.0).toDouble();
+    if (lat == 0.0 || lng == 0.0) return null;
+    final straightLine = Geolocator.distanceBetween(_currentPosition!.latitude, _currentPosition!.longitude, lat, lng);
+    return straightLine * 1.5;
   }
 
   Future<void> _launchNavigationToTarget({double? targetLat, double? targetLng, String? destinationName}) async {
@@ -649,14 +713,15 @@ class _DriverDashboardState extends State<DriverDashboard> {
     final user = Provider.of<AuthService>(context).currentUser;
     final socketService = Provider.of<SocketService>(context);
 
-    return PopScope(
-      canPop: !_isOnline,
-      onPopInvokedWithResult: (didPop, result) {
-        if (didPop) return;
+    return DashboardBackScope(
+      onWillHandleBack: () {
         if (_isOnline) {
           _showExitWarningDialog(context);
+          return true;
         }
+        return false;
       },
+      exitMessage: 'Press back again to exit SISTecChalo',
       child: Scaffold(
         backgroundColor: AppColors.bg,
         body: ValueListenableBuilder<bool>(
@@ -888,6 +953,8 @@ class _DriverDashboardState extends State<DriverDashboard> {
                           _buildStartButton(),
                           const SizedBox(height: 16),
                           _buildSOSButton(user),
+                          const SizedBox(height: 12),
+                          _buildTransportInchargeCallCard(),
                           const SizedBox(height: 24),
                           _buildTripStats(),
                           const SizedBox(height: 24),
@@ -1666,6 +1733,220 @@ class _DriverDashboardState extends State<DriverDashboard> {
     );
   }
 
+  Widget _buildTransportInchargeCallCard() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(7),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.shield_outlined, color: AppColors.primaryLight, size: 16),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'TRANSPORT INCHARGE HELPLINE',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textMuted,
+                    fontSize: 8.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                Text(
+                  'Vaibhav Pathak & Ramswroop',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => _showDriverInchargeHelpSheet(context),
+            icon: const Icon(Icons.phone_rounded, size: 12),
+            label: const Text('Call'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              textStyle: GoogleFonts.plusJakartaSans(fontSize: 11, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _makeDriverPhoneCall(String phoneNumber) async {
+    final clean = phoneNumber.replaceAll(RegExp(r'[^0-9+]'), '');
+    if (clean.isEmpty) return;
+    final uri = Uri.parse('tel:$clean');
+    try {
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
+      }
+    } catch (e) {
+      debugPrint('Driver call to $clean failed: $e');
+    }
+  }
+
+  void _showDriverInchargeHelpSheet(BuildContext context) {
+    HapticFeedback.mediumImpact();
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.bgSecondary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.headset_mic_rounded, color: AppColors.primaryLight, size: 20),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'SISTec Transport Incharge Helpline',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Emergency & Fleet Dispatch Support',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: AppColors.textMuted,
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                Text(
+                  'INSTITUTIONAL TRANSPORT INCHARGES',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: AppColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                ...TimetableResolver.transportIncharges.map((incharge) {
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 8),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Icon(Icons.shield_outlined, color: AppColors.accent, size: 18),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                incharge.name,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              Text(
+                                incharge.designation,
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: AppColors.textMuted,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () => _makeDriverPhoneCall(incharge.phone),
+                          icon: const Icon(Icons.phone_rounded, size: 14),
+                          label: const Text('Call'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                            textStyle: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildTripStats() {
     final int totalStops = _selectedRoute?.stops.length ?? 0;
     return Column(
@@ -1679,7 +1960,19 @@ class _DriverDashboardState extends State<DriverDashboard> {
             const SizedBox(width: 8),
             _buildSmallStat('STOPS', '$_sessionStops/$totalStops', 'DONE', AppColors.accentGreen),
             const SizedBox(width: 8),
-            _buildSmallStat('DURATION', _formatDuration(_tripDurationSeconds), '', AppColors.accent),
+            // FREEZE FIX: ValueListenableBuilder isolates timer rebuilds.
+            // Only the duration Text widget rebuilds every second — nothing else.
+            Expanded(
+              child: ValueListenableBuilder<int>(
+                valueListenable: _tripDurationNotifier,
+                builder: (context, secs, _) => _buildSmallStatInner(
+                  'DURATION',
+                  _formatDuration(secs),
+                  '',
+                  AppColors.accent,
+                ),
+              ),
+            ),
           ],
         ),
       ],
@@ -1687,36 +1980,40 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildSmallStat(String label, String value, String unit, Color accent) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.bgSecondary,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: accent.withValues(alpha: 0.2)),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(label, style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1.0)),
-            const SizedBox(height: 3),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.baseline,
-                textBaseline: TextBaseline.alphabetic,
-                children: [
-                  Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
-                  if (unit.isNotEmpty) ...[
-                    const SizedBox(width: 3),
-                    Text(unit, style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 9, fontWeight: FontWeight.w900)),
-                  ],
+    return Expanded(child: _buildSmallStatInner(label, value, unit, accent));
+  }
+
+  /// Inner content only (no Expanded wrapper) — used when the caller supplies
+  /// its own Expanded (e.g., inside a ValueListenableBuilder).
+  Widget _buildSmallStatInner(String label, String value, String unit, Color accent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppColors.bgSecondary,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: accent.withValues(alpha: 0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: GoogleFonts.plusJakartaSans(color: AppColors.textMuted, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 1.0)),
+          const SizedBox(height: 3),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                Text(value, style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w900)),
+                if (unit.isNotEmpty) ...[
+                  const SizedBox(width: 3),
+                  Text(unit, style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 9, fontWeight: FontWeight.w900)),
                 ],
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -1787,6 +2084,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
           itemBuilder: (context, idx) {
             final stop = displayedStops[idx];
             final stopName = stop['name']?.toString().trim() ?? 'Stop ${idx + 1}';
+            final schedTime = TimetableResolver.getScheduledTimeForStop(_selectedRoute?.name, stopName);
             final isReached = _reachedStopNames.contains(stopName);
             final isTarget = idx == nextTargetIdx;
             final isFirst = idx == 0;
@@ -1872,6 +2170,25 @@ class _DriverDashboardState extends State<DriverDashboard> {
                                 ),
                               ),
                             ),
+                            if (schedTime != null) ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.06),
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                                ),
+                                child: Text(
+                                  schedTime,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white70,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
                             if (isTarget && !isReached) ...[
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
