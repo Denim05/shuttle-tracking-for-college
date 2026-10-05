@@ -753,7 +753,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                 Column(
                   children: [
                     Container(
-                      padding: EdgeInsets.fromLTRB(20, MediaQuery.of(context).padding.top + (isConnected ? 10 : 30), 20, 10),
+                      padding: EdgeInsets.fromLTRB(16, MediaQuery.of(context).padding.top + (isConnected ? 10 : 30), 16, 10),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -762,51 +762,54 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  crossAxisAlignment: CrossAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'SISTec',
-                                      style: GoogleFonts.outfit(
-                                        color: Colors.white,
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: -0.3,
-                                      ),
-                                    ),
-                                    Text(
-                                      'Chalo',
-                                      style: GoogleFonts.outfit(
-                                        color: const Color(0xFF00F0FF),
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.w900,
-                                        letterSpacing: -0.3,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
-                                        borderRadius: BorderRadius.circular(6),
-                                        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
-                                      ),
-                                      child: Text(
-                                        'CAMPUS',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          color: const Color(0xFF00F0FF),
-                                          fontSize: 8.5,
+                                FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    crossAxisAlignment: CrossAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'SISTec',
+                                        style: GoogleFonts.outfit(
+                                          color: Colors.white,
+                                          fontSize: 17,
                                           fontWeight: FontWeight.w900,
-                                          letterSpacing: 0.8,
+                                          letterSpacing: -0.3,
                                         ),
                                       ),
-                                    ),
-                                  ],
+                                      Text(
+                                        'Chalo',
+                                        style: GoogleFonts.outfit(
+                                          color: const Color(0xFF00F0FF),
+                                          fontSize: 17,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: -0.3,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                        decoration: BoxDecoration(
+                                          color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
+                                          borderRadius: BorderRadius.circular(5),
+                                          border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
+                                        ),
+                                        child: Text(
+                                          'CAMPUS',
+                                          style: GoogleFonts.plusJakartaSans(
+                                            color: const Color(0xFF00F0FF),
+                                            fontSize: 8.0,
+                                            fontWeight: FontWeight.w900,
+                                            letterSpacing: 0.6,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                                 const SizedBox(height: 3),
                                 Row(
-                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Container(
                                       width: 6,
@@ -822,14 +825,18 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                         ],
                                       ),
                                     ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(0.85, 0.85), end: const Offset(1.15, 1.15), duration: 1.seconds),
-                                    const SizedBox(width: 6),
-                                    Text(
-                                      'Manager Console • Live Fleet Ops',
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: Colors.white70,
-                                        fontSize: 10.5,
-                                        fontWeight: FontWeight.w600,
-                                        letterSpacing: 0.3,
+                                    const SizedBox(width: 5),
+                                    Expanded(
+                                      child: Text(
+                                        'Manager Console',
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: Colors.white70,
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w600,
+                                          letterSpacing: 0.2,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -837,7 +844,9 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               ],
                             ),
                           ),
+                          const SizedBox(width: 8),
                           Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
                               _buildAppBarAction(Icons.person_outline_rounded, () {
                                 Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileSettingsScreen()));
@@ -945,16 +954,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
   Widget _buildAppBarAction(IconData icon, VoidCallback onTap) {
     return Container(
-      margin: const EdgeInsets.only(left: 6),
+      margin: const EdgeInsets.only(left: 4),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.05),
+        color: Colors.white.withValues(alpha: 0.06),
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.12)),
       ),
       child: IconButton(
-        padding: const EdgeInsets.all(8),
+        padding: const EdgeInsets.all(7),
         constraints: const BoxConstraints(),
-        icon: Icon(icon, color: Colors.white, size: 18),
+        icon: Icon(icon, color: Colors.white, size: 17),
         onPressed: onTap,
       ),
     );
