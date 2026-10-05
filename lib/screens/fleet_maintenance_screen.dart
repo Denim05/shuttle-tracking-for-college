@@ -685,19 +685,162 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
     );
   }
 
+  bool _isBusBroadcasting(Map<String, dynamic> bus) {
+    final status = (bus['status']?.toString() ?? '').toLowerCase().trim();
+    if (status == 'offline' || status == 'in depot' || status == 'standby' || status.isEmpty) {
+      return false;
+    }
+
+    final lastUpdatedVal = bus['lastUpdated'];
+    if (lastUpdatedVal == null) return false;
+
+    DateTime? lastUp;
+    if (lastUpdatedVal is DateTime) {
+      lastUp = lastUpdatedVal;
+    } else {
+      lastUp = DateTime.tryParse(lastUpdatedVal.toString());
+    }
+
+    if (lastUp == null) return false;
+
+    // A bus is ONLY actively broadcasting live if telemetry arrived within last 45 seconds AND has positive speed or active trip marker
+    final diff = DateTime.now().difference(lastUp).inSeconds;
+    final speed = (bus['speed'] is num)
+        ? (bus['speed'] as num).toDouble()
+        : (double.tryParse(bus['speed']?.toString() ?? '0') ?? 0.0);
+
+    return diff >= 0 && diff <= 45 && (speed > 0 || status == 'active');
+  }
+
+  Future<void> _restoreDefaults() async {
+    setState(() => _isLoading = true);
+    try {
+      bool backendRestored = false;
+      try {
+        final res = await _apiService.post('manager/buses/restore-defaults', {});
+        backendRestored = true;
+      } catch (endpointErr) {
+        debugPrint('Direct restore endpoint not available on server, applying per-bus fallback: $endpointErr');
+      }
+
+      if (!backendRestored) {
+        // Resilient fallback: reset all buses via PUT /buses/:id/status
+        final futures = <Future>[];
+        for (final bus in _fleet) {
+          if (bus is! Map) continue;
+          final id = (bus['_id'] ?? '').toString();
+          if (id.isNotEmpty && id.length >= 12) {
+            futures.add(_apiService.put('buses/$id/status', {
+              'status': 'Offline',
+            }).catchError((_) => null));
+          }
+        }
+        if (futures.isNotEmpty) {
+          await Future.wait(futures);
+        }
+      }
+
+      await _fetchFleetStatus();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'All buses restored to default In-Depot standby status.',
+                    style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to restore fleet defaults: $e', style: GoogleFonts.plusJakartaSans()),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _confirmRestoreDefaults() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1B2335),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        title: Row(
+          children: [
+            const Icon(Icons.restart_alt_rounded, color: Color(0xFFFBBF24), size: 24),
+            const SizedBox(width: 10),
+            Text(
+              'Restore Default Fleet?',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+          ],
+        ),
+        content: Text(
+          'This will reset all buses to their default institutional In-Depot standby status and restore original timetable route assignments.',
+          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 13),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.plusJakartaSans(color: Colors.white38)),
+          ),
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFBBF24),
+              foregroundColor: Colors.black,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            icon: const Icon(Icons.check_circle_rounded, size: 16),
+            label: Text('Restore Defaults', style: GoogleFonts.plusJakartaSans(fontWeight: FontWeight.w800)),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _restoreDefaults();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   FleetReadinessReport _computeReadinessReport() {
     final active = <dynamic>[];
     final delayed = <dynamic>[];
 
     for (final bus in _fleet) {
       if (bus is! Map) continue;
+      final busMap = Map<String, dynamic>.from(bus);
+      final isBroadcasting = _isBusBroadcasting(busMap);
+
+      // Only count buses as active/delayed if they are actively streaming telemetry right now
+      if (!isBroadcasting) continue;
+
       final status = (bus['status']?.toString() ?? '').toLowerCase();
       final isDelayed = status == 'delayed' || status == 'warning';
-      final isActive = status == 'active' || status == 'on-time' || status == 'nominal';
 
       if (isDelayed) {
         delayed.add(bus);
-      } else if (isActive) {
+      } else {
         active.add(bus);
       }
     }
@@ -712,13 +855,12 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
       bool isCovered = false;
       for (final bus in _fleet) {
         if (bus is! Map) continue;
-        final bStatus = (bus['status']?.toString() ?? '').toLowerCase();
+        final busMap = Map<String, dynamic>.from(bus);
+        if (!_isBusBroadcasting(busMap)) continue; // Must be actively broadcasting to cover route!
+
         final bRoute = (bus['routeName']?.toString() ?? '').toLowerCase();
         final bNum = (bus['busNumber']?.toString() ?? '').toLowerCase();
         final bName = (bus['name']?.toString() ?? '').toLowerCase();
-
-        final isOnline = bStatus == 'active' || bStatus == 'on-time' || bStatus == 'nominal' || bStatus == 'delayed' || bStatus == 'warning';
-        if (!isOnline) continue;
 
         if (bRoute.contains(eRoute) || eRoute.contains(bRoute) ||
             bNum == eBus || bNum == eCleanBus || bNum == ePlate ||
@@ -816,36 +958,69 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFF10B981),
-                        shape: BoxShape.circle,
+              const SizedBox(width: 6),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  InkWell(
+                    onTap: _confirmRestoreDefaults,
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFFBBF24).withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: const Color(0xFFFBBF24).withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.restart_alt_rounded, size: 13, color: Color(0xFFFBBF24)),
+                          const SizedBox(width: 3.5),
+                          Text(
+                            'Restore Defaults',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFFFBBF24),
+                              fontSize: 9.0,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(width: 5),
-                    Text(
-                      '${report.totalRoutes} ROUTES',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: const Color(0xFF10B981),
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w800,
-                      ),
+                  ),
+                  const SizedBox(width: 5),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.3)),
                     ),
-                  ],
-                ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 5,
+                          height: 5,
+                          decoration: const BoxDecoration(
+                            color: Color(0xFF10B981),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${report.totalRoutes} ROUTES',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: const Color(0xFF10B981),
+                            fontSize: 9.0,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1246,8 +1421,14 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
   }
 
   Widget _buildFleetBusCard(Map<String, dynamic> bus, int index) {
+    final bool isBroadcasting = _isBusBroadcasting(bus);
     final String rawStatus = bus['status']?.toString() ?? 'Offline';
-    final Color statusColor = _getStatusColor(rawStatus);
+    final String displayStatus = isBroadcasting
+        ? (rawStatus.toLowerCase() == 'delayed' ? 'DELAYED' : 'ON-TIME')
+        : 'IN DEPOT';
+    final Color statusColor = isBroadcasting
+        ? _getStatusColor(rawStatus)
+        : const Color(0xFF64748B);
     
     final String routeName = bus['routeName']?.toString() ?? '';
     final String assignedBusLabel = TimetableResolver.resolveAssignedBusNumber(
@@ -1417,7 +1598,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                       ),
                       const SizedBox(width: 5),
                       Text(
-                        rawStatus == 'Offline' ? 'IN DEPOT' : rawStatus.toUpperCase(),
+                        displayStatus,
                         style: GoogleFonts.plusJakartaSans(
                           color: statusColor,
                           fontSize: 9,

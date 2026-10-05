@@ -331,13 +331,13 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
       } catch (err) {
         try {
           await _apiService.put('buses/$busId/status', {
-            'status': 'On-time',
+            'status': 'Offline',
             'routeId': routeId,
             'routeName': routeName,
             'routeColor': routeColor,
           });
           success = true;
-          statusMessage = 'Bus $busNum updated to $routeName';
+          statusMessage = 'Bus $busNum updated to $routeName (Standby)';
         } catch (_) {}
       }
     }
@@ -351,10 +351,10 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
           'routeId': routeId,
           'routeName': routeName,
           'routeColor': routeColor,
-          'status': 'On-time',
+          'status': 'Offline',
         });
         success = true;
-        statusMessage = 'Bus $busNum newly registered and assigned to $routeName';
+        statusMessage = 'Bus $busNum newly registered and assigned to $routeName (Standby)';
       } catch (err) {
         debugPrint('Creation fallback failed: $err');
       }

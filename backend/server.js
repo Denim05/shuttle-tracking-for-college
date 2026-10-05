@@ -3076,6 +3076,35 @@ app.post('/api/manager/buses/quick-assign', authMiddleware, async (req, res) => 
     }
 });
 
+// POST /api/manager/buses/restore-defaults
+// Resets all buses back to default institutional standby status (In Depot)
+app.post('/api/manager/buses/restore-defaults', authMiddleware, async (req, res) => {
+    try {
+        const buses = await Bus.find({});
+        for (const b of buses) {
+            b.status = 'Offline';
+            b.speed = 0;
+            b.lastUpdated = new Date(0); // Mark as not live
+            b.reachedStops = [];
+            b.completedStops = 0;
+            await b.save();
+        }
+
+        io.emit('busesUpdated');
+        io.emit('fleetReset');
+        broadcastStats();
+
+        res.json({
+            success: true,
+            message: 'All buses restored to default In-Depot standby status.',
+            count: buses.length
+        });
+    } catch (err) {
+        console.error('Restore defaults error:', err);
+        res.status(500).json({ error: 'Failed to restore defaults: ' + err.message });
+    }
+});
+
 // ─── MANAGER: IN-APP PER-BUS DAILY REPORT (JSON) ─────────────────────────────
 // GET /api/manager/reports/bus/:busId/summary
 // Returns detailed daily operational records for college management.
