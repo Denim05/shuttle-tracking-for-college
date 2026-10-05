@@ -1682,25 +1682,41 @@ app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], async (
     }
 });
 
-// ─── MANAGER: 2-TRIP DAY-WISE BUS OPERATIONAL REPORT (CSV/Excel) ────────────
-// GET /api/manager/reports/bus-trip-report?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>
+// ─── MANAGER: 2-TRIP DAY-WISE BUS OPERATIONAL REPORT (JSON & CSV/Excel) ────────────
+// GET /api/manager/reports/bus-trip-report?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1&format=json|csv
 app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
     try {
-        const { date, shift, busId, days } = req.query;
+        const { date, shift, busId, days, format } = req.query;
         const targetDate = date || new Date().toISOString().split('T')[0];
         const targetShift = shift || 'all';
 
         const reportData = await generateTripReportData({
             targetDate,
             shift: targetShift,
-            busId: busId || null
+            busId: busId || null,
+            days: days ? parseInt(days, 10) : 1
         });
 
-        // Generate clean CSV for spreadsheet/Excel
-        let csv = 'Date,Day,Shift,Bus Name,License Plate,Route Name,Driver Name,Driver Phone,Departure Time,Arrival Time,Duration,Punctuality,Delay (mins),Stops Completed,Total Dist (km),Status\n';
+        // If client requested JSON or sent Accept: application/json
+        const wantsJson = format === 'json' || 
+                          req.query.json === 'true' || 
+                          (req.headers.accept && req.headers.accept.includes('application/json') && format !== 'csv');
+
+        if (wantsJson) {
+            return res.json({
+                success: true,
+                ...reportData
+            });
+        }
+
+        // Generate clean, comprehensive CSV for spreadsheet/Excel
+        let csv = '# SISTec Ratibad - Official Campus Shuttle Operational Trip Log\n';
+        csv += `# Generated Date: ${reportData.date} | Shift: ${targetShift} | Total Buses: ${reportData.totalBuses} | Punctuality: ${reportData.punctualityRate}%\n\n`;
+        csv += 'Trip ID,Date,Day,Shift,Bus Name,License Plate,Route Name,Driver Name,Driver Phone,Origin Stop,Destination Stop,Departure Time,Arrival Time,Duration,Punctuality,Delay (mins),Stops Completed,Total Dist (km),Status,Stop Timeline (Stop: Scheduled [Actual | Variance])\n';
 
         reportData.allTrips.forEach(t => {
-            csv += `"${t.date}","${t.day}","${t.shift}","${t.busNo}","${t.vehicleNo}","${t.routeName}","${t.driverName}","${t.driverPhone}","${t.departureTime}","${t.arrivalTime}","${t.duration}","${t.punctuality}",${t.delayMinutes},"${t.stopsCompleted}","${t.distanceKm}","${t.status}"\n`;
+            const timelineStr = (t.stops || []).map(s => `${s.stopNumber}. ${s.name} (${s.scheduledTime}) [${s.actualTime} | ${s.variance}]`).join(' ➔ ');
+            csv += `"${t.tripId}","${t.date}","${t.day}","${t.shift}","${t.busNo}","${t.vehicleNo}","${t.routeName}","${t.driverName}","${t.driverPhone}","${t.originStop}","${t.destinationStop}","${t.departureTime}","${t.arrivalTime}","${t.duration}","${t.punctuality}",${t.delayMinutes},"${t.stopsCompleted}","${t.distanceKm}","${t.status}","${timelineStr.replace(/"/g, '""')}"\n`;
         });
 
         const safeDate = targetDate.replace(/[^0-9-]/g, '');
@@ -1714,17 +1730,18 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
 });
 
 // ─── MANAGER: PRINTABLE 2-TRIP DAY-WISE HTML & PDF EXECUTIVE REPORT ─────────
-// GET /api/manager/reports/bus-trip-report/html?date=YYYY-MM-DD&shift=all|morning|evening
+// GET /api/manager/reports/bus-trip-report/html?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1
 app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
     try {
-        const { date, shift, busId } = req.query;
+        const { date, shift, busId, days } = req.query;
         const targetDate = date || new Date().toISOString().split('T')[0];
         const targetShift = shift || 'all';
 
         const reportData = await generateTripReportData({
             targetDate,
             shift: targetShift,
-            busId: busId || null
+            busId: busId || null,
+            days: days ? parseInt(days, 10) : 1
         });
 
         const html = `
@@ -1733,25 +1750,28 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SISTec Ratibad - Daily Bus Operations Report (${reportData.date})</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <title>SISTec Ratibad - Fleet & Trip Operations Report (${reportData.date})</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;700&display=swap" rel="stylesheet">
     <style>
         :root {
-            --bg: #0b0f19;
+            --bg: #0a0e17;
             --surface: #111827;
-            --surface-card: #1f2937;
-            --surface-hover: #374151;
+            --surface-card: #1a2234;
+            --surface-hover: #243048;
             --text: #f9fafb;
-            --text-secondary: #9ca3af;
-            --text-muted: #6b7280;
+            --text-secondary: #94a3b8;
+            --text-muted: #64748b;
             --border: rgba(255, 255, 255, 0.08);
             --primary: #4f46e5;
-            --primary-gradient: linear-gradient(135deg, #4f46e5, #3b82f6);
+            --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
             --accent-green: #10b981;
             --accent-amber: #f59e0b;
             --accent-rose: #ef4444;
+            --accent-cyan: #06b6d4;
             --radius-lg: 16px;
-            --radius-md: 10px;
+            --radius-md: 12px;
+            --radius-sm: 8px;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -1764,11 +1784,11 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1440px;
             margin: 0 auto;
         }
 
-        /* Top Header */
+        /* Top Institutional Header */
         .header {
             display: flex;
             justify-content: space-between;
@@ -1783,33 +1803,51 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
         .brand-section {
             display: flex;
             align-items: center;
-            gap: 16px;
+            gap: 18px;
         }
 
         .brand-logo {
-            width: 48px;
-            height: 48px;
-            border-radius: 12px;
+            width: 56px;
+            height: 56px;
+            border-radius: 14px;
             background: var(--primary-gradient);
             display: flex;
             align-items: center;
             justify-content: center;
             font-weight: 800;
-            font-size: 20px;
+            font-size: 22px;
             color: #fff;
-            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.4);
+            box-shadow: 0 8px 20px rgba(79, 70, 229, 0.4);
+            letter-spacing: -1px;
         }
 
         .brand-text h1 {
             font-size: 22px;
             font-weight: 800;
             letter-spacing: -0.3px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .brand-badge {
+            font-size: 11px;
+            font-weight: 700;
+            background: rgba(16, 185, 129, 0.15);
+            color: #10b981;
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
         .brand-text p {
             color: var(--text-secondary);
             font-size: 13px;
             font-weight: 500;
+            margin-top: 2px;
         }
 
         .header-actions {
@@ -1832,29 +1870,34 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             align-items: center;
             gap: 8px;
             text-decoration: none;
-            transition: all 0.2s;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .btn:hover {
             background: var(--surface-hover);
             transform: translateY(-1px);
+            border-color: rgba(255, 255, 255, 0.2);
         }
 
         .btn-primary {
             background: var(--primary-gradient);
             border: none;
             color: #fff;
-            box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.35);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 6px 18px rgba(79, 70, 229, 0.5);
         }
 
         .btn-sheets {
-            background: linear-gradient(135deg, #059669, #10b981);
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
             color: #fff;
             border: none;
-            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
         }
 
-        /* KPI Cards */
+        /* KPI Cards Grid */
         .kpi-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -1869,6 +1912,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             padding: 20px;
             position: relative;
             overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
         }
 
         .kpi-card::before {
@@ -1880,6 +1924,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 
         .kpi-card.green::before { background: var(--accent-green); }
         .kpi-card.amber::before { background: var(--accent-amber); }
+        .kpi-card.cyan::before { background: var(--accent-cyan); }
 
         .kpi-label {
             font-size: 11px;
@@ -1888,18 +1933,24 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             letter-spacing: 1.2px;
             color: var(--text-secondary);
             margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
         }
 
         .kpi-val {
             font-size: 28px;
             font-weight: 800;
             color: #fff;
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            letter-spacing: -0.5px;
         }
 
         .kpi-sub {
             font-size: 12px;
             color: var(--text-muted);
             margin-top: 4px;
+            font-weight: 500;
         }
 
         /* Filter Controls */
@@ -1932,6 +1983,11 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             font-size: 13px;
             font-weight: 600;
             outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-box:focus {
+            border-color: var(--primary);
         }
 
         .shift-tabs {
@@ -1944,8 +2000,8 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
         }
 
         .shift-tab {
-            padding: 6px 14px;
-            border-radius: 6px;
+            padding: 7px 16px;
+            border-radius: 8px;
             font-size: 12px;
             font-weight: 700;
             color: var(--text-secondary);
@@ -1953,11 +2009,23 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             cursor: pointer;
             border: none;
             background: transparent;
+            transition: all 0.2s;
         }
 
         .shift-tab.active {
             background: var(--primary);
             color: #fff;
+            box-shadow: 0 2px 8px rgba(79, 70, 229, 0.4);
+        }
+
+        .search-input {
+            width: 240px;
+            background: var(--surface-card);
+            border: 1px solid var(--border);
+            color: #fff;
+            padding: 8px 14px;
+            border-radius: var(--radius-md);
+            font-size: 13px;
         }
 
         /* Section Headings */
@@ -1965,100 +2033,271 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             display: flex;
             align-items: center;
             justify-content: space-between;
-            margin: 28px 0 16px 0;
-            padding-bottom: 10px;
+            margin: 32px 0 18px 0;
+            padding-bottom: 12px;
             border-bottom: 1px solid var(--border);
         }
 
         .section-title {
-            font-size: 16px;
+            font-size: 18px;
             font-weight: 800;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 10px;
+            letter-spacing: -0.2px;
         }
 
-        /* Tables */
-        .table-wrap {
-            background: var(--surface);
-            border: 1px solid var(--border);
-            border-radius: var(--radius-lg);
-            overflow-x: auto;
+        /* Trip Cards List */
+        .trip-cards-container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
             margin-bottom: 32px;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 13px;
-            text-align: left;
+        .trip-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s, border-color 0.2s;
         }
 
-        th {
-            background: rgba(31, 41, 55, 0.6);
-            color: var(--text-secondary);
+        .trip-card:hover {
+            border-color: rgba(99, 102, 241, 0.35);
+        }
+
+        .trip-card-header {
+            padding: 18px 24px;
+            background: var(--surface-card);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 14px;
+        }
+
+        .trip-bus-info {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+        }
+
+        .bus-pill {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 13px;
             font-weight: 800;
+            background: linear-gradient(135deg, rgba(79, 70, 229, 0.2), rgba(59, 130, 246, 0.2));
+            color: #818cf8;
+            padding: 6px 12px;
+            border-radius: var(--radius-sm);
+            border: 1px solid rgba(129, 140, 248, 0.3);
+        }
+
+        .plate-pill {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            font-weight: 700;
+            color: var(--text-secondary);
+            background: rgba(255, 255, 255, 0.05);
+            padding: 4px 10px;
+            border-radius: var(--radius-sm);
+        }
+
+        .trip-route-title {
+            font-size: 16px;
+            font-weight: 800;
+            color: #fff;
+        }
+
+        .trip-driver-meta {
+            font-size: 12px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 3px;
+        }
+
+        .trip-card-body {
+            padding: 20px 24px;
+        }
+
+        /* Metric Highlights Strip */
+        .metric-strip {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            padding-bottom: 18px;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 18px;
+        }
+
+        .metric-item {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .metric-title {
             font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: var(--text-muted);
+            margin-bottom: 4px;
+        }
+
+        .metric-data {
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--text);
+        }
+
+        .metric-data.highlight {
+            color: #818cf8;
+        }
+
+        /* Visual Stop-by-Stop Stepper */
+        .stop-stepper-title {
+            font-size: 12px;
+            font-weight: 800;
             text-transform: uppercase;
             letter-spacing: 1px;
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--border);
+            color: var(--text-secondary);
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .stop-timeline-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 10px;
+        }
+
+        .stop-node {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 10px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            transition: background 0.15s;
+        }
+
+        .stop-node:hover {
+            background: rgba(255, 255, 255, 0.04);
+        }
+
+        .stop-node.reached {
+            border-left: 3px solid var(--accent-green);
+        }
+
+        .stop-node.next {
+            border-left: 3px solid var(--accent-amber);
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .stop-node.scheduled {
+            border-left: 3px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .stop-info {
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .stop-name {
+            font-size: 12px;
+            font-weight: 700;
+            color: #f1f5f9;
             white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
         }
 
-        td {
-            padding: 14px 16px;
-            border-bottom: 1px solid var(--border);
-            color: var(--text);
-            vertical-align: middle;
+        .stop-times {
+            font-size: 11px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 2px;
+            font-family: 'JetBrains Mono', monospace;
         }
-
-        tr:last-child td { border-bottom: none; }
-        tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
         .badge {
             display: inline-flex;
             align-items: center;
-            padding: 4px 8px;
+            padding: 3px 8px;
             border-radius: 6px;
             font-size: 11px;
             font-weight: 700;
+            white-space: nowrap;
         }
 
-        .badge-ontime { background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
-        .badge-delayed { background: rgba(245, 158, 11, 0.15); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
-        .badge-status { background: rgba(79, 70, 229, 0.15); color: #818cf8; }
+        .badge-ontime { 
+            background: rgba(16, 185, 129, 0.15); 
+            color: #10b981; 
+            border: 1px solid rgba(16, 185, 129, 0.3); 
+        }
 
-        .bus-badge {
-            font-family: 'JetBrains Mono', monospace;
-            font-weight: 700;
-            background: var(--surface-card);
-            padding: 4px 8px;
-            border-radius: 6px;
-            border: 1px solid var(--border);
-            color: #818cf8;
+        .badge-delayed { 
+            background: rgba(245, 158, 11, 0.15); 
+            color: #f59e0b; 
+            border: 1px solid rgba(245, 158, 11, 0.3); 
+        }
+
+        .badge-live { 
+            background: rgba(6, 182, 212, 0.15); 
+            color: #06b6d4; 
+            border: 1px solid rgba(6, 182, 212, 0.3); 
+        }
+
+        .badge-status { 
+            background: rgba(79, 70, 229, 0.15); 
+            color: #818cf8; 
+            border: 1px solid rgba(79, 70, 229, 0.3); 
         }
 
         /* Print Media Styles */
         @media print {
             body {
                 background: #ffffff !important;
-                color: #000000 !important;
-                padding: 10px !important;
-                font-size: 11px !important;
+                color: #0f172a !important;
+                padding: 8mm !important;
+                font-size: 10pt !important;
             }
-            .header-actions, .controls-bar { display: none !important; }
-            .kpi-card, .table-wrap {
+            .header-actions, .controls-bar, .search-box { display: none !important; }
+            .container { max-width: 100% !important; margin: 0 !important; }
+            .kpi-card, .trip-card, .trip-card-header, .stop-node {
                 background: #ffffff !important;
-                border: 1px solid #cccccc !important;
+                border: 1px solid #cbd5e1 !important;
                 box-shadow: none !important;
-                color: #000000 !important;
+                color: #0f172a !important;
+                page-break-inside: avoid;
             }
-            .kpi-val, .kpi-label, td, th { color: #000000 !important; }
-            th { background: #f3f4f6 !important; }
-            .badge-ontime, .badge-delayed, .badge-status, .bus-badge {
-                border: 1px solid #999999 !important;
-                color: #000000 !important;
+            .brand-logo {
+                background: #1e293b !important;
+                box-shadow: none !important;
+            }
+            .brand-text h1, .trip-route-title, .kpi-val, .stop-name, .metric-data {
+                color: #0f172a !important;
+            }
+            .bus-pill, .plate-pill {
+                background: #f1f5f9 !important;
+                color: #0f172a !important;
+                border: 1px solid #94a3b8 !important;
+            }
+            .badge-ontime, .badge-delayed, .badge-live, .badge-status {
+                border: 1px solid #64748b !important;
+                color: #0f172a !important;
                 background: none !important;
             }
         }
@@ -2071,13 +2310,16 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             <div class="brand-section">
                 <div class="brand-logo">SC</div>
                 <div class="brand-text">
-                    <h1>SISTec Ratibad - Daily Fleet Operations Report</h1>
-                    <p>Generated for: <strong>${reportData.day}, ${reportData.date}</strong> | Official 2-Trip Operational Log</p>
+                    <h1>
+                        SISTec Ratibad - Fleet & Trip Operations Report
+                        <span class="brand-badge">Official Audit</span>
+                    </h1>
+                    <p>Generated for: <strong>${reportData.day}, ${reportData.date}</strong> | Complete 2-Trip Scheduled & Live Telemetry Logs</p>
                 </div>
             </div>
             <div class="header-actions">
                 <button class="btn btn-sheets" onclick="syncSheets()">
-                    📊 Sync to Google Sheets
+                    📊 Sync Google Sheets
                 </button>
                 <a href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}" class="btn" download>
                     📥 Download CSV
@@ -2091,28 +2333,33 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
         <!-- KPI Grid -->
         <div class="kpi-grid">
             <div class="kpi-card">
-                <div class="kpi-label">Active Fleet Buses</div>
+                <div class="kpi-label">Monitored Fleet Buses</div>
                 <div class="kpi-val">${reportData.totalBuses}</div>
-                <div class="kpi-sub">Total operational buses today</div>
+                <div class="kpi-sub">Total active campus shuttles</div>
             </div>
             <div class="kpi-card green">
                 <div class="kpi-label">Daily Scheduled Trips</div>
                 <div class="kpi-val">${reportData.totalTrips}</div>
-                <div class="kpi-sub">27 Morning + 27 Evening</div>
+                <div class="kpi-sub">${reportData.morningTrips.length} Pickup + ${reportData.eveningTrips.length} Drop-off</div>
             </div>
             <div class="kpi-card amber">
-                <div class="kpi-label">Fleet On-Time Rate</div>
+                <div class="kpi-label">Punctuality Compliance</div>
                 <div class="kpi-val">${reportData.punctualityRate}%</div>
-                <div class="kpi-sub">${reportData.onTimeTrips} of ${reportData.totalTrips} trips on-time</div>
+                <div class="kpi-sub">${reportData.onTimeTrips} on-time, ${reportData.delayedTrips} delayed</div>
+            </div>
+            <div class="kpi-card cyan">
+                <div class="kpi-label">Fleet Commute Mileage</div>
+                <div class="kpi-val">${reportData.totalDistance} km</div>
+                <div class="kpi-sub">Total road network distance</div>
             </div>
             <div class="kpi-card">
-                <div class="kpi-label">Total Fleet Distance</div>
-                <div class="kpi-val">${reportData.totalDistance} km</div>
-                <div class="kpi-sub">Total covered commute km</div>
+                <div class="kpi-label">Stops Serviced</div>
+                <div class="kpi-val">${reportData.totalStopsServiced || reportData.stopLogs.length}</div>
+                <div class="kpi-sub">Total passenger boarding stops</div>
             </div>
         </div>
 
-        <!-- Controls -->
+        <!-- Controls Toolbar -->
         <div class="controls-bar">
             <div class="filter-group">
                 <label style="font-size:12px; font-weight:700; color:var(--text-secondary);">Select Date:</label>
@@ -2123,107 +2370,181 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 
             <div class="filter-group">
                 <div class="shift-tabs">
-                    <button class="shift-tab ${reportData.shift === 'all' ? 'active' : ''}" onclick="changeShift('all')">All 54 Trips</button>
-                    <button class="shift-tab ${reportData.shift === 'morning' ? 'active' : ''}" onclick="changeShift('morning')">🌅 Morning (27)</button>
-                    <button class="shift-tab ${reportData.shift === 'evening' ? 'active' : ''}" onclick="changeShift('evening')">🌆 Evening (27)</button>
+                    <button class="shift-tab ${reportData.shift === 'all' ? 'active' : ''}" onclick="changeShift('all')">All Trips (${reportData.totalTrips})</button>
+                    <button class="shift-tab ${reportData.shift === 'morning' ? 'active' : ''}" onclick="changeShift('morning')">🌅 Morning (${reportData.morningTrips.length})</button>
+                    <button class="shift-tab ${reportData.shift === 'evening' ? 'active' : ''}" onclick="changeShift('evening')">🌆 Afternoon (${reportData.eveningTrips.length})</button>
                 </div>
+                <input type="text" id="busSearch" class="search-input" placeholder="🔍 Search Bus, Route, Driver..." onkeyup="filterTrips(this.value)">
             </div>
         </div>
 
-        <!-- TRIP 1: MORNING PICKUP TABLE -->
+        <!-- TRIP 1: MORNING PICKUP -->
         ${reportData.shift === 'all' || reportData.shift === 'morning' ? `
         <div class="section-header">
             <div class="section-title">
-                🌅 Trip 1: Morning Pickup (City Stops ➔ SISTec Ratibad Campus)
+                🌅 Trip 1: Morning Pickup Shift (City Origins ➔ SISTec Ratibad Campus)
             </div>
-            <span style="font-size:13px; color:var(--text-secondary); font-weight:600;">27 Buses Scheduled | Target Arrival ~08:45 AM</span>
+            <span style="font-size:13px; color:var(--text-secondary); font-weight:600;">
+                Target Campus Arrival: 08:35 - 08:45 AM
+            </span>
         </div>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Bus No</th>
-                        <th>Plate No</th>
-                        <th>Route Name</th>
-                        <th>Driver & Phone</th>
-                        <th>Depart Time</th>
-                        <th>Campus Arrival</th>
-                        <th>Duration</th>
-                        <th>Punctuality</th>
-                        <th>Stops</th>
-                        <th>Dist (km)</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${reportData.morningTrips.map(t => `
-                    <tr>
-                        <td><span class="bus-badge">${t.busNo}</span></td>
-                        <td style="font-family:'JetBrains Mono'; font-weight:600;">${t.vehicleNo}</td>
-                        <td style="font-weight:700;">${t.routeName}</td>
-                        <td>${t.driverName}<br><span style="font-size:11px; color:var(--text-muted);">${t.driverPhone}</span></td>
-                        <td>${t.departureTime}</td>
-                        <td style="font-weight:700;">${t.arrivalTime}</td>
-                        <td>${t.duration}</td>
-                        <td><span class="badge ${t.punctuality.includes('On-Time') ? 'badge-ontime' : 'badge-delayed'}">${t.punctuality}</span></td>
-                        <td>${t.stopsCompleted}</td>
-                        <td>${t.distanceKm}</td>
-                        <td><span class="badge badge-status">${t.status}</span></td>
-                    </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+
+        <div class="trip-cards-container">
+            ${reportData.morningTrips.map(t => `
+            <div class="trip-card" data-search="${t.busNo} ${t.vehicleNo} ${t.routeName} ${t.driverName}">
+                <div class="trip-card-header">
+                    <div class="trip-bus-info">
+                        <span class="bus-pill">${t.busNo}</span>
+                        <span class="plate-pill">${t.vehicleNo}</span>
+                        <div>
+                            <div class="trip-route-title">${t.routeName}</div>
+                            <div class="trip-driver-meta">
+                                <span>👨‍✈️ Driver: <strong>${t.driverName}</strong></span>
+                                <span>• 📞 ${t.driverPhone}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="badge ${t.punctuality.includes('On-Time') ? 'badge-ontime' : 'badge-delayed'}">${t.punctuality}</span>
+                        <span class="badge badge-status">${t.status}</span>
+                    </div>
+                </div>
+
+                <div class="trip-card-body">
+                    <!-- Metric Highlights -->
+                    <div class="metric-strip">
+                        <div class="metric-item">
+                            <span class="metric-title">Origin ➔ Destination</span>
+                            <span class="metric-data">${t.originStop} ➔ ${t.destinationStop}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Departure Time</span>
+                            <span class="metric-data highlight">${t.departureTime} <small style="color:var(--text-muted);">(Sched: ${t.scheduledDeparture})</small></span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Campus Arrival</span>
+                            <span class="metric-data highlight">${t.arrivalTime} <small style="color:var(--text-muted);">(Sched: ${t.scheduledArrival})</small></span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Trip Duration & Mileage</span>
+                            <span class="metric-data">${t.duration} • ${t.distanceKm} km</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Stops Serviced</span>
+                            <span class="metric-data">${t.stopsCompleted} Reached</span>
+                        </div>
+                    </div>
+
+                    <!-- Stop-by-Stop Stepper -->
+                    <div class="stop-stepper-title">
+                        <span>Detailed Stop-by-Stop Progress (${t.stops ? t.stops.length : 0} Stops)</span>
+                        <span style="font-size:11px; text-transform:none; color:var(--text-muted);">Scheduled vs Actual Arrival</span>
+                    </div>
+                    <div class="stop-timeline-grid">
+                        ${(t.stops || []).map(st => `
+                        <div class="stop-node ${st.status.includes('Reached') ? 'reached' : (st.status.includes('Next') ? 'next' : 'scheduled')}">
+                            <div class="stop-info">
+                                <span class="stop-name">${st.stopNumber}. ${st.name}</span>
+                                <div class="stop-times">
+                                    <span>Sched: ${st.scheduledTime}</span>
+                                    <span>• Reached: <strong>${st.actualTime}</strong></span>
+                                </div>
+                            </div>
+                            <span class="badge ${st.variance.includes('On-Time') ? 'badge-ontime' : (st.variance.includes('Early') ? 'badge-live' : 'badge-delayed')}">${st.variance}</span>
+                        </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+            `).join('')}
         </div>
         ` : ''}
 
-        <!-- TRIP 2: EVENING DROP-OFF TABLE -->
+        <!-- TRIP 2: AFTERNOON DROP-OFF -->
         ${reportData.shift === 'all' || reportData.shift === 'evening' ? `
         <div class="section-header">
             <div class="section-title">
-                🌆 Trip 2: Evening Drop-off (SISTec Ratibad Campus ➔ City Stops)
+                🌆 Trip 2: Afternoon/Evening Drop-off Shift (SISTec Ratibad Campus ➔ City Terminus)
             </div>
-            <span style="font-size:13px; color:var(--text-secondary); font-weight:600;">27 Buses Scheduled | Departure ~04:45 PM</span>
+            <span style="font-size:13px; color:var(--text-secondary); font-weight:600;">
+                Campus Departure: 04:45 PM
+            </span>
         </div>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Bus No</th>
-                        <th>Plate No</th>
-                        <th>Route Name</th>
-                        <th>Driver & Phone</th>
-                        <th>Depart Time</th>
-                        <th>Final Stop Drop</th>
-                        <th>Duration</th>
-                        <th>Punctuality</th>
-                        <th>Stops</th>
-                        <th>Dist (km)</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${reportData.eveningTrips.map(t => `
-                    <tr>
-                        <td><span class="bus-badge">${t.busNo}</span></td>
-                        <td style="font-family:'JetBrains Mono'; font-weight:600;">${t.vehicleNo}</td>
-                        <td style="font-weight:700;">${t.routeName}</td>
-                        <td>${t.driverName}<br><span style="font-size:11px; color:var(--text-muted);">${t.driverPhone}</span></td>
-                        <td>${t.departureTime}</td>
-                        <td style="font-weight:700;">${t.arrivalTime}</td>
-                        <td>${t.duration}</td>
-                        <td><span class="badge ${t.punctuality.includes('On-Time') ? 'badge-ontime' : 'badge-delayed'}">${t.punctuality}</span></td>
-                        <td>${t.stopsCompleted}</td>
-                        <td>${t.distanceKm}</td>
-                        <td><span class="badge badge-status">${t.status}</span></td>
-                    </tr>
-                    `).join('')}
-                </tbody>
-            </table>
+
+        <div class="trip-cards-container">
+            ${reportData.eveningTrips.map(t => `
+            <div class="trip-card" data-search="${t.busNo} ${t.vehicleNo} ${t.routeName} ${t.driverName}">
+                <div class="trip-card-header">
+                    <div class="trip-bus-info">
+                        <span class="bus-pill">${t.busNo}</span>
+                        <span class="plate-pill">${t.vehicleNo}</span>
+                        <div>
+                            <div class="trip-route-title">${t.routeName}</div>
+                            <div class="trip-driver-meta">
+                                <span>👨‍✈️ Driver: <strong>${t.driverName}</strong></span>
+                                <span>• 📞 ${t.driverPhone}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div style="display:flex; align-items:center; gap:8px;">
+                        <span class="badge ${t.punctuality.includes('On-Time') ? 'badge-ontime' : 'badge-delayed'}">${t.punctuality}</span>
+                        <span class="badge badge-status">${t.status}</span>
+                    </div>
+                </div>
+
+                <div class="trip-card-body">
+                    <!-- Metric Highlights -->
+                    <div class="metric-strip">
+                        <div class="metric-item">
+                            <span class="metric-title">Origin ➔ Destination</span>
+                            <span class="metric-data">${t.originStop} ➔ ${t.destinationStop}</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Departure Time</span>
+                            <span class="metric-data highlight">${t.departureTime} <small style="color:var(--text-muted);">(Sched: ${t.scheduledDeparture})</small></span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Final Drop Arrival</span>
+                            <span class="metric-data highlight">${t.arrivalTime} <small style="color:var(--text-muted);">(Sched: ${t.scheduledArrival})</small></span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Trip Duration & Mileage</span>
+                            <span class="metric-data">${t.duration} • ${t.distanceKm} km</span>
+                        </div>
+                        <div class="metric-item">
+                            <span class="metric-title">Stops Serviced</span>
+                            <span class="metric-data">${t.stopsCompleted} Reached</span>
+                        </div>
+                    </div>
+
+                    <!-- Stop-by-Stop Stepper -->
+                    <div class="stop-stepper-title">
+                        <span>Detailed Return Stop Sequence (${t.stops ? t.stops.length : 0} Stops)</span>
+                        <span style="font-size:11px; text-transform:none; color:var(--text-muted);">Scheduled vs Actual Arrival</span>
+                    </div>
+                    <div class="stop-timeline-grid">
+                        ${(t.stops || []).map(st => `
+                        <div class="stop-node ${st.status.includes('Reached') ? 'reached' : (st.status.includes('Next') ? 'next' : 'scheduled')}">
+                            <div class="stop-info">
+                                <span class="stop-name">${st.stopNumber}. ${st.name}</span>
+                                <div class="stop-times">
+                                    <span>Sched: ${st.scheduledTime}</span>
+                                    <span>• Reached: <strong>${st.actualTime}</strong></span>
+                                </div>
+                            </div>
+                            <span class="badge ${st.variance.includes('On-Time') ? 'badge-ontime' : (st.variance.includes('Early') ? 'badge-live' : 'badge-delayed')}">${st.variance}</span>
+                        </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+            `).join('')}
         </div>
         ` : ''}
 
-        <div style="text-align:center; padding: 24px; font-size:12px; color:var(--text-muted);">
-            SISTec Chalo Shuttle Tracking System • Verified Manager Operations Report • Official SGI Ratibad
+        <!-- Institutional Footer -->
+        <div style="text-align:center; padding: 36px 0; font-size:12px; color:var(--text-muted); border-top: 1px solid var(--border); margin-top: 40px;">
+            SISTec Chalo Institutional Transit Audit • Sagar Institute of Science & Technology (SISTec), Ratibad Campus, Bhopal • ISO 9001:2015 Transport Protocol
         </div>
     </div>
 
@@ -2245,6 +2566,19 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             d.setDate(d.getDate() + offsetDays);
             const iso = d.toISOString().split('T')[0];
             changeDate(iso);
+        }
+
+        function filterTrips(term) {
+            const lower = term.toLowerCase().trim();
+            const cards = document.querySelectorAll('.trip-card');
+            cards.forEach(card => {
+                const searchData = (card.getAttribute('data-search') || '').toLowerCase();
+                if (!lower || searchData.includes(lower)) {
+                    card.style.display = '';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
         }
 
         async function syncSheets() {

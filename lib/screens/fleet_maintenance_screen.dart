@@ -360,82 +360,12 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                         ),
                       ),
 
-                      // --- TAB 2: TRIP REPORTS & LOGS ---
-                      SingleChildScrollView(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Daily Trip Logs (Today)', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
-                            const SizedBox(height: 14),
-                            
-                            // Morning Pickup Card
-                            _buildTripCard(
-                              title: 'Morning Pickup Trip',
-                              timeRange: '06:00 AM – 09:30 AM',
-                              direction: 'Stops → SISTec Campus',
-                              status: 'Completed',
-                              statusColor: Colors.greenAccent,
-                              avgDuration: '45 mins',
-                              passengers: '42 Students',
-                            ),
-                            const SizedBox(height: 14),
-
-                            // Afternoon Return Card
-                            _buildTripCard(
-                              title: 'Afternoon Return Trip',
-                              timeRange: '04:30 PM – 06:30 PM',
-                              direction: 'SISTec Campus → Stops',
-                              status: 'Scheduled',
-                              statusColor: Colors.orangeAccent,
-                              avgDuration: '50 mins',
-                              passengers: '38 Students',
-                            ),
-                            const SizedBox(height: 24),
-
-                            Text('Export Operational Reports', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: OutlinedButton.icon(
-                                    style: OutlinedButton.styleFrom(
-                                      side: const BorderSide(color: Colors.blueAccent),
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                    ),
-                                    icon: const Icon(Icons.download_rounded, color: Colors.blueAccent, size: 20),
-                                    label: Text('Download CSV', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 12)),
-                                    onPressed: () async {
-                                      final url = Uri.parse('${AppConstants.apiUrl}/manager/reports/bus-trip-report?busId=$busId&days=7');
-                                      if (await canLaunchUrl(url)) {
-                                        await launchUrl(url, mode: LaunchMode.externalApplication);
-                                      }
-                                    },
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: ElevatedButton.icon(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blueAccent,
-                                      padding: const EdgeInsets.symmetric(vertical: 14),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                                    ),
-                                    icon: const Icon(Icons.print_rounded, color: Colors.white, size: 20),
-                                    label: Text('Print Report', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
-                                    onPressed: () async {
-                                      final url = Uri.parse('${AppConstants.apiUrl}/manager/reports/bus-trip-report/html?busId=$busId&days=7');
-                                      if (await canLaunchUrl(url)) {
-                                        await launchUrl(url, mode: LaunchMode.externalApplication);
-                                      }
-                                    },
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
+                      // --- TAB 2: LIVE BUS TRIP & DAY REPORTS ---
+                      _BusTripReportTab(
+                        busId: busId,
+                        busName: initialName,
+                        busNumber: initialNum,
+                        apiService: _apiService,
                       ),
                     ],
                   ),
@@ -444,65 +374,6 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildTripCard({
-    required String title,
-    required String timeRange,
-    required String direction,
-    required String status,
-    required Color statusColor,
-    required String avgDuration,
-    required String passengers,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF242424),
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Text(
-                  title, 
-                  style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(status, style: GoogleFonts.plusJakartaSans(color: statusColor, fontSize: 10, fontWeight: FontWeight.bold)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-          Text(direction, style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 12)),
-          const SizedBox(height: 10),
-          Row(
-            children: [
-              const Icon(Icons.access_time_rounded, color: Colors.blueAccent, size: 16),
-              const SizedBox(width: 6),
-              Text(timeRange, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11)),
-              const Spacer(),
-              const Icon(Icons.people_outline_rounded, color: Colors.greenAccent, size: 16),
-              const SizedBox(width: 6),
-              Text(passengers, style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11)),
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -1698,3 +1569,527 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
     }
   }
 }
+
+class _BusTripReportTab extends StatefulWidget {
+  final String busId;
+  final String busName;
+  final String busNumber;
+  final ApiService apiService;
+
+  const _BusTripReportTab({
+    required this.busId,
+    required this.busName,
+    required this.busNumber,
+    required this.apiService,
+  });
+
+  @override
+  State<_BusTripReportTab> createState() => _BusTripReportTabState();
+}
+
+class _BusTripReportTabState extends State<_BusTripReportTab> {
+  bool _isLoading = true;
+  String? _error;
+  Map<String, dynamic>? _report;
+  String _selectedShift = 'morning'; // 'morning', 'evening', 'all'
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchReport();
+  }
+
+  Future<void> _fetchReport() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final res = await widget.apiService.get('manager/reports/bus-trip-report?busId=${widget.busId}&days=1&format=json');
+      if (mounted) {
+        setState(() {
+          _report = res is Map<String, dynamic> ? res : null;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _openReport({required bool isHtml}) async {
+    final path = isHtml ? 'bus-trip-report/html' : 'bus-trip-report';
+    final url = Uri.parse('${AppConstants.apiUrl}/manager/reports/$path?busId=${widget.busId}&days=1&shift=$_selectedShift');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(32),
+          child: CircularProgressIndicator(color: Colors.blueAccent),
+        ),
+      );
+    }
+
+    if (_error != null || _report == null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.error_outline_rounded, color: Colors.orangeAccent, size: 36),
+              const SizedBox(height: 10),
+              Text(
+                'Could not load telemetry report',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _error ?? 'No records available',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 11),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 14),
+              ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF4F46E5),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                icon: const Icon(Icons.refresh_rounded, size: 16),
+                label: Text('Retry', style: GoogleFonts.plusJakartaSans(fontSize: 12, fontWeight: FontWeight.bold)),
+                onPressed: _fetchReport,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final morningTrips = (_report!['morningTrips'] as List?) ?? [];
+    final eveningTrips = (_report!['eveningTrips'] as List?) ?? [];
+    final allTrips = (_report!['allTrips'] as List?) ?? [];
+
+    List<dynamic> displayedTrips = [];
+    if (_selectedShift == 'morning') {
+      displayedTrips = morningTrips;
+    } else if (_selectedShift == 'evening') {
+      displayedTrips = eveningTrips;
+    } else {
+      displayedTrips = allTrips;
+    }
+
+    final dateStr = _report!['date'] ?? 'Today';
+    final dayStr = _report!['day'] ?? '';
+    final punctualityRate = _report!['punctualityRate'] ?? '100.0';
+    final totalDistance = _report!['totalDistance'] ?? '0.0';
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.fromLTRB(18, 14, 18, 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Day Summary Dossier ──
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF1E2640), Color(0xFF151A2C)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFF4F46E5).withValues(alpha: 0.3)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4F46E5).withValues(alpha: 0.25),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: const Color(0xFF818CF8).withValues(alpha: 0.4)),
+                          ),
+                          child: Text(
+                            widget.busName,
+                            style: GoogleFonts.jetBrainsMono(
+                              color: const Color(0xFF818CF8),
+                              fontWeight: FontWeight.w800,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.busNumber,
+                          style: GoogleFonts.jetBrainsMono(
+                            color: Colors.white70,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: Colors.greenAccent.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.greenAccent.withValues(alpha: 0.3)),
+                      ),
+                      child: Text(
+                        'Day Report',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 10,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '$dayStr, $dateStr',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildKpiMini('Punctuality', '$punctualityRate%', Colors.greenAccent),
+                    const SizedBox(width: 10),
+                    _buildKpiMini('Commute', '$totalDistance km', const Color(0xFF818CF8)),
+                    const SizedBox(width: 10),
+                    _buildKpiMini('Trips', '${morningTrips.length + eveningTrips.length}', Colors.amberAccent),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Segmented Trip Filter Switcher ──
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: const Color(0xFF161B26),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: _buildShiftTab('🌅 Morning (${morningTrips.length})', 'morning'),
+                ),
+                Expanded(
+                  child: _buildShiftTab('🌆 Afternoon (${eveningTrips.length})', 'evening'),
+                ),
+                Expanded(
+                  child: _buildShiftTab('All (${allTrips.length})', 'all'),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── Trip Cards & Stop-by-Stop Progress ──
+          if (displayedTrips.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'No trips found for this selection.',
+                  style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12),
+                ),
+              ),
+            )
+          else
+            ...displayedTrips.map((t) => _buildTripDetailTile(t)),
+
+          const SizedBox(height: 20),
+
+          // ── Export Actions ──
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.download_rounded, color: Colors.greenAccent, size: 16),
+                  label: Text('Download CSV', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11.5)),
+                  onPressed: () => _openReport(isHtml: false),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF4F46E5),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.print_rounded, color: Colors.white, size: 16),
+                  label: Text('Print PDF', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11.5)),
+                  onPressed: () => _openReport(isHtml: true),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildKpiMini(String label, String value, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 9.5, fontWeight: FontWeight.w700)),
+            const SizedBox(height: 2),
+            Text(value, style: GoogleFonts.plusJakartaSans(color: color, fontSize: 13, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildShiftTab(String label, String key) {
+    final isSelected = _selectedShift == key;
+    return InkWell(
+      onTap: () => setState(() => _selectedShift = key),
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF4F46E5) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          textAlign: TextAlign.center,
+          style: GoogleFonts.plusJakartaSans(
+            color: isSelected ? Colors.white : Colors.white54,
+            fontWeight: FontWeight.w800,
+            fontSize: 11,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTripDetailTile(dynamic t) {
+    final shift = t['shift'] ?? 'Commute Trip';
+    final origin = t['originStop'] ?? 'Origin';
+    final destination = t['destinationStop'] ?? 'Destination';
+    final departure = t['departureTime'] ?? 'N/A';
+    final arrival = t['arrivalTime'] ?? 'N/A';
+    final schedDepart = t['scheduledDeparture'] ?? '';
+    final schedArrive = t['scheduledArrival'] ?? '';
+    final duration = t['duration'] ?? 'N/A';
+    final distance = t['distanceKm'] ?? '0';
+    final punctuality = t['punctuality'] ?? 'On-Time';
+    final status = t['status'] ?? 'Scheduled';
+    final stops = (t['stops'] as List?) ?? [];
+    final isOnTime = punctuality.toString().contains('On-Time');
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1E2433),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Padding(
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        shift,
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 13.5),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '$origin ➔ $destination',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 11),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: isOnTime ? Colors.greenAccent.withValues(alpha: 0.15) : Colors.amberAccent.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: isOnTime ? Colors.greenAccent.withValues(alpha: 0.3) : Colors.amberAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    punctuality,
+                    style: GoogleFonts.plusJakartaSans(
+                      color: isOnTime ? Colors.greenAccent : Colors.amberAccent,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Timings Row
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            color: Colors.black.withValues(alpha: 0.2),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('DEPARTURE', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text(departure, style: GoogleFonts.jetBrainsMono(color: const Color(0xFF818CF8), fontSize: 12, fontWeight: FontWeight.bold)),
+                      if (schedDepart.isNotEmpty)
+                        Text('Sched: $schedDepart', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('ARRIVAL', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text(arrival, style: GoogleFonts.jetBrainsMono(color: const Color(0xFF818CF8), fontSize: 12, fontWeight: FontWeight.bold)),
+                      if (schedArrive.isNotEmpty)
+                        Text('Sched: $schedArrive', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9)),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('DURATION / DIST', style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 2),
+                      Text('$duration • ${distance}km', style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold)),
+                      Text(status, style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 9)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Stop Stepper Expansion
+          if (stops.isNotEmpty) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 12, 14, 6),
+              child: Text(
+                'Stop Timetable (${stops.length} Stops)',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 10.5, fontWeight: FontWeight.w800, letterSpacing: 0.5),
+              ),
+            ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: stops.length,
+              itemBuilder: (ctx, sIdx) {
+                final st = stops[sIdx];
+                final stName = st['name'] ?? 'Stop ${sIdx + 1}';
+                final stSched = st['scheduledTime'] ?? 'N/A';
+                final stAct = st['actualTime'] ?? 'Pending';
+                final isReached = st['status']?.toString().contains('Reached') == true;
+
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        isReached ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                        color: isReached ? Colors.greenAccent : Colors.white24,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '${sIdx + 1}. $stName',
+                          style: GoogleFonts.plusJakartaSans(color: isReached ? Colors.white : Colors.white60, fontSize: 11, fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Text(
+                        'Sched: $stSched  •  ',
+                        style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 10),
+                      ),
+                      Text(
+                        stAct,
+                        style: GoogleFonts.jetBrainsMono(
+                          color: isReached ? Colors.greenAccent : Colors.white54,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+        ],
+      ),
+    );
+  }
+}
+

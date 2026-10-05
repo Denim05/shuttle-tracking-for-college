@@ -69,7 +69,7 @@ export const notificationAPI = {
 };
 
 export const reportAPI = {
-  getBusTripReport: (busId, days = 7) => api.get(`/api/manager/reports/bus-trip-report?busId=${busId}&days=${days}`),
+  getBusTripReport: (busId, days = 7, shift = 'all') => api.get(`/api/manager/reports/bus-trip-report?busId=${busId || ''}&days=${days}&shift=${shift}&format=json`),
   getBusSummary: (busId) => api.get(`/api/manager/reports/bus/${busId}/summary`),
 };
 
