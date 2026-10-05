@@ -135,10 +135,349 @@ async function initializeSpreadsheetTabs(sheets, spreadsheetId = SPREADSHEET_ID)
             }
         });
 
+        // Apply executive spreadsheet styling (frozen rows, column widths, banding, colors)
+        await applyProfessionalSpreadsheetStyling(sheets, spreadsheetId);
+
         return true;
     } catch (e) {
         console.error('❌ Error initializing Google Sheets tabs:', e.message);
         throw e;
+    }
+}
+
+/**
+ * Applies executive styling across all Google Sheets tabs:
+ * - Vibrant tab accent colors (Gold Amber, Twilight Violet, Emerald Teal, Cobalt Blue)
+ * - Pinned frozen header rows + visible crisp gridlines
+ * - Interactive Auto-Filter dropdowns on all columns
+ * - Generous row heights (42px header, 28px data rows) for effortless readability
+ * - Smart column alignments (LEFT for routes/names, CENTER for dates/times/status/metrics)
+ * - Tailored, non-truncating column widths
+ * - High-contrast institutional header color schemes
+ * - Alternating zebra striping (Pure White #FFFFFF / Executive Slate #F8FAFC)
+ * - Triple-tier conditional formatting (🟢 On-Time mint, 🔴 Delay rose, ⚡ In-Transit azure)
+ */
+async function applyProfessionalSpreadsheetStyling(sheets, spreadsheetId = SPREADSHEET_ID) {
+    try {
+        const meta = await sheets.spreadsheets.get({ spreadsheetId });
+        const sheetMap = {};
+        for (const s of meta.data.sheets) {
+            sheetMap[s.properties.title] = s;
+        }
+
+        const requests = [];
+
+        const configs = [
+            {
+                title: '🌅 Morning Trips (Pickup)',
+                headerBg: { red: 0.06, green: 0.09, blue: 0.16 }, // #0F172A Deep Slate Navy
+                tabColor: { red: 0.96, green: 0.62, blue: 0.04 }, // #F59E0B Golden Amber
+                punctualityCol: 13,
+                statusCol: 15,
+                columnWidths: [110, 95, 100, 130, 270, 190, 120, 120, 110, 160, 140, 110, 115, 165, 110, 135, 120],
+                leftCols: [4, 5, 9], // Route Name, Origin, Driver Name
+                numCols: 17
+            },
+            {
+                title: '🌆 Evening Trips (Drop)',
+                headerBg: { red: 0.12, green: 0.11, blue: 0.29 }, // #1E1B4B Twilight Indigo
+                tabColor: { red: 0.55, green: 0.36, blue: 0.96 }, // #8B5CF6 Twilight Purple
+                punctualityCol: 14,
+                statusCol: 16,
+                columnWidths: [110, 95, 100, 130, 280, 190, 130, 190, 120, 110, 160, 140, 110, 115, 165, 110, 135],
+                leftCols: [4, 5, 7, 10], // Route, Campus Origin, Destination, Driver Name
+                numCols: 17
+            },
+            {
+                title: '📍 Real-Time Stops Log',
+                headerBg: { red: 0.02, green: 0.31, blue: 0.23 }, // #064E3B Deep Forest Emerald
+                tabColor: { red: 0.06, green: 0.73, blue: 0.51 }, // #10B981 Vibrant Mint
+                punctualityCol: 9,
+                statusCol: 10,
+                columnWidths: [110, 150, 100, 130, 260, 90, 240, 120, 140, 130, 140],
+                leftCols: [4, 6], // Route Name, Stop Name
+                numCols: 11
+            },
+            {
+                title: '📊 Fleet KPI Summary',
+                headerBg: { red: 0.12, green: 0.23, blue: 0.54 }, // #1E3A8A Executive Royal Blue
+                tabColor: { red: 0.15, green: 0.39, blue: 0.92 }, // #2563EB Cobalt Blue
+                punctualityCol: 6,
+                statusCol: 9,
+                columnWidths: [115, 105, 140, 155, 155, 140, 140, 165, 140, 150, 135],
+                leftCols: [9], // Fleet Health
+                numCols: 11
+            }
+        ];
+
+        for (const cfg of configs) {
+            const sheet = sheetMap[cfg.title];
+            if (!sheet) continue;
+            const sheetId = sheet.properties.sheetId;
+
+            // 1. Tab Color, Freeze Top Row, and Enable Gridlines
+            requests.push({
+                updateSheetProperties: {
+                    properties: {
+                        sheetId,
+                        tabColorStyle: {
+                            rgbColor: cfg.tabColor
+                        },
+                        gridProperties: {
+                            frozenRowCount: 1,
+                            showGridLines: true
+                        }
+                    },
+                    fields: 'tabColorStyle,gridProperties.frozenRowCount,gridProperties.showGridLines'
+                }
+            });
+
+            // 2. Header Row Height (42px - Spacious Executive Touch)
+            requests.push({
+                updateDimensionProperties: {
+                    range: { sheetId, dimension: 'ROWS', startIndex: 0, endIndex: 1 },
+                    properties: { pixelSize: 42 },
+                    fields: 'pixelSize'
+                }
+            });
+
+            // 3. Data Rows Default Height (28px)
+            requests.push({
+                updateDimensionProperties: {
+                    range: { sheetId, dimension: 'ROWS', startIndex: 1, endIndex: 500 },
+                    properties: { pixelSize: 28 },
+                    fields: 'pixelSize'
+                }
+            });
+
+            // 4. Header Cell Styling (High-contrast, bold, centered, middle-aligned)
+            requests.push({
+                repeatCell: {
+                    range: {
+                        sheetId,
+                        startRowIndex: 0,
+                        endRowIndex: 1,
+                        startColumnIndex: 0,
+                        endColumnIndex: cfg.numCols
+                    },
+                    cell: {
+                        userEnteredFormat: {
+                            backgroundColor: cfg.headerBg,
+                            textFormat: {
+                                foregroundColor: { red: 1.0, green: 1.0, blue: 1.0 },
+                                bold: true,
+                                fontSize: 10.5,
+                                fontFamily: 'Roboto'
+                            },
+                            horizontalAlignment: 'CENTER',
+                            verticalAlignment: 'MIDDLE',
+                            wrapStrategy: 'CLIP'
+                        }
+                    },
+                    fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)'
+                }
+            });
+
+            // 5. Data Rows Default Formatting (Roboto, vertical middle, centered by default)
+            requests.push({
+                repeatCell: {
+                    range: {
+                        sheetId,
+                        startRowIndex: 1,
+                        endRowIndex: 1000,
+                        startColumnIndex: 0,
+                        endColumnIndex: cfg.numCols
+                    },
+                    cell: {
+                        userEnteredFormat: {
+                            textFormat: {
+                                foregroundColor: { red: 0.12, green: 0.15, blue: 0.20 },
+                                fontSize: 9.5,
+                                fontFamily: 'Roboto'
+                            },
+                            horizontalAlignment: 'CENTER',
+                            verticalAlignment: 'MIDDLE',
+                            wrapStrategy: 'CLIP'
+                        }
+                    },
+                    fields: 'userEnteredFormat(textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)'
+                }
+            });
+
+            // 6. Left-align text columns (routes, stops, drivers) for superior readability
+            for (const colIdx of cfg.leftCols) {
+                requests.push({
+                    repeatCell: {
+                        range: {
+                            sheetId,
+                            startRowIndex: 1,
+                            endRowIndex: 1000,
+                            startColumnIndex: colIdx,
+                            endColumnIndex: colIdx + 1
+                        },
+                        cell: {
+                            userEnteredFormat: {
+                                horizontalAlignment: 'LEFT'
+                            }
+                        },
+                        fields: 'userEnteredFormat.horizontalAlignment'
+                    }
+                });
+            }
+
+            // 7. Column Widths (Generous, non-truncating)
+            cfg.columnWidths.forEach((width, colIdx) => {
+                requests.push({
+                    updateDimensionProperties: {
+                        range: {
+                            sheetId,
+                            dimension: 'COLUMNS',
+                            startIndex: colIdx,
+                            endIndex: colIdx + 1
+                        },
+                        properties: { pixelSize: width },
+                        fields: 'pixelSize'
+                    }
+                });
+            });
+
+            // 8. Auto-Filter (Dropdown buttons for instant sorting & filtering by managers)
+            requests.push({
+                setBasicFilter: {
+                    filter: {
+                        range: {
+                            sheetId,
+                            startRowIndex: 0,
+                            endRowIndex: 1000,
+                            startColumnIndex: 0,
+                            endColumnIndex: cfg.numCols
+                        }
+                    }
+                }
+            });
+
+            // 9. Alternating Zebra Banding (White / #F8FAFC)
+            if (!sheet.bandedRanges || sheet.bandedRanges.length === 0) {
+                requests.push({
+                    addBanding: {
+                        bandedRange: {
+                            range: {
+                                sheetId,
+                                startRowIndex: 0,
+                                endRowIndex: 1000,
+                                startColumnIndex: 0,
+                                endColumnIndex: cfg.numCols
+                            },
+                            rowProperties: {
+                                headerColor: cfg.headerBg,
+                                firstBandColor: { red: 1.0, green: 1.0, blue: 1.0 },
+                                secondBandColor: { red: 0.97, green: 0.98, blue: 0.99 } // Crisp #F8FAFC
+                            }
+                        }
+                    }
+                });
+            }
+
+            // 10. Conditional Formatting (Punctuality & Trip Status Badges)
+            if (!sheet.conditionalFormats || sheet.conditionalFormats.length === 0) {
+                // Rule A: Soft Mint for On-Time
+                requests.push({
+                    addConditionalFormatRule: {
+                        rule: {
+                            ranges: [{
+                                sheetId,
+                                startRowIndex: 1,
+                                endRowIndex: 1000,
+                                startColumnIndex: cfg.punctualityCol,
+                                endColumnIndex: cfg.punctualityCol + 1
+                            }],
+                            booleanRule: {
+                                condition: {
+                                    type: 'TEXT_CONTAINS',
+                                    values: [{ userEnteredValue: 'On-Time' }]
+                                },
+                                format: {
+                                    backgroundColor: { red: 0.88, green: 0.95, blue: 0.89 }, // Soft Emerald Mint
+                                    textFormat: {
+                                        foregroundColor: { red: 0.08, green: 0.45, blue: 0.22 },
+                                        bold: true
+                                    }
+                                }
+                            }
+                        },
+                        index: 0
+                    }
+                });
+
+                // Rule B: Soft Rose for Delay
+                requests.push({
+                    addConditionalFormatRule: {
+                        rule: {
+                            ranges: [{
+                                sheetId,
+                                startRowIndex: 1,
+                                endRowIndex: 1000,
+                                startColumnIndex: cfg.punctualityCol,
+                                endColumnIndex: cfg.punctualityCol + 1
+                            }],
+                            booleanRule: {
+                                condition: {
+                                    type: 'TEXT_CONTAINS',
+                                    values: [{ userEnteredValue: 'Delay' }]
+                                },
+                                format: {
+                                    backgroundColor: { red: 0.99, green: 0.90, blue: 0.90 }, // Soft Rose Pink
+                                    textFormat: {
+                                        foregroundColor: { red: 0.72, green: 0.11, blue: 0.11 },
+                                        bold: true
+                                    }
+                                }
+                            }
+                        },
+                        index: 1
+                    }
+                });
+
+                // Rule C: Soft Azure for In-Transit / Active
+                requests.push({
+                    addConditionalFormatRule: {
+                        rule: {
+                            ranges: [{
+                                sheetId,
+                                startRowIndex: 1,
+                                endRowIndex: 1000,
+                                startColumnIndex: cfg.punctualityCol,
+                                endColumnIndex: cfg.punctualityCol + 1
+                            }],
+                            booleanRule: {
+                                condition: {
+                                    type: 'TEXT_CONTAINS',
+                                    values: [{ userEnteredValue: 'In-Transit' }]
+                                },
+                                format: {
+                                    backgroundColor: { red: 0.88, green: 0.94, blue: 1.0 }, // Soft Azure Blue
+                                    textFormat: {
+                                        foregroundColor: { red: 0.08, green: 0.35, blue: 0.75 },
+                                        bold: true
+                                    }
+                                }
+                            }
+                        },
+                        index: 2
+                    }
+                });
+            }
+        }
+
+        if (requests.length > 0) {
+            await sheets.spreadsheets.batchUpdate({
+                spreadsheetId,
+                requestBody: { requests }
+            });
+            console.log(`✨ Applied executive styling, vibrant tab colors, auto-filters, alignments, and banding across ${configs.length} Google Sheets tabs!`);
+        }
+    } catch (err) {
+        console.warn('⚠️ Google Sheets styling batchUpdate warning (non-fatal):', err.message);
     }
 }
 
@@ -156,45 +495,50 @@ async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
 
         const syncTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
 
-        // Format Morning Rows
-        const morningRows = (reportData.morningTrips || []).map(t => [
+        // Natural sort by Bus Number (Bus 01 -> Bus 27)
+        const parseBusNum = str => parseInt(String(str).replace(/[^0-9]/g, ''), 10) || 0;
+        const sortedMorning = [...(reportData.morningTrips || [])].sort((a, b) => parseBusNum(a.busNo) - parseBusNum(b.busNo));
+        const sortedEvening = [...(reportData.eveningTrips || [])].sort((a, b) => parseBusNum(a.busNo) - parseBusNum(b.busNo));
+
+        // Format Morning Rows with clean values
+        const morningRows = sortedMorning.map(t => [
             t.date,
             t.day,
             t.busNo,
             t.vehicleNo,
             t.routeName,
             t.originStop,
-            t.departureTime,
-            t.arrivalTime,
+            t.scheduledDeparture || t.departureTime,
+            t.scheduledArrival || t.arrivalTime,
             t.duration,
             t.driverName,
             t.driverPhone,
             t.stopsCompleted,
-            t.distanceKm,
+            typeof t.distanceKm === 'number' ? `${t.distanceKm.toFixed(1)} km` : (String(t.distanceKm).includes('km') ? t.distanceKm : `${t.distanceKm} km`),
             t.punctuality,
-            t.delayMinutes !== undefined ? t.delayMinutes : 0,
+            t.delayMinutes !== undefined ? (t.delayMinutes > 0 ? `+${t.delayMinutes} min` : '0 min') : '0 min',
             t.status,
-            syncTime
+            `${syncTime} IST`
         ]);
 
-        // Format Evening Rows
-        const eveningRows = (reportData.eveningTrips || []).map(t => [
+        // Format Evening Rows with clean values
+        const eveningRows = sortedEvening.map(t => [
             t.date,
             t.day,
             t.busNo,
             t.vehicleNo,
             t.routeName,
-            t.originStop || 'Ratibad Campus',
-            t.departureTime,
+            t.originStop || 'SISTec Ratibad Campus',
+            t.scheduledDeparture || t.departureTime,
             t.destinationStop,
-            t.arrivalTime,
+            t.scheduledArrival || t.arrivalTime,
             t.duration,
             t.driverName,
             t.driverPhone,
             t.stopsCompleted,
-            t.distanceKm,
+            typeof t.distanceKm === 'number' ? `${t.distanceKm.toFixed(1)} km` : (String(t.distanceKm).includes('km') ? t.distanceKm : `${t.distanceKm} km`),
             t.punctuality,
-            t.delayMinutes !== undefined ? t.delayMinutes : 0,
+            t.delayMinutes !== undefined ? (t.delayMinutes > 0 ? `+${t.delayMinutes} min` : '0 min') : '0 min',
             t.status
         ]);
 
@@ -274,24 +618,24 @@ async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
 
         // 4. Update Fleet KPI Summary Sheet
         const totalTrips = morningRows.length + eveningRows.length;
-        const onTimeMorning = morningRows.filter(r => String(r[13]).includes('On-Time')).length;
-        const onTimeEvening = eveningRows.filter(r => String(r[14]).includes('On-Time')).length;
+        const onTimeMorning = morningRows.filter(r => String(r[13]).includes('On-Time') || String(r[13]).includes('🟢')).length;
+        const onTimeEvening = eveningRows.filter(r => String(r[14]).includes('On-Time') || String(r[14]).includes('🟢')).length;
         const punctualityRate = totalTrips > 0 ? (((onTimeMorning + onTimeEvening) / totalTrips) * 100).toFixed(1) + '%' : '100.0%';
-        const totalKm = (reportData.morningTrips || []).reduce((acc, t) => acc + (parseFloat(t.distanceKm) || 0), 0) +
-                        (reportData.eveningTrips || []).reduce((acc, t) => acc + (parseFloat(t.distanceKm) || 0), 0);
+        const totalKm = (reportData.morningTrips || []).reduce((acc, t) => acc + (parseFloat(String(t.distanceKm).replace(/[^0-9.]/g, '')) || 0), 0) +
+                        (reportData.eveningTrips || []).reduce((acc, t) => acc + (parseFloat(String(t.distanceKm).replace(/[^0-9.]/g, '')) || 0), 0);
 
         const kpiRow = [
             targetDate,
             reportData.day,
-            reportData.totalBuses || 27,
-            morningRows.length,
-            eveningRows.length,
-            totalTrips,
+            `${reportData.totalBuses || 27} Buses`,
+            `${morningRows.length} Trips`,
+            `${eveningRows.length} Trips`,
+            `${totalTrips} Trips`,
             punctualityRate,
-            totalKm.toFixed(1),
-            reportData.totalBuses || 27,
-            '100% Operational',
-            syncTime
+            `${totalKm.toFixed(1)} km`,
+            `${reportData.totalBuses || 27} Drivers (100%)`,
+            '🟢 100% Operational',
+            `${syncTime} IST`
         ];
 
         const existingKpi = await sheets.spreadsheets.values.get({
@@ -311,6 +655,9 @@ async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
             valueInputOption: 'USER_ENTERED',
             requestBody: { values: curKpi }
         });
+
+        // Re-apply professional styling and auto-filters across updated ranges
+        await applyProfessionalSpreadsheetStyling(sheets, spreadsheetId);
 
         console.log(`✅ Google Sheets Sync Successful: ${morningRows.length} Morning + ${eveningRows.length} Evening + ${stopRows.length} Stops Logged!`);
 

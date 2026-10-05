@@ -18,7 +18,7 @@ const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const { generateTripReportData } = require('./services/trip_report_generator');
+const { generateTripReportData, generateTripReportExcelBuffer } = require('./services/trip_report_generator');
 const { syncDailyTripReportsToGoogleSheets, SPREADSHEET_ID } = require('./services/google_sheets_service');
 
 // Load Firebase service account credentials
@@ -1697,10 +1697,19 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
             days: days ? parseInt(days, 10) : 1
         });
 
+        // If client requested Excel (.xlsx) format
+        if (format === 'xlsx' || format === 'excel') {
+            const excelBuffer = generateTripReportExcelBuffer(reportData);
+            const safeDate = targetDate.replace(/[^0-9-]/g, '');
+            res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}.xlsx"`);
+            return res.status(200).send(excelBuffer);
+        }
+
         // If client requested JSON or sent Accept: application/json
         const wantsJson = format === 'json' || 
                           req.query.json === 'true' || 
-                          (req.headers.accept && req.headers.accept.includes('application/json') && format !== 'csv');
+                          (req.headers.accept && req.headers.accept.includes('application/json') && format !== 'csv' && format !== 'xlsx');
 
         if (wantsJson) {
             return res.json({
@@ -1726,6 +1735,32 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
     } catch (err) {
         console.error('Report Generation Error:', err);
         res.status(500).json({ error: 'Failed to generate report' });
+    }
+});
+
+// ─── MANAGER: DIRECT MICROSOFT EXCEL (.XLSX) DOWNLOAD ───────────────────────
+// GET /api/manager/reports/bus-trip-report/excel?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1
+app.get('/api/manager/reports/bus-trip-report/excel', async (req, res) => {
+    try {
+        const { date, shift, busId, days } = req.query;
+        const targetDate = date || new Date().toISOString().split('T')[0];
+        const targetShift = shift || 'all';
+
+        const reportData = await generateTripReportData({
+            targetDate,
+            shift: targetShift,
+            busId: busId || null,
+            days: days ? parseInt(days, 10) : 1
+        });
+
+        const excelBuffer = generateTripReportExcelBuffer(reportData);
+        const safeDate = targetDate.replace(/[^0-9-]/g, '');
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}.xlsx"`);
+        return res.status(200).send(excelBuffer);
+    } catch (err) {
+        console.error('Excel Report Generation Error:', err);
+        res.status(500).json({ error: 'Failed to generate Excel report' });
     }
 });
 
@@ -2321,7 +2356,10 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                 <button class="btn btn-sheets" onclick="syncSheets()">
                     📊 Sync Google Sheets
                 </button>
-                <a href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}" class="btn" download>
+                <a href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}&format=xlsx" class="btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: rgba(16, 185, 129, 0.4); color: #fff;" download>
+                    📗 Download Excel (.xlsx)
+                </a>
+                <a href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}&format=csv" class="btn" download>
                     📥 Download CSV
                 </a>
                 <button class="btn btn-primary" onclick="window.print()">
@@ -2608,6 +2646,13 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                 btn.disabled = false;
             }
         }
+
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('autoprint') === 'true' || urlParams.get('download') === 'pdf') {
+                setTimeout(() => { window.print(); }, 400);
+            }
+        });
     </script>
 </body>
 </html>
