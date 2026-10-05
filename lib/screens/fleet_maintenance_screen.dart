@@ -771,45 +771,54 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+              Expanded(
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [Color(0xFF2563EB), Color(0xFF1D4ED8)],
+                        ),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      borderRadius: BorderRadius.circular(12),
+                      child: const Icon(Icons.speed_rounded, color: Colors.white, size: 20),
                     ),
-                    child: const Icon(Icons.speed_rounded, color: Colors.white, size: 20),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'MORNING 8:00 AM FLEET DISPATCH BOARD',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: const Color(0xFF60A5FA),
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.2,
-                        ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'MORNING 8:00 AM FLEET DISPATCH',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF60A5FA),
+                              fontSize: 9.0,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                          Text(
+                            'Fleet Readiness Matrix',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.plusJakartaSans(
+                              color: Colors.white,
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Fleet Readiness Matrix',
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                    ),
+                  ],
+                ),
               ),
+              const SizedBox(width: 8),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(
                   color: const Color(0xFF10B981).withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -826,12 +835,12 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                         shape: BoxShape.circle,
                       ),
                     ),
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 5),
                     Text(
                       '${report.totalRoutes} ROUTES',
                       style: GoogleFonts.plusJakartaSans(
                         color: const Color(0xFF10B981),
-                        fontSize: 10,
+                        fontSize: 9.5,
                         fontWeight: FontWeight.w800,
                       ),
                     ),
@@ -1002,7 +1011,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 11),
         decoration: BoxDecoration(
           color: isSelected ? color.withValues(alpha: 0.16) : Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(16),
@@ -1017,8 +1026,8 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
             Row(
               children: [
                 Container(
-                  width: 8,
-                  height: 8,
+                  width: 7,
+                  height: 7,
                   decoration: BoxDecoration(
                     color: color,
                     shape: BoxShape.circle,
@@ -1027,16 +1036,17 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                     ],
                   ),
                 ),
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Expanded(
                   child: Text(
                     label,
                     style: GoogleFonts.plusJakartaSans(
                       color: isSelected ? color : Colors.white70,
                       fontWeight: FontWeight.w700,
-                      fontSize: 11,
+                      fontSize: 10.0,
                     ),
                     maxLines: 1,
+                    softWrap: false,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),

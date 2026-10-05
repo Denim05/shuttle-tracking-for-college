@@ -2967,8 +2967,8 @@ app.patch('/api/manager/buses/:id', authMiddleware, async (req, res) => {
 app.post('/api/manager/buses/quick-assign', authMiddleware, async (req, res) => {
     try {
         const { busNumber, busId, routeId, routeName, routeColor, notifyUsers, reason } = req.body;
-        if (!routeId) {
-            return res.status(400).json({ error: 'Target Route ID is required' });
+        if (!routeId && !routeName) {
+            return res.status(400).json({ error: 'Target Route ID or Route Name is required' });
         }
         if (!busNumber && !busId) {
             return res.status(400).json({ error: 'Bus Number or Bus ID is required' });
@@ -2976,15 +2976,27 @@ app.post('/api/manager/buses/quick-assign', authMiddleware, async (req, res) => 
 
         // 1. Fetch Target Route
         let targetRoute = null;
-        if (isValidId(routeId)) {
+        if (routeId && isValidId(routeId)) {
             targetRoute = await Route.findById(routeId);
-        } else {
+        } else if (routeId) {
             targetRoute = await Route.findOne({ name: new RegExp('^' + routeId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+        }
+        if (!targetRoute && routeName) {
+            targetRoute = await Route.findOne({ name: new RegExp(routeName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') });
+        }
+        if (!targetRoute && routeName) {
+            targetRoute = new Route({
+                name: routeName,
+                color: routeColor || '#2563EB',
+                stops: [],
+                coordinates: []
+            });
+            await targetRoute.save();
         }
 
         const effectiveRouteName = targetRoute ? targetRoute.name : (routeName || 'Assigned Route');
         const effectiveRouteColor = targetRoute ? (targetRoute.color || '#2563EB') : (routeColor || '#2563EB');
-        const effectiveRouteId = targetRoute ? targetRoute._id.toString() : routeId;
+        const effectiveRouteId = targetRoute ? targetRoute._id.toString() : (routeId || 'route_default');
 
         // 2. Find or Create Bus
         let bus = null;

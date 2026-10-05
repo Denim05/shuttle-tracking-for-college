@@ -99,30 +99,39 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
           _dbBuses = responses[1] is List ? List<dynamic>.from(responses[1] as List) : [];
           _isLoading = false;
 
-          // If initial route id was passed, ensure full object is selected
+          // If initial route id was passed, ensure full object is selected with valid MongoDB _id
           if (_selectedRoute != null) {
-            final targetId = _selectedRoute!['_id']?.toString();
-            final targetName = (_selectedRoute!['name'] ?? _selectedRoute!['routeName'] ?? '').toString().toLowerCase();
-            final match = _routes.firstWhere(
-              (r) {
-                if (r is! Map) return false;
-                if (targetId != null && targetId.isNotEmpty && r['_id']?.toString() == targetId) return true;
-                final rName = (r['name'] ?? r['routeName'] ?? '').toString().toLowerCase();
-                if (targetName.isNotEmpty && (rName.contains(targetName) || targetName.contains(rName))) return true;
-                return false;
-              },
-              orElse: () => _selectedRoute!,
-            );
-            if (match is Map) _selectedRoute = Map<String, dynamic>.from(match);
-          } else if (_routes.isNotEmpty) {
+            final targetId = _selectedRoute!['_id']?.toString() ?? '';
+            final targetName = (_selectedRoute!['name'] ?? _selectedRoute!['routeName'] ?? '').toString();
+            final cleanTarget = targetName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+
+            Map<String, dynamic>? bestMatch;
+            for (final r in _routes) {
+              if (r is! Map) continue;
+              final rId = (r['_id'] ?? '').toString();
+              if (targetId.isNotEmpty && rId == targetId) {
+                bestMatch = Map<String, dynamic>.from(r);
+                break;
+              }
+              final rName = (r['name'] ?? r['routeName'] ?? '').toString();
+              final cleanRName = rName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+              if (cleanTarget.isNotEmpty && (cleanRName.contains(cleanTarget) || cleanTarget.contains(cleanRName))) {
+                bestMatch = Map<String, dynamic>.from(r);
+                break;
+              }
+            }
+            if (bestMatch != null) {
+              _selectedRoute = bestMatch;
+            }
+          } else if (_routes.isNotEmpty && _routes.first is Map) {
             _selectedRoute = Map<String, dynamic>.from(_routes.first as Map);
           }
 
           // If initial bus number was provided, find match
           if (widget.initialBusNumber != null && widget.initialBusNumber!.isNotEmpty) {
-            final cleanInit = widget.initialBusNumber!.toUpperCase().replaceAll(RegExp(r'\D'), '');
+            final cleanInit = _normalizeBusKey(widget.initialBusNumber!);
             for (final b in _combinedFleet) {
-              final busNum = (b['busNumber'] ?? '').toString().toUpperCase().replaceAll(RegExp(r'\D'), '');
+              final busNum = _normalizeBusKey((b['busNumber'] ?? '').toString());
               if (busNum == cleanInit) {
                 _selectedBus = b;
                 break;
@@ -136,22 +145,37 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
     }
   }
 
+  static String _normalizeBusKey(String raw) {
+    final clean = raw.trim().toUpperCase();
+    final digits = clean.replaceAll(RegExp(r'\D'), '');
+    if (digits.isNotEmpty) {
+      final val = int.tryParse(digits);
+      if (val != null) {
+        return val.toString().padLeft(2, '0');
+      }
+    }
+    return clean.replaceAll(RegExp(r'^(BUS|SHUTTLE)\s*'), '').trim();
+  }
+
   /// Merges live database buses with official 37 institutional roster
-  /// so that EVERY bus (even if currently not broadcasting in DB) is immediately assignable!
+  /// Strictly deduplicated: each bus number (01 to 37) appears EXACTLY ONCE!
   List<Map<String, dynamic>> get _combinedFleet {
     final Map<String, Map<String, dynamic>> map = {};
 
     // 1. Seed from official master fleet (Bus 01 to Bus 37)
     for (final entry in TimetableResolver.masterFleet) {
-      final key = entry.busNumber.toUpperCase().trim();
+      final key = _normalizeBusKey(entry.busNumber);
       map[key] = {
-        'busNumber': entry.busNumber,
+        'busNumber': entry.busNumber.padLeft(2, '0'),
+        'displayNumber': 'Bus ${entry.busNumber.padLeft(2, '0')}',
         'officialPlate': entry.vehicleNo,
         'driverName': entry.driverName,
         'driverPhone': entry.driverPhone,
         'defaultRoute': entry.routeName,
         'currentRoute': 'Default: ${entry.routeName}',
-        'status': 'Standby',
+        'status': 'In Depot',
+        'isLive': false,
+        'speed': 0.0,
         'isOfficial': true,
       };
     }
@@ -162,22 +186,50 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
       final rawNum = (b['busNumber'] ?? b['name'] ?? '').toString().trim();
       if (rawNum.isEmpty) continue;
 
-      final cleanKey = rawNum.toUpperCase().replaceAll(RegExp(r'BUS\s*', caseSensitive: false), 'BUS ');
-      final existing = map[cleanKey] ?? <String, dynamic>{};
+      final key = _normalizeBusKey(rawNum);
+      final existing = map[key] ?? <String, dynamic>{
+        'busNumber': rawNum,
+        'displayNumber': rawNum,
+        'officialPlate': 'MP04 PA ----',
+        'driverName': 'Assigned Driver',
+        'driverPhone': '',
+        'defaultRoute': 'Institutional Route',
+        'currentRoute': 'Standby',
+        'status': 'In Depot',
+        'isLive': false,
+        'speed': 0.0,
+        'isOfficial': false,
+      };
 
       existing['_id'] = b['_id'];
-      existing['busNumber'] = b['busNumber'] ?? existing['busNumber'] ?? rawNum;
-      existing['status'] = b['status'] ?? existing['status'] ?? 'Offline';
+      if (b['driverId'] != null) existing['driverId'] = b['driverId'];
       if (b['routeName'] != null && b['routeName'].toString().isNotEmpty) {
         existing['currentRoute'] = b['routeName'].toString();
       }
-      existing['driverId'] = b['driverId'];
-      map[cleanKey] = existing;
+
+      // Real-time live broadcasting detection
+      final lastUpdatedStr = b['lastUpdated']?.toString();
+      DateTime? lastUp;
+      if (lastUpdatedStr != null) lastUp = DateTime.tryParse(lastUpdatedStr);
+      final isBroadcasting = lastUp != null &&
+          DateTime.now().difference(lastUp).inSeconds <= 35 &&
+          (b['status']?.toString().toLowerCase() != 'offline');
+
+      if (isBroadcasting) {
+        existing['isLive'] = true;
+        existing['status'] = 'Live';
+        existing['speed'] = (b['speed'] as num?)?.toDouble() ?? 0.0;
+      } else {
+        existing['isLive'] = false;
+        existing['status'] = b['status']?.toString() ?? 'In Depot';
+      }
+
+      map[key] = existing;
     }
 
     final list = map.values.toList();
 
-    // Sort numerically (Bus 01, Bus 02 ... Bus 37, Bus T-4...)
+    // Sort numerically (Bus 01, Bus 02 ... Bus 37)
     list.sort((a, b) {
       final aNum = (a['busNumber'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
       final bNum = (b['busNumber'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
@@ -218,17 +270,36 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
       return;
     }
 
-    final routeId = (_selectedRoute!['_id'] ?? '').toString();
-    final routeName = (_selectedRoute!['name'] ?? 'Route').toString();
+    String routeId = (_selectedRoute!['_id'] ?? '').toString();
+    String routeName = (_selectedRoute!['name'] ?? _selectedRoute!['routeName'] ?? 'Route').toString();
     final routeColor = (_selectedRoute!['color'] ?? '#2563EB').toString();
     final busId = _selectedBus?['_id']?.toString();
+
+    // Ensure routeId is valid MongoDB ObjectId or fallback to matching route in _routes
+    if (routeId.isEmpty || routeId.length < 12) {
+      final cleanTarget = routeName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+      for (final r in _routes) {
+        if (r is! Map) continue;
+        final rName = (r['name'] ?? r['routeName'] ?? '').toString();
+        final cleanRName = rName.toLowerCase().replaceAll(RegExp(r'[^a-z0-9]'), '');
+        final rId = (r['_id'] ?? '').toString();
+        if (rId.isNotEmpty && (cleanRName.contains(cleanTarget) || cleanTarget.contains(cleanRName))) {
+          routeId = rId;
+          routeName = rName;
+          break;
+        }
+      }
+      if (routeId.isEmpty && _routes.isNotEmpty && _routes.first is Map) {
+        routeId = (_routes.first['_id'] ?? '').toString();
+      }
+    }
 
     setState(() => _isSubmitting = true);
 
     bool success = false;
     String statusMessage = '';
 
-    // 1. Try dedicated quick-assign endpoint
+    // 1. Dedicated quick-assign endpoint
     try {
       final res = await _apiService.post('manager/buses/quick-assign', {
         'busNumber': busNum,
@@ -363,17 +434,21 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            'Quick Bus Assignment',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w900,
-                              fontSize: 17,
+                          Flexible(
+                            child: Text(
+                              'Quick Bus Assignment',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w900,
+                                fontSize: 15.5,
+                              ),
                             ),
                           ),
                           const SizedBox(width: 6),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
                             decoration: BoxDecoration(
                               color: const Color(0xFFF59E0B).withValues(alpha: 0.2),
                               borderRadius: BorderRadius.circular(6),
@@ -383,8 +458,8 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                               style: GoogleFonts.plusJakartaSans(
                                 color: const Color(0xFFFBBF24),
                                 fontWeight: FontWeight.w900,
-                                fontSize: 9,
-                                letterSpacing: 0.8,
+                                fontSize: 8.5,
+                                letterSpacing: 0.6,
                               ),
                             ),
                           ),
@@ -393,9 +468,11 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                       const SizedBox(height: 2),
                       Text(
                         'Instantly reassign any bus to a route in seconds',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.plusJakartaSans(
                           color: AppColors.textMuted,
-                          fontSize: 11.5,
+                          fontSize: 11,
                         ),
                       ),
                     ],
@@ -854,11 +931,42 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                                           ),
                                         ),
                                         const SizedBox(width: 6),
-                                        Text(
-                                          '•  $driver',
-                                          style: GoogleFonts.plusJakartaSans(
-                                            color: AppColors.textMuted,
-                                            fontSize: 11,
+                                        if (item['isLive'] == true) ...[
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFF10B981).withValues(alpha: 0.18),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Container(width: 5, height: 5, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'LIVE',
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    color: const Color(0xFF10B981),
+                                                    fontSize: 8.5,
+                                                    fontWeight: FontWeight.w900,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(width: 6),
+                                        ],
+                                        Expanded(
+                                          child: Text(
+                                            '•  $driver',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: AppColors.textMuted,
+                                              fontSize: 11,
+                                            ),
                                           ),
                                         ),
                                       ],
