@@ -760,25 +760,78 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                Text(
-                                  'CHALO CAMPUS',
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w900,
-                                    letterSpacing: 4,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
                                 Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  crossAxisAlignment: CrossAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      'SISTec',
+                                      style: GoogleFonts.outfit(
+                                        color: Colors.white,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: -0.3,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Chalo',
+                                      style: GoogleFonts.outfit(
+                                        color: const Color(0xFF00F0FF),
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w900,
+                                        letterSpacing: -0.3,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF00F0FF).withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(color: const Color(0xFF00F0FF).withValues(alpha: 0.3)),
+                                      ),
+                                      child: Text(
+                                        'CAMPUS',
+                                        style: GoogleFonts.plusJakartaSans(
+                                          color: const Color(0xFF00F0FF),
+                                          fontSize: 8.5,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.8,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
                                   children: [
                                     Container(
-                                      width: 6, height: 6,
-                                      decoration: const BoxDecoration(color: Colors.blueAccent, shape: BoxShape.circle),
-                                    ).animate(onPlay: (c) => c.repeat()).fadeOut(duration: 1.seconds),
-                                    const SizedBox(width: 8),
-                                    Text('Manager Panel', style: GoogleFonts.plusJakartaSans(color: Colors.blueAccent, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                                      width: 6,
+                                      height: 6,
+                                      decoration: BoxDecoration(
+                                        color: isConnected ? const Color(0xFF10B981) : const Color(0xFFFBBF24),
+                                        shape: BoxShape.circle,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: (isConnected ? const Color(0xFF10B981) : const Color(0xFFFBBF24)).withValues(alpha: 0.6),
+                                            blurRadius: 4,
+                                          ),
+                                        ],
+                                      ),
+                                    ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(0.85, 0.85), end: const Offset(1.15, 1.15), duration: 1.seconds),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      'Manager Console • Live Fleet Ops',
+                                      style: GoogleFonts.plusJakartaSans(
+                                        color: Colors.white70,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w600,
+                                        letterSpacing: 0.3,
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ],
