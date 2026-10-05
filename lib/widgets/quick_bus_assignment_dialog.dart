@@ -146,15 +146,45 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
   }
 
   static String _normalizeBusKey(String raw) {
-    final clean = raw.trim().toUpperCase();
-    final digits = clean.replaceAll(RegExp(r'\D'), '');
-    if (digits.isNotEmpty) {
-      final val = int.tryParse(digits);
+    String clean = raw.trim().toUpperCase();
+    clean = clean.replaceAll(RegExp(r'^(BUS|SHUTTLE)\s*[-:]?\s*', caseSensitive: false), '').trim();
+
+    // 1. Check Transit Shuttle (e.g. T-4, T-6, T4, T6)
+    final tMatch = RegExp(r'^T[- ]?(\d+)', caseSensitive: false).firstMatch(clean);
+    if (tMatch != null) {
+      return 'T-${tMatch.group(1)}';
+    }
+
+    // 2. Check standard 1 or 2 digit bus number (e.g. 01, 1, 04, 28)
+    final numMatch = RegExp(r'^(\d{1,2})(?:\b|[-_ ])').firstMatch(clean);
+    if (numMatch != null) {
+      final val = int.tryParse(numMatch.group(1)!);
       if (val != null) {
         return val.toString().padLeft(2, '0');
       }
     }
-    return clean.replaceAll(RegExp(r'^(BUS|SHUTTLE)\s*'), '').trim();
+
+    // 3. License Plate (e.g. MP04 PA 1886)
+    final plateMatch = RegExp(r'([A-Z]{2}\s*\d{2}\s*[A-Z]{1,2}\s*\d{4})').firstMatch(clean);
+    if (plateMatch != null) {
+      return plateMatch.group(1)!.replaceAll(RegExp(r'\s+'), ' ').trim();
+    }
+
+    return clean;
+  }
+
+  static String _formatDisplayBusTitle(String busNum) {
+    final clean = busNum.trim().toUpperCase();
+    if (RegExp(r'^\d+$').hasMatch(clean)) {
+      return 'Bus ${clean.padLeft(2, '0')}';
+    }
+    if (clean.startsWith('T-')) {
+      return 'Shuttle $clean';
+    }
+    if (clean.startsWith('MP')) {
+      return 'Express Shuttle';
+    }
+    return 'Bus $clean';
   }
 
   /// Merges live database buses with official 37 institutional roster
@@ -166,13 +196,15 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
     for (final entry in TimetableResolver.masterFleet) {
       final key = _normalizeBusKey(entry.busNumber);
       map[key] = {
-        'busNumber': entry.busNumber.padLeft(2, '0'),
-        'displayNumber': 'Bus ${entry.busNumber.padLeft(2, '0')}',
+        'busNumber': entry.busNumber,
+        'displayNumber': _formatDisplayBusTitle(entry.busNumber),
         'officialPlate': entry.vehicleNo,
         'driverName': entry.driverName,
         'driverPhone': entry.driverPhone,
         'defaultRoute': entry.routeName,
-        'currentRoute': 'Default: ${entry.routeName}',
+        'currentRoute': entry.routeName,
+        'morningDeparture': entry.morningDeparture,
+        'campusArrival': entry.campusArrival,
         'status': 'In Depot',
         'isLive': false,
         'speed': 0.0,
@@ -189,12 +221,14 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
       final key = _normalizeBusKey(rawNum);
       final existing = map[key] ?? <String, dynamic>{
         'busNumber': rawNum,
-        'displayNumber': rawNum,
+        'displayNumber': _formatDisplayBusTitle(rawNum),
         'officialPlate': 'MP04 PA ----',
         'driverName': 'Assigned Driver',
         'driverPhone': '',
         'defaultRoute': 'Institutional Route',
         'currentRoute': 'Standby',
+        'morningDeparture': '07:30 AM',
+        'campusArrival': '09:00 AM',
         'status': 'In Depot',
         'isLive': false,
         'speed': 0.0,
@@ -211,17 +245,20 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
       final lastUpdatedStr = b['lastUpdated']?.toString();
       DateTime? lastUp;
       if (lastUpdatedStr != null) lastUp = DateTime.tryParse(lastUpdatedStr);
+      final rawStatus = (b['status'] ?? '').toString().toLowerCase();
+      final speed = (b['speed'] as num?)?.toDouble() ?? 0.0;
       final isBroadcasting = lastUp != null &&
-          DateTime.now().difference(lastUp).inSeconds <= 35 &&
-          (b['status']?.toString().toLowerCase() != 'offline');
+          DateTime.now().difference(lastUp).inSeconds <= 45 &&
+          rawStatus != 'offline' && rawStatus != 'in depot' && rawStatus != 'standby' &&
+          (speed > 0 || rawStatus == 'active');
 
       if (isBroadcasting) {
         existing['isLive'] = true;
-        existing['status'] = 'Live';
-        existing['speed'] = (b['speed'] as num?)?.toDouble() ?? 0.0;
+        existing['status'] = rawStatus == 'delayed' ? 'Delayed' : 'Live';
+        existing['speed'] = speed;
       } else {
         existing['isLive'] = false;
-        existing['status'] = b['status']?.toString() ?? 'In Depot';
+        existing['status'] = 'In Depot';
       }
 
       map[key] = existing;
@@ -229,13 +266,27 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
 
     final list = map.values.toList();
 
-    // Sort numerically (Bus 01, Bus 02 ... Bus 37)
+    // Sort: 1) Numbered buses (01-28), 2) Shuttles (T-4, T-6), 3) Express plates
     list.sort((a, b) {
-      final aNum = (a['busNumber'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
-      final bNum = (b['busNumber'] ?? '').toString().replaceAll(RegExp(r'\D'), '');
-      final aInt = int.tryParse(aNum) ?? 999;
-      final bInt = int.tryParse(bNum) ?? 999;
-      return aInt.compareTo(bInt);
+      final aKey = (a['busNumber'] ?? '').toString();
+      final bKey = (b['busNumber'] ?? '').toString();
+
+      final aIsNum = RegExp(r'^\d+$').hasMatch(aKey);
+      final bIsNum = RegExp(r'^\d+$').hasMatch(bKey);
+
+      if (aIsNum && bIsNum) {
+        return (int.tryParse(aKey) ?? 0).compareTo(int.tryParse(bKey) ?? 0);
+      }
+      if (aIsNum && !bIsNum) return -1;
+      if (!aIsNum && bIsNum) return 1;
+
+      final aIsT = aKey.startsWith('T-');
+      final bIsT = bKey.startsWith('T-');
+      if (aIsT && bIsT) return aKey.compareTo(bKey);
+      if (aIsT && !bIsT) return -1;
+      if (!aIsT && bIsT) return 1;
+
+      return aKey.compareTo(bKey);
     });
 
     return list;
@@ -248,10 +299,19 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
 
     return all.where((b) {
       final busNo = (b['busNumber'] ?? '').toString().toLowerCase();
+      final display = (b['displayNumber'] ?? '').toString().toLowerCase();
       final plate = (b['officialPlate'] ?? '').toString().toLowerCase();
       final driver = (b['driverName'] ?? '').toString().toLowerCase();
+      final phone = (b['driverPhone'] ?? '').toString().toLowerCase();
       final route = (b['currentRoute'] ?? '').toString().toLowerCase();
-      return busNo.contains(q) || plate.contains(q) || driver.contains(q) || route.contains(q);
+      final defRoute = (b['defaultRoute'] ?? '').toString().toLowerCase();
+      return busNo.contains(q) ||
+          display.contains(q) ||
+          plate.contains(q) ||
+          driver.contains(q) ||
+          phone.contains(q) ||
+          route.contains(q) ||
+          defRoute.contains(q);
     }).toList();
   }
 
@@ -838,13 +898,13 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
             ),
           ),
 
-        // Fleet List (Scrollable Horizontal Cards or Grid)
+        // Fleet List (Scrollable Cards)
         Container(
-          constraints: const BoxConstraints(maxHeight: 190),
+          constraints: const BoxConstraints(maxHeight: 270),
           decoration: BoxDecoration(
             color: const Color(0xFF0F131C),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
           ),
           child: filtered.isEmpty
               ? Center(
@@ -864,27 +924,34 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                   itemBuilder: (context, index) {
                     final item = filtered[index];
                     final busNum = (item['busNumber'] ?? '').toString();
+                    final displayTitle = (item['displayNumber'] ?? 'Bus $busNum').toString();
                     final plate = (item['officialPlate'] ?? 'MP04 PA ----').toString();
                     final driver = (item['driverName'] ?? 'Assigned Driver').toString();
+                    final phone = (item['driverPhone'] ?? '').toString().trim();
                     final currentRoute = (item['currentRoute'] ?? 'Standby').toString();
+                    final departure = (item['morningDeparture'] ?? '').toString().trim();
+                    final isLive = item['isLive'] == true;
                     final isSelected = selectedBusNum == busNum;
 
+                    // Clean route string to remove redundant prefix
+                    final cleanRoute = currentRoute.replaceAll(RegExp(r'^BUS\s+[\w\-]+\s*[-–]\s*', caseSensitive: false), '').trim();
+
                     return Container(
-                      margin: const EdgeInsets.only(bottom: 6),
+                      margin: const EdgeInsets.only(bottom: 7),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? const Color(0xFFF59E0B).withValues(alpha: 0.18)
-                            : AppColors.surface,
-                        borderRadius: BorderRadius.circular(12),
+                            ? const Color(0xFFF59E0B).withValues(alpha: 0.16)
+                            : const Color(0xFF161A26),
+                        borderRadius: BorderRadius.circular(14),
                         border: Border.all(
                           color: isSelected
                               ? const Color(0xFFF59E0B)
-                              : Colors.white.withValues(alpha: 0.06),
+                              : Colors.white.withValues(alpha: 0.07),
                           width: isSelected ? 1.5 : 1,
                         ),
                       ),
                       child: InkWell(
-                        borderRadius: BorderRadius.circular(12),
+                        borderRadius: BorderRadius.circular(14),
                         onTap: () {
                           setState(() {
                             _selectedBus = item;
@@ -892,46 +959,50 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                           });
                         },
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 9),
                           child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
-                              // Bus Number Pill
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? const Color(0xFFF59E0B)
-                                      : Colors.white.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  busNum,
-                                  style: GoogleFonts.plusJakartaSans(
-                                    color: isSelected ? Colors.black : Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 11.5,
-                                  ),
-                                ),
-                              ),
+                              // Bus Number Icon Badge
+                              _buildBusBadge(busNum, isSelected),
                               const SizedBox(width: 10),
 
-                              // Details
+                              // Details Column
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
+                                    // Row 1: Bus Name + License Plate + Status
                                     Row(
                                       children: [
                                         Text(
-                                          plate,
+                                          displayTitle,
                                           style: GoogleFonts.plusJakartaSans(
                                             color: Colors.white,
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 12,
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 13,
                                           ),
                                         ),
                                         const SizedBox(width: 6),
-                                        if (item['isLive'] == true) ...[
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                          decoration: BoxDecoration(
+                                            color: Colors.black.withValues(alpha: 0.35),
+                                            borderRadius: BorderRadius.circular(5),
+                                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                                          ),
+                                          child: Text(
+                                            plate,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: const Color(0xFFFBBF24),
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 9.0,
+                                              letterSpacing: 0.5,
+                                            ),
+                                          ),
+                                        ),
+                                        const Spacer(),
+                                        if (isLive)
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                                             decoration: BoxDecoration(
@@ -939,50 +1010,99 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                                               borderRadius: BorderRadius.circular(4),
                                               border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.4)),
                                             ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Container(width: 5, height: 5, decoration: const BoxDecoration(color: Color(0xFF10B981), shape: BoxShape.circle)),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  'LIVE',
-                                                  style: GoogleFonts.plusJakartaSans(
-                                                    color: const Color(0xFF10B981),
-                                                    fontSize: 8.5,
-                                                    fontWeight: FontWeight.w900,
-                                                    letterSpacing: 0.5,
-                                                  ),
-                                                ),
-                                              ],
+                                            child: Text(
+                                              'LIVE',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                color: const Color(0xFF10B981),
+                                                fontSize: 8.0,
+                                                fontWeight: FontWeight.w900,
+                                              ),
+                                            ),
+                                          )
+                                        else
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white.withValues(alpha: 0.06),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Text(
+                                              'DEPOT',
+                                              style: GoogleFonts.plusJakartaSans(
+                                                color: Colors.white54,
+                                                fontSize: 8.0,
+                                                fontWeight: FontWeight.w800,
+                                              ),
                                             ),
                                           ),
-                                          const SizedBox(width: 6),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+
+                                    // Row 2: Driver Name & Phone
+                                    Row(
+                                      children: [
+                                        const Icon(Icons.person_outline_rounded, size: 12, color: Color(0xFF60A5FA)),
+                                        const SizedBox(width: 3.5),
+                                        Text(
+                                          driver,
+                                          style: GoogleFonts.plusJakartaSans(
+                                            color: Colors.white.withValues(alpha: 0.9),
+                                            fontWeight: FontWeight.w700,
+                                            fontSize: 11,
+                                          ),
+                                        ),
+                                        if (phone.isNotEmpty) ...[
+                                          const SizedBox(width: 7),
+                                          const Icon(Icons.phone_outlined, size: 10.5, color: Color(0xFF34D399)),
+                                          const SizedBox(width: 2.5),
+                                          Text(
+                                            phone,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: const Color(0xFF34D399),
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 10.5,
+                                            ),
+                                          ),
                                         ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 2),
+
+                                    // Row 3: Route Corridor & Timetable departure
+                                    Row(
+                                      children: [
+                                        Icon(Icons.route_outlined, size: 11, color: isSelected ? const Color(0xFFFBBF24) : Colors.white38),
+                                        const SizedBox(width: 3.5),
                                         Expanded(
                                           child: Text(
-                                            '•  $driver',
+                                            cleanRoute,
                                             maxLines: 1,
                                             overflow: TextOverflow.ellipsis,
                                             style: GoogleFonts.plusJakartaSans(
-                                              color: AppColors.textMuted,
-                                              fontSize: 11,
+                                              color: isSelected ? const Color(0xFFFBBF24) : Colors.white60,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w600,
                                             ),
                                           ),
                                         ),
+                                        if (departure.isNotEmpty) ...[
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            '⏰ $departure',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: Colors.white38,
+                                              fontSize: 9.0,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ],
                                       ],
-                                    ),
-                                    Text(
-                                      'Current: $currentRoute',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: GoogleFonts.plusJakartaSans(
-                                        color: isSelected ? const Color(0xFFFBBF24) : Colors.white38,
-                                        fontSize: 10,
-                                      ),
                                     ),
                                   ],
                                 ),
                               ),
+                              const SizedBox(width: 6),
 
                               // Radio / Check Indicator
                               Icon(
@@ -999,6 +1119,60 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                 ),
         ),
       ],
+    );
+  }
+
+  Widget _buildBusBadge(String busNum, bool isSelected) {
+    String topLabel = 'BUS';
+    String mainNumber = busNum;
+
+    if (busNum.startsWith('T-')) {
+      topLabel = 'SHUTTLE';
+      mainNumber = busNum;
+    } else if (busNum.startsWith('MP')) {
+      topLabel = 'EXPRESS';
+      final parts = busNum.split(' ');
+      mainNumber = parts.isNotEmpty ? parts.last : busNum;
+    } else if (RegExp(r'^\d+$').hasMatch(busNum)) {
+      topLabel = 'BUS';
+      mainNumber = busNum.padLeft(2, '0');
+    }
+
+    return Container(
+      width: 46,
+      height: 44,
+      decoration: BoxDecoration(
+        color: isSelected
+            ? const Color(0xFFF59E0B)
+            : const Color(0xFF222938),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: isSelected ? const Color(0xFFF59E0B) : Colors.white.withValues(alpha: 0.12),
+        ),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            topLabel,
+            style: GoogleFonts.plusJakartaSans(
+              color: isSelected ? Colors.black87 : const Color(0xFFFBBF24),
+              fontSize: 6.5,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 0.4,
+            ),
+          ),
+          Text(
+            mainNumber,
+            style: GoogleFonts.plusJakartaSans(
+              color: isSelected ? Colors.black : Colors.white,
+              fontWeight: FontWeight.w900,
+              fontSize: 12.5,
+              height: 1.1,
+            ),
+          ),
+        ],
+      ),
     );
   }
 
