@@ -219,10 +219,14 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                           children: [
                             Text(
                               initialName.isNotEmpty ? initialName : 'Bus Management',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
                             ),
                             Text(
                               routeName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 12),
                             ),
                           ],
@@ -962,36 +966,39 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  InkWell(
-                    onTap: _confirmRestoreDefaults,
-                    borderRadius: BorderRadius.circular(16),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4.5),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFBBF24).withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFFFBBF24).withValues(alpha: 0.35)),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.restart_alt_rounded, size: 13, color: Color(0xFFFBBF24)),
-                          const SizedBox(width: 3.5),
-                          Text(
-                            'Restore Defaults',
-                            style: GoogleFonts.plusJakartaSans(
-                              color: const Color(0xFFFBBF24),
-                              fontSize: 9.0,
-                              fontWeight: FontWeight.w800,
+                  Tooltip(
+                    message: 'Restore Official Defaults',
+                    child: InkWell(
+                      onTap: _confirmRestoreDefaults,
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFBBF24).withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFFBBF24).withValues(alpha: 0.35)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.restart_alt_rounded, size: 12, color: Color(0xFFFBBF24)),
+                            const SizedBox(width: 3),
+                            Text(
+                              'Restore',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFFFBBF24),
+                                fontSize: 9.0,
+                                fontWeight: FontWeight.w800,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(width: 5),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                     decoration: BoxDecoration(
                       color: const Color(0xFF10B981).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(20),
@@ -1008,9 +1015,9 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
                             shape: BoxShape.circle,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: 3.5),
                         Text(
-                          '${report.totalRoutes} ROUTES',
+                          '${report.totalRoutes}R',
                           style: GoogleFonts.plusJakartaSans(
                             color: const Color(0xFF10B981),
                             fontSize: 9.0,

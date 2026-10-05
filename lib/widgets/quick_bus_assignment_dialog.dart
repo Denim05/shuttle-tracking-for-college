@@ -603,6 +603,8 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                                   children: [
                                     Text(
                                       'Broadcast Alert to Students',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.plusJakartaSans(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w700,
@@ -611,6 +613,8 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                                     ),
                                     Text(
                                       'Notifies riders tracking this route of the bus swap',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
                                       style: GoogleFonts.plusJakartaSans(
                                         color: AppColors.textMuted,
                                         fontSize: 10.5,
@@ -661,26 +665,32 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
           ),
         ),
         const SizedBox(width: 10),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: GoogleFonts.plusJakartaSans(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 12.5,
-                letterSpacing: 0.5,
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.plusJakartaSans(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 12.5,
+                  letterSpacing: 0.5,
+                ),
               ),
-            ),
-            Text(
-              subtitle,
-              style: GoogleFonts.plusJakartaSans(
-                color: AppColors.textMuted,
-                fontSize: 10.5,
+              Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.plusJakartaSans(
+                  color: AppColors.textMuted,
+                  fontSize: 10.5,
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ],
     );
@@ -787,6 +797,8 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                     ),
                     Text(
                       '$stopsCount Stops  •  09:00 AM Institutional Shift',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: GoogleFonts.plusJakartaSans(
                         color: AppColors.textMuted,
                         fontSize: 11,
@@ -864,6 +876,8 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                 const SizedBox(width: 10),
                 Expanded(
                   child: RichText(
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
                     text: TextSpan(
                       style: GoogleFonts.plusJakartaSans(fontSize: 12, color: Colors.white),
                       children: [
@@ -975,33 +989,44 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                                     // Row 1: Bus Name + License Plate + Status
                                     Row(
                                       children: [
-                                        Text(
-                                          displayTitle,
-                                          style: GoogleFonts.plusJakartaSans(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
-                                            fontSize: 13,
+                                        Expanded(
+                                          child: Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              Flexible(
+                                                child: Text(
+                                                  displayTitle,
+                                                  maxLines: 1,
+                                                  overflow: TextOverflow.ellipsis,
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    color: Colors.white,
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 13,
+                                                  ),
+                                                ),
+                                              ),
+                                              const SizedBox(width: 5),
+                                              Container(
+                                                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                                                decoration: BoxDecoration(
+                                                  color: Colors.black.withValues(alpha: 0.35),
+                                                  borderRadius: BorderRadius.circular(5),
+                                                  border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+                                                ),
+                                                child: Text(
+                                                  plate,
+                                                  style: GoogleFonts.plusJakartaSans(
+                                                    color: const Color(0xFFFBBF24),
+                                                    fontWeight: FontWeight.w700,
+                                                    fontSize: 9.0,
+                                                    letterSpacing: 0.5,
+                                                  ),
+                                                ),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                         const SizedBox(width: 6),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                                          decoration: BoxDecoration(
-                                            color: Colors.black.withValues(alpha: 0.35),
-                                            borderRadius: BorderRadius.circular(5),
-                                            border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
-                                          ),
-                                          child: Text(
-                                            plate,
-                                            style: GoogleFonts.plusJakartaSans(
-                                              color: const Color(0xFFFBBF24),
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 9.0,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ),
-                                        const Spacer(),
                                         if (isLive)
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
@@ -1044,12 +1069,16 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                                       children: [
                                         const Icon(Icons.person_outline_rounded, size: 12, color: Color(0xFF60A5FA)),
                                         const SizedBox(width: 3.5),
-                                        Text(
-                                          driver,
-                                          style: GoogleFonts.plusJakartaSans(
-                                            color: Colors.white.withValues(alpha: 0.9),
-                                            fontWeight: FontWeight.w700,
-                                            fontSize: 11,
+                                        Flexible(
+                                          child: Text(
+                                            driver,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: Colors.white.withValues(alpha: 0.9),
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 11,
+                                            ),
                                           ),
                                         ),
                                         if (phone.isNotEmpty) ...[
@@ -1266,17 +1295,22 @@ class _QuickBusAssignmentDialogState extends State<QuickBusAssignmentDialog> {
                       )
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           const Icon(Icons.bolt_rounded, size: 18, color: Colors.black),
                           const SizedBox(width: 6),
-                          Text(
-                            busNum.isNotEmpty
-                                ? 'Assign $busNum Now'
-                                : 'Assign Bus Now',
-                            style: GoogleFonts.plusJakartaSans(
-                              fontWeight: FontWeight.w900,
-                              fontSize: 13.5,
-                              color: Colors.black,
+                          Flexible(
+                            child: Text(
+                              busNum.isNotEmpty
+                                  ? 'Assign $busNum Now'
+                                  : 'Assign Bus Now',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.plusJakartaSans(
+                                fontWeight: FontWeight.w900,
+                                fontSize: 13.5,
+                                color: Colors.black,
+                              ),
                             ),
                           ),
                         ],
