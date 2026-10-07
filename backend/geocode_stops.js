@@ -101,8 +101,32 @@ const ROUTE_STOP_COORDINATES = {
         "ratibad campus": RATIBAD_CAMPUS_COORDS
     },
 
-    // ── Bus 04: Kolar Road & Arera Colony ────────────────────────────────────
+    // ── Bus 04 & 23: Katara Hills & AIIMS Route ─────────────────────────────
     "04": {
+        "katara hospital": { lat: 23.18920, lng: 77.49520 },
+        "katara dastoor hostel": { lat: 23.19460, lng: 77.49120 },
+        "lahar pur": { lat: 23.19720, lng: 77.48360 },
+        "bagsewaniya ojes hospital": { lat: 23.20120, lng: 77.47420 },
+        "saket nagar": { lat: 23.21220, lng: 77.45220 },
+        "aiims": { lat: 23.20860, lng: 77.45820 },
+        "alkapuri": { lat: 23.20660, lng: 77.46420 },
+        "durga mandir": { lat: 23.21820, lng: 77.47120 },
+        "durgamandir": { lat: 23.21820, lng: 77.47120 },
+        "barkheda pathani": { lat: 23.22160, lng: 77.48320 },
+        "awadhpuri thana": { lat: 23.23092, lng: 77.49502 },
+        "aadharshila chowk": { lat: 23.23560, lng: 77.48660 },
+        "aadhar sila chaowk": { lat: 23.23560, lng: 77.48660 },
+        "durga chowk": { lat: 23.23860, lng: 77.47920 },
+        "awadhpuri tiraha": { lat: 23.24260, lng: 77.47160 },
+        "mahatma gandhi chauraha": { lat: 23.24820, lng: 77.44220 },
+        "red cross": { lat: 23.22860, lng: 77.42120 },
+        "panchsheel nagar": { lat: 23.22560, lng: 77.39820 },
+        "panchsil nagar": { lat: 23.22560, lng: 77.39820 },
+        "ratibad campus": RATIBAD_CAMPUS_COORDS
+    },
+
+    // ── Bus 02: Kolar Road & Arera Colony ────────────────────────────────────
+    "02": {
         "dps school": { lat: 23.16860, lng: 77.42420 },
         "bairagarh": { lat: 23.16120, lng: 77.42160 }, // Bairagarh Chichali on Kolar
         "bairagarh chichali": { lat: 23.16120, lng: 77.42160 },

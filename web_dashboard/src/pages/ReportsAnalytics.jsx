@@ -64,6 +64,12 @@ export default function ReportsAnalytics() {
     window.open(windowUrl, '_blank');
   };
 
+  const handleDownloadExcel = () => {
+    const busParam = selectedBusId ? `&busId=${selectedBusId}` : '';
+    const downloadUrl = `http://localhost:5000/api/manager/reports/bus-trip-report?days=${reportDays}&shift=${shiftFilter}${busParam}&format=xlsx`;
+    window.open(downloadUrl, '_blank');
+  };
+
   const handleDownloadCsv = () => {
     const busParam = selectedBusId ? `&busId=${selectedBusId}` : '';
     const downloadUrl = `http://localhost:5000/api/manager/reports/bus-trip-report?days=${reportDays}&shift=${shiftFilter}${busParam}&format=csv`;
@@ -108,12 +114,19 @@ export default function ReportsAnalytics() {
           </p>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-3 flex-wrap gap-y-2">
+          <button 
+            onClick={handleDownloadExcel}
+            className="bg-emerald-950/50 hover:bg-emerald-900/70 text-emerald-300 border border-emerald-500/40 px-4 py-2.5 rounded-xl text-xs font-semibold shadow-md flex items-center space-x-2 transition"
+          >
+            <Download className="w-4 h-4 text-emerald-400" />
+            <span>Export Excel (.xlsx)</span>
+          </button>
           <button 
             onClick={handleDownloadCsv}
             className="bg-gray-800 hover:bg-gray-700 text-gray-200 px-4 py-2.5 rounded-xl text-xs font-semibold shadow-md flex items-center space-x-2 transition border border-gray-700"
           >
-            <Download className="w-4 h-4 text-emerald-400" />
+            <Download className="w-4 h-4 text-cyan-400" />
             <span>Export CSV</span>
           </button>
           <button 

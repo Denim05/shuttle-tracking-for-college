@@ -3,7 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/api_service.dart';
-import '../constants/constants.dart';
+import '../services/report_download_service.dart';
 import '../utils/timetable_resolver.dart';
 import '../widgets/quick_bus_assignment_dialog.dart';
 
@@ -592,7 +592,7 @@ class _FleetMaintenanceScreenState extends State<FleetMaintenanceScreen> {
     try {
       bool backendRestored = false;
       try {
-        final res = await _apiService.post('manager/buses/restore-defaults', {});
+        await _apiService.post('manager/buses/restore-defaults', {});
         backendRestored = true;
       } catch (endpointErr) {
         debugPrint('Direct restore endpoint not available on server, applying per-bus fallback: $endpointErr');
@@ -1623,12 +1623,14 @@ class _BusTripReportTabState extends State<_BusTripReportTab> {
     }
   }
 
-  Future<void> _openReport({required bool isHtml}) async {
-    final path = isHtml ? 'bus-trip-report/html' : 'bus-trip-report';
-    final url = Uri.parse('${AppConstants.apiUrl}/manager/reports/$path?busId=${widget.busId}&days=1&shift=$_selectedShift');
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
+  Future<void> _openReport({String format = 'excel', bool? isHtml}) async {
+    final resolvedFormat = isHtml != null ? (isHtml ? 'html' : 'csv') : format;
+    await ReportDownloadService().downloadAndOpenReport(
+      context,
+      format: resolvedFormat,
+      busId: widget.busId,
+      shift: _selectedShift,
+    );
   }
 
   @override
@@ -1842,18 +1844,31 @@ class _BusTripReportTabState extends State<_BusTripReportTab> {
           Row(
             children: [
               Expanded(
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF059669),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.table_view_rounded, color: Colors.white, size: 16),
+                  label: Text('Excel (.xlsx)', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                  onPressed: () => _openReport(format: 'excel'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  icon: const Icon(Icons.download_rounded, color: Colors.greenAccent, size: 16),
-                  label: Text('Download CSV', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11.5)),
-                  onPressed: () => _openReport(isHtml: false),
+                  icon: const Icon(Icons.download_rounded, color: Colors.cyanAccent, size: 16),
+                  label: Text('CSV', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                  onPressed: () => _openReport(format: 'csv'),
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
@@ -1861,9 +1876,9 @@ class _BusTripReportTabState extends State<_BusTripReportTab> {
                     padding: const EdgeInsets.symmetric(vertical: 12),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                   ),
-                  icon: const Icon(Icons.print_rounded, color: Colors.white, size: 16),
-                  label: Text('Print PDF', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11.5)),
-                  onPressed: () => _openReport(isHtml: true),
+                  icon: const Icon(Icons.picture_as_pdf_rounded, color: Colors.white, size: 16),
+                  label: Text('Print PDF', style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11)),
+                  onPressed: () => _openReport(format: 'pdf'),
                 ),
               ),
             ],

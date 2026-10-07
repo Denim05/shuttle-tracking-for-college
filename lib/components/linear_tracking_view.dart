@@ -213,7 +213,7 @@ class LinearTrackingView extends StatelessWidget {
                     children: displayedStops.asMap().entries.map((entry) {
                       final int idx = entry.key;
                       final stopName = entry.value['name']?.toString().trim() ?? '';
-                      final bool isReached = bus.reachedStops.contains(stopName);
+                      final bool isReached = bus.reachedStops.any((r) => r.trim().toLowerCase() == stopName.toLowerCase() || (r.length > 2 && (stopName.toLowerCase().contains(r.toLowerCase()) || r.toLowerCase().contains(stopName.toLowerCase()))));
                       final bool isVisited = isReached || (stopCount > 1 ? ((idx / (stopCount - 1)) <= progress) : true);
                       final bool isFirstStop = idx == 0;
                       final bool isLastStop = idx == stopCount - 1;

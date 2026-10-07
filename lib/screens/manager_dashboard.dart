@@ -14,6 +14,7 @@ import 'registration_manager_screen.dart';
 import 'complaint_manager_screen.dart';
 import 'route_management_screen.dart';
 import 'fleet_maintenance_screen.dart';
+import 'manager_report_hub_screen.dart';
 import 'profile_settings_screen.dart';
 import '../components/dashboard_back_scope.dart';
 
@@ -23,6 +24,7 @@ import 'dart:io';
 import 'dart:convert';
 import 'dart:math' as math;
 import '../constants/constants.dart';
+import '../services/report_download_service.dart';
 
 class ManagerDashboard extends StatefulWidget {
   const ManagerDashboard({super.key});
@@ -253,9 +255,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
+                  Row(
                     children: [
                       _buildShiftFilterChip(
                         label: 'All 54',
@@ -263,12 +263,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                         selectedValue: selectedShift,
                         onSelected: (val) => setModalState(() => selectedShift = val),
                       ),
+                      const SizedBox(width: 8),
                       _buildShiftFilterChip(
                         label: '🌅 Morning',
                         value: 'morning',
                         selectedValue: selectedShift,
                         onSelected: (val) => setModalState(() => selectedShift = val),
                       ),
+                      const SizedBox(width: 8),
                       _buildShiftFilterChip(
                         label: '🌆 Evening',
                         value: 'evening',
@@ -292,47 +294,14 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                   ),
                   const SizedBox(height: 10),
 
-                  // Option A: Live Google Sheets Sync
+                  // Option 1: Interactive Mobile Report & Analytics Hub
                   InkWell(
-                    onTap: isSyncing ? null : () async {
-                      setModalState(() => isSyncing = true);
-                      try {
-                        final res = await _apiService.post('manager/reports/sync-google-sheets', {
-                          'date': dateStr,
-                        });
-                        setModalState(() => isSyncing = false);
-                        if (mounted) {
-                          Navigator.pop(ctx);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('✅ Synced ${res['syncedMorning'] ?? 27} Morning + ${res['syncedEvening'] ?? 27} Evening Trips & ${res['syncedStops'] ?? 658} Stop Logs to Google Sheets!'),
-                              backgroundColor: const Color(0xFF059669),
-                              behavior: SnackBarBehavior.floating,
-                              action: SnackBarAction(
-                                label: 'OPEN SHEET',
-                                textColor: Colors.white,
-                                onPressed: () {
-                                  final sheetUrl = res['spreadsheetUrl'] ?? 'https://docs.google.com/spreadsheets/d/16V1Og-UYtzN8gM1x3Bj4wZLjdw5-fyvWFMWucwby8EE/edit';
-                                  launchUrl(Uri.parse(sheetUrl), mode: LaunchMode.externalApplication);
-                                },
-                              ),
-                            ),
-                          );
-                          final sheetUrl = res['spreadsheetUrl'] ?? 'https://docs.google.com/spreadsheets/d/16V1Og-UYtzN8gM1x3Bj4wZLjdw5-fyvWFMWucwby8EE/edit';
-                          launchUrl(Uri.parse(sheetUrl), mode: LaunchMode.externalApplication);
-                        }
-                      } catch (e) {
-                        setModalState(() => isSyncing = false);
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text('Google Sheets Sync Failed: $e'),
-                              backgroundColor: Colors.redAccent,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      }
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => ManagerReportHubScreen(initialBusId: busId)),
+                      );
                     },
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
@@ -340,27 +309,22 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            const Color(0xFF059669).withValues(alpha: 0.18),
-                            const Color(0xFF10B981).withValues(alpha: 0.08),
+                            const Color(0xFF4F46E5).withValues(alpha: 0.25),
+                            const Color(0xFF38BDF8).withValues(alpha: 0.12),
                           ],
                         ),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
+                        border: Border.all(color: const Color(0xFF38BDF8).withValues(alpha: 0.4)),
                       ),
                       child: Row(
                         children: [
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                              color: const Color(0xFF38BDF8).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: isSyncing 
-                              ? const SizedBox(
-                                  width: 20, height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
-                                )
-                              : const Icon(Icons.table_chart_rounded, color: Color(0xFF10B981), size: 20),
+                            child: const Icon(Icons.insights_rounded, color: Color(0xFF38BDF8), size: 20),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -368,7 +332,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Sync to Google Sheets',
+                                  'Open Mobile Analytics Hub',
                                   style: GoogleFonts.plusJakartaSans(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -376,16 +340,16 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   ),
                                 ),
                                 Text(
-                                  'Appends real-time Morning & Evening runs for all 27 buses',
+                                  'In-app stop timelines, delays & passenger feedback',
                                   style: GoogleFonts.plusJakartaSans(
-                                    color: Colors.white54,
+                                    color: Colors.white60,
                                     fontSize: 10,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF10B981), size: 14),
+                          const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF38BDF8), size: 14),
                         ],
                       ),
                     ),
@@ -393,11 +357,11 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
                   const SizedBox(height: 10),
 
-                  // Option B: Executive HTML & PDF Print
+                  // Option 2: Download Excel (.xlsx) Workbook
                   InkWell(
                     onTap: () {
                       Navigator.pop(ctx);
-                      _launchReportUrl(busId, isHtml: true, date: dateStr, shift: selectedShift);
+                      _launchReportUrl(busId, format: 'excel', date: dateStr, shift: selectedShift);
                     },
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
@@ -412,10 +376,10 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF4F46E5).withValues(alpha: 0.15),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.print_rounded, color: Color(0xFF818CF8), size: 20),
+                            child: const Icon(Icons.table_view_rounded, color: Color(0xFF10B981), size: 20),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -423,7 +387,117 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Executive Print / PDF',
+                                  'Download Excel (.xlsx)',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  'Official multi-sheet workbook (Summary, Trips, Stops)',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white38,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_downward_rounded, color: Color(0xFF10B981), size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Option 3: Download CSV Spreadsheet
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchReportUrl(busId, format: 'csv', date: dateStr, shift: selectedShift);
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF06B6D4).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.file_download_rounded, color: Color(0xFF06B6D4), size: 20),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Download CSV Spreadsheet',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                Text(
+                                  'Raw tabular data format for analysis & reporting',
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: Colors.white38,
+                                    fontSize: 10,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const Icon(Icons.arrow_downward_rounded, color: Colors.white24, size: 14),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 10),
+
+                  // Option 4: Executive Print / PDF Export
+                  InkWell(
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _launchReportUrl(busId, format: 'pdf', date: dateStr, shift: selectedShift);
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.03),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF59E0B).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: const Icon(Icons.picture_as_pdf_rounded, color: Color(0xFFF59E0B), size: 20),
+                          ),
+                          const SizedBox(width: 14),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Print / Save as PDF',
                                   style: GoogleFonts.plusJakartaSans(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -448,11 +522,47 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
 
                   const SizedBox(height: 10),
 
-                  // Option C: CSV Spreadsheet Download
+                  // Option 5: Live Google Sheets Sync
                   InkWell(
-                    onTap: () {
-                      Navigator.pop(ctx);
-                      _launchReportUrl(busId, isHtml: false, date: dateStr, shift: selectedShift);
+                    onTap: isSyncing ? null : () async {
+                      setModalState(() => isSyncing = true);
+                      final messenger = ScaffoldMessenger.of(context);
+                      final nav = Navigator.of(ctx);
+                      try {
+                        final res = await _apiService.post('manager/reports/sync-google-sheets', {
+                          'date': dateStr,
+                        });
+                        setModalState(() => isSyncing = false);
+                        if (mounted) {
+                          nav.pop();
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('✅ Synced ${res['syncedMorning'] ?? 27} Morning + ${res['syncedEvening'] ?? 27} Evening Trips to Google Sheets!'),
+                              backgroundColor: const Color(0xFF059669),
+                              behavior: SnackBarBehavior.floating,
+                              action: SnackBarAction(
+                                label: 'OPEN SHEET',
+                                textColor: Colors.white,
+                                onPressed: () {
+                                  final sheetUrl = res['spreadsheetUrl'] ?? 'https://docs.google.com/spreadsheets/d/16V1Og-UYtzN8gM1x3Bj4wZLjdw5-fyvWFMWucwby8EE/edit';
+                                  launchUrl(Uri.parse(sheetUrl), mode: LaunchMode.externalApplication);
+                                },
+                              ),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        setModalState(() => isSyncing = false);
+                        if (mounted) {
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text('Google Sheets Sync Failed: $e'),
+                              backgroundColor: Colors.redAccent,
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                      }
                     },
                     borderRadius: BorderRadius.circular(16),
                     child: Container(
@@ -467,10 +577,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                           Container(
                             padding: const EdgeInsets.all(10),
                             decoration: BoxDecoration(
-                              color: Colors.amber.withValues(alpha: 0.15),
+                              color: const Color(0xFF10B981).withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.file_download_rounded, color: Colors.amberAccent, size: 20),
+                            child: isSyncing 
+                              ? const SizedBox(
+                                  width: 20, height: 20,
+                                  child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF10B981)),
+                                )
+                              : const Icon(Icons.cloud_sync_rounded, color: Color(0xFF10B981), size: 20),
                           ),
                           const SizedBox(width: 14),
                           Expanded(
@@ -478,7 +593,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  'Download CSV (Excel)',
+                                  'Sync to Google Sheets',
                                   style: GoogleFonts.plusJakartaSans(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,
@@ -486,7 +601,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                                   ),
                                 ),
                                 Text(
-                                  'Raw data format for Microsoft Excel / LibreOffice',
+                                  'Appends real-time Morning & Evening runs for all 27 buses',
                                   style: GoogleFonts.plusJakartaSans(
                                     color: Colors.white38,
                                     fontSize: 10,
@@ -495,7 +610,7 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
                               ],
                             ),
                           ),
-                          const Icon(Icons.arrow_downward_rounded, color: Colors.white24, size: 14),
+                          const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF10B981), size: 14),
                         ],
                       ),
                     ),
@@ -548,39 +663,15 @@ class _ManagerDashboardState extends State<ManagerDashboard> {
     );
   }
 
-  Future<void> _launchReportUrl(String? busId, {required bool isHtml, String? date, String? shift}) async {
-    final reportPath = isHtml ? 'bus-trip-report/html' : 'bus-trip-report';
-    final targetDate = date ?? DateTime.now().toIso8601String().split('T')[0];
-    final targetShift = shift ?? 'all';
-    
-    final uri = busId != null 
-        ? '${AppConstants.apiUrl}/manager/reports/$reportPath?busId=$busId&date=$targetDate&shift=$targetShift'
-        : '${AppConstants.apiUrl}/manager/reports/$reportPath?date=$targetDate&shift=$targetShift';
-        
-    final url = Uri.parse(uri);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(isHtml ? 'Opening Day-Wise Executive Report...' : 'Downloading CSV Fleet Report...'),
-          backgroundColor: const Color(0xFF4F46E5),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
-    
-    try {
-      final success = await launchUrl(url, mode: LaunchMode.externalApplication);
-      if (!success) {
-        await launchUrl(url);
-      }
-    } catch (e) {
-      debugPrint('Error launching report URL: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not open report: $e'), backgroundColor: Colors.redAccent),
-        );
-      }
-    }
+  Future<void> _launchReportUrl(String? busId, {String format = 'excel', bool? isHtml, String? date, String? shift}) async {
+    final resolvedFormat = isHtml != null ? (isHtml ? 'html' : 'csv') : format;
+    await ReportDownloadService().downloadAndOpenReport(
+      context,
+      format: resolvedFormat,
+      busId: busId,
+      date: date,
+      shift: shift,
+    );
   }
 
 

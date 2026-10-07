@@ -1847,14 +1847,47 @@ class _GuestDashboardState extends State<GuestDashboard>
   }
 
   int _findNextStopIndex(List<Map<String, dynamic>> stops, Bus activeBus) {
-    if (activeBus.nextStop == null || activeBus.nextStop!.isEmpty) return -1;
-    final cleanNext = activeBus.nextStop!.toLowerCase().trim();
+    bool isPassed(String name) {
+      if (activeBus.reachedStops.isEmpty) return false;
+      final clean = name.trim().toLowerCase();
+      return activeBus.reachedStops.any((r) {
+        final rClean = r.trim().toLowerCase();
+        return rClean == clean || (rClean.length > 2 && (clean.contains(rClean) || rClean.contains(clean)));
+      });
+    }
+
+    if (activeBus.nextStop != null && activeBus.nextStop!.isNotEmpty && !isPassed(activeBus.nextStop!)) {
+      final cleanNext = activeBus.nextStop!.toLowerCase().trim();
+      for (int i = 0; i < stops.length; i++) {
+        final sName = (stops[i]['name']?.toString() ?? '').toLowerCase().trim();
+        if ((sName == cleanNext || sName.contains(cleanNext) || cleanNext.contains(sName)) && !isPassed(sName)) {
+          return i;
+        }
+      }
+    }
+
+    // Match by unreached ETAs
+    if (activeBus.etas.isNotEmpty) {
+      for (final eta in activeBus.etas) {
+        final target = eta.stopName.trim().toLowerCase();
+        if (isPassed(target)) continue;
+        for (int i = 0; i < stops.length; i++) {
+          final sName = (stops[i]['name']?.toString() ?? '').toLowerCase().trim();
+          if ((sName == target || sName.contains(target) || target.contains(sName)) && !isPassed(sName)) {
+            return i;
+          }
+        }
+      }
+    }
+
+    // Match first unreached stop
     for (int i = 0; i < stops.length; i++) {
       final sName = (stops[i]['name']?.toString() ?? '').toLowerCase().trim();
-      if (sName == cleanNext || sName.contains(cleanNext) || cleanNext.contains(sName)) {
+      if (!isPassed(sName)) {
         return i;
       }
     }
+
     return -1;
   }
 

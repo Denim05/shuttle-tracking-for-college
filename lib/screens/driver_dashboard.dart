@@ -4,6 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:geolocator/geolocator.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -51,11 +52,17 @@ class _DriverDashboardState extends State<DriverDashboard> {
   bool _isSosActive = false;
   Timer? _heartbeatTimer;
   Timer? _tripDurationTimer;
+  Timer? _simulationTimer;
+  bool _isSimulating = false;
   /// ValueNotifier replaces bare int — the timer widget rebuilds independently,
   /// never causing a full-page setState every second.
   final ValueNotifier<int> _tripDurationNotifier = ValueNotifier<int>(0);
   final Set<String> _reachedStopNames = <String>{};
   final ValueNotifier<DateTime?> _lastEmitTime = ValueNotifier<DateTime?>(null);
+
+  // ── Adaptive Telemetry Broadcast Rate Limiter (Battery & Network Optimization) ──
+  DateTime? _lastBroadcastTime;
+  Position? _lastBroadcastPosition;
 
   // ── GPS setState throttle ─────────────────────────────────────────────────
   /// Timestamp of last UI setState from GPS stream — we cap rebuilds at 4/sec.
@@ -536,7 +543,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         }
 
         // Immediately update telemetry so students & manager get live stop status
-        _emitLocation();
+        _emitLocation(force: true);
         break;
       }
     }
@@ -547,6 +554,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
     _positionStream?.cancel();
     _heartbeatTimer?.cancel();
     _tripDurationTimer?.cancel();
+    _simulationTimer?.cancel();
 
     // Notify server the trip has ended so it logs the end time
     if (_selectedBusId != null) {
@@ -560,20 +568,207 @@ class _DriverDashboardState extends State<DriverDashboard> {
 
     setState(() {
       _isOnline         = false;
+      _isSimulating     = false;
       _speedKmH            = 0;
       _smoothedSpeedKmH    = 0;
       _prevPosition        = null;
       _prevPositionTime    = null;
       _recentSpeedIndex    = 0;
       _recentSpeeds.fillRange(0, 15, 0.0);
+      _lastBroadcastTime   = null;
+      _lastBroadcastPosition = null;
     });
   }
 
-  void _emitLocation() {
+  void _startSimulatedTracking() {
+    if (_selectedBusId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a bus first')));
+      return;
+    }
+    if (_selectedRoute == null || _selectedRoute!.stops.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please select a route first')));
+      return;
+    }
+
+    HapticFeedback.heavyImpact();
+    final isDropoff = _selectedTripType == 'dropoff';
+    final List<Map<String, dynamic>> routeStops = isDropoff 
+        ? _selectedRoute!.stops.reversed.toList() 
+        : _selectedRoute!.stops;
+
+    final validStops = routeStops.where((s) {
+      final lat = (s['lat'] as num?)?.toDouble();
+      final lng = (s['lng'] as num?)?.toDouble();
+      return lat != null && lng != null && lat != 0.0 && lng != 0.0;
+    }).toList();
+
+    if (validStops.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Route requires at least 2 geocoded stops to simulate.')));
+      return;
+    }
+
+    setState(() {
+      _isOnline = true;
+      _isSimulating = true;
+      _sessionDistanceKm = 0.0;
+      _sessionStops = 0;
+      _reachedStopNames.clear();
+      _speedKmH = 32.0;
+      _smoothedSpeedKmH = 32.0;
+    });
+
+    _tripDurationNotifier.value = 0;
+    _tripDurationTimer?.cancel();
+    _tripDurationTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted && _isOnline) {
+        _tripDurationNotifier.value++;
+      }
+    });
+
+    int currentLegIndex = 0;
+    double legProgress = 0.0;
+
+    final initialStop = validStops.first;
+    _currentPosition = Position(
+      latitude: (initialStop['lat'] as num).toDouble(),
+      longitude: (initialStop['lng'] as num).toDouble(),
+      timestamp: DateTime.now(),
+      accuracy: 5.0,
+      altitude: 0.0,
+      altitudeAccuracy: 0.0,
+      heading: 0.0,
+      headingAccuracy: 0.0,
+      speed: 32.0 / 3.6,
+      speedAccuracy: 1.0,
+    );
+    _prevPosition = _currentPosition;
+    _prevPositionTime = DateTime.now();
+
+    _emitLocation(force: true);
+
+    _simulationTimer?.cancel();
+    _simulationTimer = Timer.periodic(const Duration(milliseconds: 1500), (timer) {
+      if (!mounted || !_isOnline || !_isSimulating) {
+        timer.cancel();
+        return;
+      }
+
+      if (currentLegIndex >= validStops.length - 1) {
+        final lastStopName = validStops.last['name']?.toString() ?? '';
+        if (lastStopName.isNotEmpty) _reachedStopNames.add(lastStopName);
+        _sessionStops = _reachedStopNames.length;
+        _emitLocation(force: true);
+        _stopTracking();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('🎉 Simulation Completed! Bus reached final destination.')),
+          );
+        }
+        return;
+      }
+
+      final fromStop = validStops[currentLegIndex];
+      final toStop = validStops[currentLegIndex + 1];
+
+      final fromLat = (fromStop['lat'] as num).toDouble();
+      final fromLng = (fromStop['lng'] as num).toDouble();
+      final toLat = (toStop['lat'] as num).toDouble();
+      final toLng = (toStop['lng'] as num).toDouble();
+
+      legProgress += 0.22;
+
+      if (legProgress >= 1.0) {
+        legProgress = 0.0;
+        final reachedName = toStop['name']?.toString() ?? '';
+        if (reachedName.isNotEmpty) {
+          _reachedStopNames.add(reachedName);
+          for (int k = 0; k <= currentLegIndex + 1; k++) {
+            final sName = validStops[k]['name']?.toString() ?? '';
+            if (sName.isNotEmpty) _reachedStopNames.add(sName);
+          }
+        }
+        currentLegIndex++;
+        _sessionStops = _reachedStopNames.length;
+        _speedKmH = 18.0;
+      } else {
+        _speedKmH = 34.0 + (legProgress * 6.0);
+      }
+
+      final p = legProgress.clamp(0.0, 1.0);
+      final curLat = fromLat + (toLat - fromLat) * p;
+      final curLng = fromLng + (toLng - fromLng) * p;
+
+      final dLng = (toLng - fromLng) * math.pi / 180.0;
+      final lat1 = fromLat * math.pi / 180.0;
+      final lat2 = toLat * math.pi / 180.0;
+      final y = math.sin(dLng) * math.cos(lat2);
+      final x = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(dLng);
+      final bearing = ((math.atan2(y, x) * 180.0 / math.pi) + 360.0) % 360.0;
+
+      final updatedPos = Position(
+        latitude: curLat,
+        longitude: curLng,
+        timestamp: DateTime.now(),
+        accuracy: 4.0,
+        altitude: 0.0,
+        altitudeAccuracy: 0.0,
+        heading: bearing,
+        headingAccuracy: 0.0,
+        speed: _speedKmH / 3.6,
+        speedAccuracy: 1.0,
+      );
+
+      _currentPosition = updatedPos;
+      _prevPosition = updatedPos;
+      _prevPositionTime = DateTime.now();
+
+      final stepDistM = Geolocator.distanceBetween(fromLat, fromLng, curLat, curLng);
+      if (stepDistM > 0) _sessionDistanceKm += (stepDistM / 1000.0);
+
+      if (mounted) setState(() {});
+      _emitLocation(force: true);
+    });
+  }
+
+  void _emitLocation({bool force = false}) {
     if (_currentPosition == null || _selectedBusId == null) return;
+
+    final now = DateTime.now();
+    if (!force && _lastBroadcastTime != null) {
+      final elapsedMs = now.difference(_lastBroadcastTime!).inMilliseconds;
+
+      // ── Adaptive Broadcast Rate Limiting (Battery & Network Optimization) ──
+      // Stationary (< 3 km/h): Throttle to 12s unless moved > 15m (saves 65% driver battery)
+      // City traffic (3 - 25 km/h): Broadcast every 3.5s
+      // Highway / Fast (> 25 km/h): Broadcast every 1.5s for smooth animation
+      int minIntervalMs;
+      if (_speedKmH < 3.0) {
+        double distMoved = 0.0;
+        if (_lastBroadcastPosition != null) {
+          distMoved = Geolocator.distanceBetween(
+            _lastBroadcastPosition!.latitude,
+            _lastBroadcastPosition!.longitude,
+            _currentPosition!.latitude,
+            _currentPosition!.longitude,
+          );
+        }
+        minIntervalMs = (distMoved > 15.0) ? 3500 : 12000;
+      } else if (_speedKmH < 25.0) {
+        minIntervalMs = 3500;
+      } else {
+        minIntervalMs = 1500;
+      }
+
+      if (elapsedMs < minIntervalMs) {
+        return; // Throttled to save driver phone battery & network bandwidth
+      }
+    }
+
+    _lastBroadcastTime = now;
+    _lastBroadcastPosition = _currentPosition;
     
     // Trigger visual pulse
-    _lastEmitTime.value = DateTime.now();
+    _lastEmitTime.value = now;
     
     final socketService = Provider.of<SocketService>(context, listen: false);
     final user = Provider.of<AuthService>(context, listen: false).currentUser;
@@ -627,7 +822,13 @@ class _DriverDashboardState extends State<DriverDashboard> {
     
     for (final stop in stops) {
       final name = stop['name']?.toString().trim() ?? '';
-      if (name.isNotEmpty && !_reachedStopNames.contains(name)) {
+      if (name.isEmpty) continue;
+      final clean = name.toLowerCase();
+      final bool alreadyReached = _reachedStopNames.any((r) {
+        final rClean = r.trim().toLowerCase();
+        return rClean == clean || (rClean.length > 2 && (clean.contains(rClean) || rClean.contains(clean)));
+      });
+      if (!alreadyReached) {
         return stop;
       }
     }
@@ -1616,44 +1817,90 @@ class _DriverDashboardState extends State<DriverDashboard> {
   }
 
   Widget _buildStartButton() {
-    return GestureDetector(
-      onTap: _toggleOnlineStatus,
-      child: AnimatedContainer(
-        duration: 300.ms,
-        height: 60,
-        width: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: _isOnline 
-              ? [AppColors.danger, const Color(0xFFDC2626)] 
-              : [AppColors.primary, const Color(0xFF4F46E5)]
-          ),
-          borderRadius: BorderRadius.circular(18),
-          boxShadow: [
-            BoxShadow(
-              color: (_isOnline ? AppColors.danger : AppColors.primary).withValues(alpha: 0.35), 
-              blurRadius: 18, 
-              offset: const Offset(0, 6)
-            )
-          ],
-        ),
-        child: Center(
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(_isOnline ? Icons.stop_circle_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 24),
-              const SizedBox(width: 10),
-              Text(
-                _isOnline ? 'FINISH LIVE TRACKING TRIP' : 'START LIVE GPS BROADCAST',
-                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.0, fontSize: 13.5),
+    return Column(
+      children: [
+        GestureDetector(
+          onTap: _toggleOnlineStatus,
+          child: AnimatedContainer(
+            duration: 300.ms,
+            height: 60,
+            width: double.infinity,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: _isOnline 
+                  ? [AppColors.danger, const Color(0xFFDC2626)] 
+                  : [AppColors.primary, const Color(0xFF4F46E5)]
               ),
-            ],
+              borderRadius: BorderRadius.circular(18),
+              boxShadow: [
+                BoxShadow(
+                  color: (_isOnline ? AppColors.danger : AppColors.primary).withValues(alpha: 0.35), 
+                  blurRadius: 18, 
+                  offset: const Offset(0, 6)
+                )
+              ],
+            ),
+            child: Center(
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(_isOnline ? Icons.stop_circle_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 24),
+                  const SizedBox(width: 10),
+                  Text(
+                    _isOnline 
+                        ? (_isSimulating ? 'STOP ROUTE SIMULATION' : 'FINISH LIVE TRACKING TRIP')
+                        : 'START LIVE GPS BROADCAST',
+                    style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1.0, fontSize: 13.5),
+                  ),
+                ],
+              ),
+            ),
           ),
+        ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(
+          duration: 3.seconds,
+          color: Colors.white.withValues(alpha: 0.1),
         ),
-      ),
-    ).animate(onPlay: (c) => c.repeat(reverse: true)).shimmer(
-      duration: 3.seconds,
-      color: Colors.white.withValues(alpha: 0.1),
+        if (!_isOnline) ...[
+          const SizedBox(height: 10),
+          GestureDetector(
+            onTap: _startSimulatedTracking,
+            child: Container(
+              height: 48,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4), width: 1.2),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF00E5FF).withValues(alpha: 0.1),
+                    blurRadius: 10,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.auto_mode_rounded, color: Color(0xFF00E5FF), size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'SIMULATE ROUTE DRIVE (TEST RUN)',
+                      style: GoogleFonts.plusJakartaSans(
+                        color: const Color(0xFF00E5FF),
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 0.8,
+                        fontSize: 11.5,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
     );
   }
 

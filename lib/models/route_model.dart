@@ -13,6 +13,29 @@ class RouteModel {
     required this.stops,
   });
 
+  static const Map<String, Map<String, double>> _verifiedStopCoords = {
+    'katara hospital': {'lat': 23.18920, 'lng': 77.49520},
+    'katara dastoor hostel': {'lat': 23.19460, 'lng': 77.49120},
+    'lahar pur': {'lat': 23.19720, 'lng': 77.48360},
+    'bagsewaniya ojes hospital': {'lat': 23.20120, 'lng': 77.47420},
+    'saket nagar': {'lat': 23.21220, 'lng': 77.45220},
+    'aiims': {'lat': 23.20860, 'lng': 77.45820},
+    'alkapuri': {'lat': 23.20660, 'lng': 77.46420},
+    'durga mandir': {'lat': 23.21820, 'lng': 77.47120},
+    'durgamandir': {'lat': 23.21820, 'lng': 77.47120},
+    'barkheda pathani': {'lat': 23.22160, 'lng': 77.48320},
+    'awadhpuri thana': {'lat': 23.23092, 'lng': 77.49502},
+    'aadharshila chowk': {'lat': 23.23560, 'lng': 77.48660},
+    'aadhar sila chaowk': {'lat': 23.23560, 'lng': 77.48660},
+    'durga chowk': {'lat': 23.23860, 'lng': 77.47920},
+    'awadhpuri tiraha': {'lat': 23.24260, 'lng': 77.47160},
+    'mahatma gandhi chauraha': {'lat': 23.24820, 'lng': 77.44220},
+    'red cross': {'lat': 23.22860, 'lng': 77.42120},
+    'panchsheel nagar': {'lat': 23.22560, 'lng': 77.39820},
+    'panchsil nagar': {'lat': 23.22560, 'lng': 77.39820},
+    'ratibad campus': {'lat': 23.180302, 'lng': 77.302695},
+  };
+
   factory RouteModel.fromJson(Map<String, dynamic> json) {
     return RouteModel(
       id: json['_id'] ?? '',
@@ -33,11 +56,26 @@ class RouteModel {
               .toList() ??
           [],
       stops: (json['stops'] as List<dynamic>?)
-              ?.map<Map<String, dynamic>>((s) => {
-                    'name': s['name'] ?? '',
-                    'lat': (s['lat'] ?? 0.0).toDouble(),
-                    'lng': (s['lng'] ?? 0.0).toDouble(),
-                  })
+              ?.map<Map<String, dynamic>>((s) {
+                final name = (s['name'] ?? '').toString();
+                double sLat = (s['lat'] is num) ? (s['lat'] as num).toDouble() : (double.tryParse('${s['lat']}') ?? 0.0);
+                double sLng = (s['lng'] is num) ? (s['lng'] as num).toDouble() : (double.tryParse('${s['lng']}') ?? 0.0);
+
+                final cleanName = name.trim().toLowerCase();
+                final bool isCampus = cleanName.contains('ratibad') || cleanName.contains('campus');
+                final bool isDefaultCampusCoords = (sLat - 23.180302).abs() < 0.001 && (sLng - 77.302695).abs() < 0.001;
+
+                if ((sLat == 0.0 || sLng == 0.0 || (isDefaultCampusCoords && !isCampus)) && _verifiedStopCoords.containsKey(cleanName)) {
+                  sLat = _verifiedStopCoords[cleanName]!['lat']!;
+                  sLng = _verifiedStopCoords[cleanName]!['lng']!;
+                }
+
+                return {
+                  'name': name,
+                  'lat': sLat,
+                  'lng': sLng,
+                };
+              })
               .toList() ??
           [],
     );

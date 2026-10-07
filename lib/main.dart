@@ -1,17 +1,19 @@
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
+import 'package:firebase_analytics/firebase_analytics.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'services/auth_service.dart';
 import 'services/socket_service.dart';
 import 'services/bus_store.dart';
 import 'services/notification_service.dart';
 import 'services/api_service.dart';
 import 'theme/app_theme.dart';
-import 'package:google_fonts/google_fonts.dart';
-import 'package:flutter_animate/flutter_animate.dart';
+import 'screens/onboarding_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/user_dashboard.dart';
 import 'screens/admin_dashboard.dart';
@@ -57,8 +59,19 @@ void main() async {
     try {
       await Firebase.initializeApp();
       FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+      // Automated Production Failure Crashlytics Error Capture
+      FlutterError.onError = (errorDetails) {
+        FirebaseCrashlytics.instance.recordFlutterFatalError(errorDetails);
+      };
+      PlatformDispatcher.instance.onError = (error, stack) {
+        FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+        return true;
+      };
+      // Log app launch event
+      FirebaseAnalytics.instance.logAppOpen();
     } catch (e) {
-      debugPrint('⚠️ Error initializing Firebase: $e');
+      debugPrint('⚠️ Error initializing Firebase/Crashlytics: $e');
     }
   }
 
@@ -144,6 +157,7 @@ class AuthWrapper extends StatefulWidget {
 
 class _AuthWrapperState extends State<AuthWrapper> {
   late Future<void> _initAppFuture;
+  bool _hasCompletedOnboarding = true;
 
   @override
   void initState() {
@@ -152,6 +166,12 @@ class _AuthWrapperState extends State<AuthWrapper> {
   }
 
   Future<void> _initializeApp() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _hasCompletedOnboarding = prefs.getBool('has_completed_onboarding') ?? false;
+    } catch (_) {}
+
+    if (!mounted) return;
     // Concurrently auto-login auth check and play the full starting screen animation
     await Future.wait([
       Provider.of<AuthService>(context, listen: false).tryAutoLogin(),
@@ -173,6 +193,13 @@ class _AuthWrapperState extends State<AuthWrapper> {
               : Consumer<AuthService>(
                   key: const ValueKey('authenticated_content'),
                   builder: (context, auth, _) {
+                    // Show 3-screen progressive onboarding on first launch
+                    if (!_hasCompletedOnboarding && !auth.isAuthenticated) {
+                      return OnboardingScreen(
+                        onCompleted: () => setState(() => _hasCompletedOnboarding = true),
+                      );
+                    }
+
                     if (!auth.isAuthenticated) return const LoginScreen();
 
                     // Mandatory First-Time Password Reset Enforcement (Students with temporary passwords)

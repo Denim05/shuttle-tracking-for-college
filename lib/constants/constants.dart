@@ -1,11 +1,18 @@
+import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 class AppConstants {
   // --- CONFIGURATION ---
   // Set to true to connect directly to the 24/7 Render Cloud Server
   static const bool isProduction = true; // ← Connected to Render Cloud Server
 
-  // Local Machine IP for testing with physical devices
-  // Run `ipconfig` and use the WiFi IPv4 address
-  static const String _localUrl = 'http://10.184.95.86:5000';
+  // Dynamic local machine URL for Android emulator (10.0.2.2) and local desktop (127.0.0.1)
+  static String get _localUrl {
+    if (!kIsWeb && Platform.isAndroid) {
+      return 'http://10.0.2.2:5000';
+    }
+    return 'http://127.0.0.1:5000';
+  }
 
   // Production Cloud Server URL (Render)
   static const String _productionUrl = 'https://smart-shuttle-backend-2h13.onrender.com';

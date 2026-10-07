@@ -143,13 +143,25 @@ class NotificationService {
     required int etaMinutes,
     required String distanceStr,
     required double speedKmh,
+    int? currentStopIndex,
+    int? totalStops,
+    int? walkingMinutes,
+    String? leavePrompt,
   }) async {
     if (kIsWeb) return;
 
     final String etaStr = etaMinutes <= 1 ? 'ARRIVING NOW' : '~$etaMinutes min';
     final String speedStr = speedKmh > 1 ? '${speedKmh.toStringAsFixed(0)} km/h' : 'Stationary';
-    final String title = '🚌 Bus $busNumber • $etaStr to $targetStop';
-    final String body = 'Distance: $distanceStr • Speed: $speedStr • Live GPS active';
+    final String title = 'Bus $busNumber • $etaStr to $targetStop';
+
+    String body = 'Distance: $distanceStr • Speed: $speedStr';
+    if (leavePrompt != null && leavePrompt.isNotEmpty) {
+      body = '$leavePrompt • $body';
+    } else if (walkingMinutes != null && walkingMinutes > 0) {
+      body = 'Walk: ~$walkingMinutes min • $body';
+    }
+
+    final bool hasProgress = currentStopIndex != null && totalStops != null && totalStops > 0;
 
     final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
       'SISTecChalo_live_tracking',
@@ -161,12 +173,16 @@ class NotificationService {
       autoCancel: false,
       onlyAlertOnce: true,
       showWhen: true,
+      showProgress: hasProgress,
+      maxProgress: totalStops ?? 1,
+      progress: currentStopIndex ?? 0,
       color: const Color(0xFF00E5FF),
       category: AndroidNotificationCategory.transport,
+      subText: 'Live Transit Telemetry',
       styleInformation: BigTextStyleInformation(
         body,
         contentTitle: title,
-        summaryText: 'SISTecChalo Live Transit',
+        summaryText: 'SISTecChalo Fleet',
       ),
     );
 
@@ -193,7 +209,7 @@ class NotificationService {
   }) async {
     if (kIsWeb) return;
 
-    final String title = '🚨 Bus $busNumber Approaching Your Stop!';
+    final String title = 'Bus $busNumber Approaching Your Stop';
     final String body = 'Your bus is $distanceStr away (~$etaMinutes min) from $stopName. Please head to your pickup point now!';
 
     final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(

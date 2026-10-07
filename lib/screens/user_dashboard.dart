@@ -31,6 +31,8 @@ import '../utils/timetable_resolver.dart';
 import '../components/dashboard_back_scope.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../components/update_dialog.dart';
+import '../components/network_status_banner.dart';
+import '../components/off_hours_empty_card.dart';
 
 class UserDashboard extends StatefulWidget {
   const UserDashboard({super.key});
@@ -62,6 +64,11 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
   bool _etaLoading = false;
   bool _delaySubscribed = false; // Whether user subscribed to delay alerts
   bool _isSwapBannerDismissed = false; // User dismissed active bus swap alert banner
+  bool _isOfflineBannerDismissed = false; // User dismissed off-hours compact pill
+
+  // ── Smart Walking Telemetry & Departure Alarm State ────────────────────────
+  int? _walkingMinutesToPickup;
+  double? _walkingDistanceMeters;
 
   @override
   void initState() {
@@ -70,6 +77,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     NotificationService().init();
     _fetchData();
     _initSocket();
+    _fetchUserLocationForWalkingETA();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       checkForAppUpdate(context);
     });
@@ -88,8 +96,67 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     if (state == AppLifecycleState.resumed) {
       Provider.of<SocketService>(context, listen: false).checkAndReconnect();
       _fetchData();
+      _fetchUserLocationForWalkingETA();
     } else if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive || state == AppLifecycleState.hidden) {
       _syncOngoingLockscreenNotification();
+    }
+  }
+
+  Future<void> _fetchUserLocationForWalkingETA() async {
+    try {
+      final perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.always || perm == LocationPermission.whileInUse) {
+        final pos = await Geolocator.getLastKnownPosition() ??
+                    await Geolocator.getCurrentPosition(timeLimit: const Duration(seconds: 4));
+        if (mounted) {
+          _updateWalkingTimeToStop(pos);
+        }
+      }
+    } catch (_) {}
+  }
+
+  void _updateWalkingTimeToStop(Position pos) {
+    final auth = Provider.of<AuthService>(context, listen: false);
+    final pickupName = (auth.currentUser?.pickupPoint ?? '').toLowerCase().trim();
+    if (pickupName.isEmpty || _selectedRoute == null) {
+      if (mounted) {
+        setState(() {
+          _walkingMinutesToPickup = null;
+          _walkingDistanceMeters = null;
+        });
+      }
+      return;
+    }
+
+    final stop = _selectedRoute!.stops.firstWhere(
+      (s) => (s['name'] ?? '').toString().toLowerCase().trim() == pickupName,
+      orElse: () => <String, dynamic>{},
+    );
+
+    if (stop.isNotEmpty && stop['lat'] != null && stop['lng'] != null) {
+      final stopLat = (stop['lat'] as num).toDouble();
+      final stopLng = (stop['lng'] as num).toDouble();
+      final straightDist = Geolocator.distanceBetween(pos.latitude, pos.longitude, stopLat, stopLng);
+      // Only show pedestrian walking guidance if user is within a realistic commuter walking radius (<= 6 km)
+      if (straightDist <= 6000) {
+        // Pedestrian walking path typically ~ 1.25× straight-line distance
+        final walkDist = straightDist * 1.25;
+        // Average walking speed ~ 4.5 km/h = 75 meters / minute
+        final walkMins = math.max(1, (walkDist / 75.0).round());
+        if (mounted) {
+          setState(() {
+            _walkingDistanceMeters = walkDist;
+            _walkingMinutesToPickup = walkMins;
+          });
+        }
+      } else {
+        if (mounted) {
+          setState(() {
+            _walkingDistanceMeters = null;
+            _walkingMinutesToPickup = null;
+          });
+        }
+      }
     }
   }
 
@@ -105,19 +172,85 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     }
 
     if (liveBus != null) {
-      final targetStop = liveBus.nextStop ?? (_selectedRoute?.stops.first['name']?.toString() ?? 'Next Stop');
-      // Use road-distance-adjusted values for accurate notification
-      final distM = liveBus.distanceToNextStopMeters ?? 650;
-      final distStr = distM < 1000 ? '$distM m' : '${(distM / 1000).toStringAsFixed(1)} km';
-      // Prefer server-computed ETA from driver broadcast (polyline-based)
+      final auth = Provider.of<AuthService>(context, listen: false);
+      final pickupName = auth.currentUser?.pickupPoint ?? '';
+      final bool pickupPassed = pickupName.isNotEmpty && _hasPassedPickupStop(liveBus, pickupName, _selectedRoute);
+
+      String targetStop;
       int etaMins;
-      if (liveBus.etas.isNotEmpty) {
-        etaMins = liveBus.etas.first.minutes;
+      String distStr;
+      String? leavePrompt;
+
+      if (pickupPassed) {
+        final terminalName = (_shiftTimelineDirection == 'dropoff')
+            ? (_selectedRoute?.stops.first['name'] ?? 'Route Terminal').toString()
+            : (_selectedRoute?.stops.last['name'] ?? 'SISTec Campus').toString();
+        targetStop = terminalName;
+        etaMins = _calculateCampusDestinationETA(liveBus, _selectedRoute);
+        final distM = liveBus.distanceToFinalStopMeters ?? 4500;
+        distStr = distM < 1000 ? '$distM m' : '${(distM / 1000).toStringAsFixed(1)} km';
+        leavePrompt = 'En route to $terminalName';
       } else {
+        String effectiveNext = (liveBus.nextStop ?? '').trim();
+        final bool isNextPassed = liveBus.reachedStops.any((r) => r.trim().toLowerCase() == effectiveNext.toLowerCase());
+        if (effectiveNext.isEmpty || isNextPassed) {
+          final unreached = _selectedRoute?.stops.firstWhere(
+            (s) => !liveBus!.reachedStops.contains((s['name'] ?? '').toString()),
+            orElse: () => _selectedRoute?.stops.first ?? <String, dynamic>{},
+          );
+          effectiveNext = (unreached?['name'] ?? 'Next Stop').toString();
+        }
+        targetStop = pickupName.isNotEmpty ? pickupName : effectiveNext;
+
+        final stop = _selectedRoute?.stops.firstWhere(
+          (s) => (s['name'] ?? '').toString().toLowerCase().trim() == targetStop.toLowerCase().trim(),
+          orElse: () => <String, dynamic>{},
+        );
+        double? directRoadM;
+        if (stop != null && stop.isNotEmpty && stop['lat'] != null && stop['lng'] != null) {
+          final sLat = (stop['lat'] as num).toDouble();
+          final sLng = (stop['lng'] as num).toDouble();
+          if (sLat != 0.0 && sLng != 0.0) {
+            final stM = Geolocator.distanceBetween(liveBus.currentLat, liveBus.currentLng, sLat, sLng);
+            directRoadM = stM * 1.5;
+          }
+        }
+
         final speedKmh = liveBus.speed > 5 ? liveBus.speed : 25.0;
         final speedMps = (speedKmh * 1000) / 3600;
-        etaMins = math.max(1, (distM / speedMps / 60).round());
+
+        int? calculatedEta;
+        if (liveBus.etas.isNotEmpty) {
+          final matchedEta = liveBus.etas.where((e) => e.stopName.toLowerCase().trim() == targetStop.toLowerCase().trim());
+          if (matchedEta.isNotEmpty && matchedEta.first.minutes > 0) {
+            calculatedEta = matchedEta.first.minutes;
+          }
+        }
+
+        if (directRoadM != null) {
+          final directEta = math.max(1, (directRoadM / speedMps / 60).round());
+          if (calculatedEta == null || (calculatedEta > directEta * 2.5 && directRoadM < 8000)) {
+            calculatedEta = directEta;
+          }
+          distStr = directRoadM < 1000 ? '${directRoadM.round()} m' : '${(directRoadM / 1000).toStringAsFixed(1)} km';
+        } else {
+          final distM = liveBus.distanceToNextStopMeters ?? 650;
+          distStr = distM < 1000 ? '$distM m' : '${(distM / 1000).toStringAsFixed(1)} km';
+        }
+        etaMins = calculatedEta ?? math.max(1, ((liveBus.distanceToNextStopMeters ?? 650) / speedMps / 60).round());
+
+        if (_walkingMinutesToPickup != null) {
+          final bufferMins = etaMins - _walkingMinutesToPickup!;
+          if (bufferMins <= 2) {
+            leavePrompt = 'LEAVE NOW (Walk ~$_walkingMinutesToPickup min)';
+          } else {
+            leavePrompt = 'Leave in $bufferMins min';
+          }
+        }
       }
+
+      final totalStops = _selectedRoute?.stops.length ?? 0;
+      final currentStopIndex = liveBus.reachedStops.length;
 
       NotificationService().updateLiveTrackingNotification(
         busNumber: liveBus.displayBusNumber,
@@ -125,6 +258,10 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
         etaMinutes: etaMins,
         distanceStr: distStr,
         speedKmh: liveBus.speed,
+        currentStopIndex: currentStopIndex,
+        totalStops: totalStops,
+        walkingMinutes: _walkingMinutesToPickup,
+        leavePrompt: leavePrompt,
       );
     } else {
       NotificationService().cancelLiveTrackingNotification();
@@ -568,6 +705,12 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
             if (_showDebugOverlay) _buildDebugOverlay(busStore),
             if (_currentIndex == 0) _buildFloatingHeader(busStore),
             if (_currentIndex == 0) _buildLiveBusSwapAlertBanner(busStore),
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 70,
+              left: 0,
+              right: 0,
+              child: const NetworkStatusBanner(),
+            ),
           ],
         ),
         bottomNavigationBar: _buildModernBottomNav(), // Selector<BusStore,int>
@@ -925,6 +1068,27 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                 setState(() => _isDriveMode = isDrive);
               },
             ),
+            if (mapBuses.isEmpty && !_isOfflineBannerDismissed)
+              Positioned(
+                top: MediaQuery.of(context).padding.top + 74,
+                left: 16,
+                right: 16,
+                child: Center(
+                  child: OffHoursEmptyCard(
+                    isCompact: true,
+                    selectedRoute: _selectedRoute,
+                    onSelectRoute: _showRouteSelection,
+                    onDismiss: () => setState(() => _isOfflineBannerDismissed = true),
+                    onTap: () {
+                      _sheetController.animateTo(
+                        0.55,
+                        duration: const Duration(milliseconds: 300),
+                        curve: Curves.easeOutCubic,
+                      );
+                    },
+                  ),
+                ),
+              ),
             if (auth.isGuest && _selectedRoute != null)
               _buildGuestLiveSwitchBanner(store),
             DraggableScrollableSheet(
@@ -951,13 +1115,26 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                   controller: scrollController,
                   padding: const EdgeInsets.fromLTRB(20, 12, 20, 140),
                   children: [
-                    Center(
-                      child: Container(
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF334155),
-                          borderRadius: BorderRadius.circular(2),
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: () {
+                        HapticFeedback.lightImpact();
+                        final cur = _sheetController.size;
+                        final target = cur > 0.25 ? 0.16 : 0.35;
+                        _sheetController.animateTo(
+                          target,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeOutCubic,
+                        );
+                      },
+                      child: Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF334155),
+                            borderRadius: BorderRadius.circular(2),
+                          ),
                         ),
                       ),
                     ),
@@ -1132,7 +1309,16 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                         ],
                       ),
 
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 18),
+                      if (mapBuses.isEmpty) ...[
+                        OffHoursEmptyCard(
+                          isCompact: false,
+                          selectedRoute: _selectedRoute,
+                          onSelectRoute: _showRouteSelection,
+                          margin: EdgeInsets.zero,
+                        ),
+                        const SizedBox(height: 14),
+                      ],
                       _buildHeroTransitCard(store),
                       const SizedBox(height: 14),
                       _buildQuickActionsRow(),
@@ -1781,53 +1967,86 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     final auth = Provider.of<AuthService>(context, listen: false);
     final hasPickup = (auth.currentUser?.pickupPoint ?? '').isNotEmpty;
     final pickupName = auth.currentUser?.pickupPoint ?? '';
+    final bool pickupPassed = hasPickup && _hasPassedPickupStop(bus, pickupName, _selectedRoute);
 
     String etaDisplay = '--';
     String etaUnit = 'MIN';
     String targetStopHeader = 'ROUTE TERMINAL';
     String targetStopLabel = 'SISTEC CAMPUS';
+    int? mins;
 
     if (_etaLoading) {
       etaDisplay = '...';
       etaUnit = '';
     } else if (isLive) {
-      int? mins;
-      if (hasPickup) {
+      if (hasPickup && !pickupPassed) {
+        // Phase 1: Pre-Boarding Phase — Approaching student's pickup stop
         targetStopHeader = (_shiftTimelineDirection == 'dropoff')
             ? 'ESTIMATED DROP-OFF AT YOUR STOP'
             : 'ESTIMATED ARRIVAL AT YOUR STOP';
         targetStopLabel = pickupName.toUpperCase();
 
+        final stop = _selectedRoute?.stops.firstWhere(
+          (s) => (s['name'] ?? '').toString().toLowerCase().trim() == pickupName.toLowerCase().trim(),
+          orElse: () => <String, dynamic>{},
+        );
+
+        double? directRoadDistM;
+        if (stop != null && stop.isNotEmpty && stop['lat'] != null && stop['lng'] != null) {
+          final sLat = (stop['lat'] as num).toDouble();
+          final sLng = (stop['lng'] as num).toDouble();
+          if (sLat != 0.0 && sLng != 0.0) {
+            final straightM = Geolocator.distanceBetween(bus.currentLat, bus.currentLng, sLat, sLng);
+            directRoadDistM = straightM * 1.5;
+          }
+        }
+
+        final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+        final speedMps = (speedKmh * 1000) / 3600;
+
         final matched = bus.etas.where(
           (e) => e.stopName.toLowerCase().trim() == pickupName.toLowerCase().trim(),
         );
-        if (matched.isNotEmpty) {
-          mins = matched.first.minutes;
-        } else if (_selectedRoute != null && _selectedRoute!.stops.isNotEmpty) {
-          final stop = _selectedRoute!.stops.firstWhere(
-            (s) => (s['name'] ?? '').toString().toLowerCase().trim() == pickupName.toLowerCase().trim(),
-            orElse: () => <String, dynamic>{},
-          );
-          if (stop.isNotEmpty && stop['lat'] != null && stop['lng'] != null) {
-            // Use road-distance estimation (1.5× Haversine for Indian mixed roads)
-            final straightDistM = Geolocator.distanceBetween(
-              bus.currentLat, bus.currentLng,
-              (stop['lat'] as num).toDouble(), (stop['lng'] as num).toDouble(),
-            );
-            final roadDistM = straightDistM * 1.5;
-            final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
-            final speedMps = (speedKmh * 1000) / 3600;
-            mins = math.max(1, (roadDistM / speedMps / 60).round());
+
+        if (matched.isNotEmpty && matched.first.minutes > 0) {
+          final serverMins = matched.first.minutes;
+          if (directRoadDistM != null) {
+            final directMins = math.max(1, (directRoadDistM / speedMps / 60).round());
+            // If server ETA is blown out due to old fallback polyline or un-geocoded jump, use direct road ETA
+            if (serverMins > directMins * 2.5 && directRoadDistM < 8000) {
+              mins = directMins;
+            } else {
+              mins = serverMins;
+            }
+          } else {
+            mins = serverMins;
           }
+        } else if (directRoadDistM != null) {
+          mins = math.max(1, (directRoadDistM / speedMps / 60).round());
         }
+      } else if (hasPickup && pickupPassed) {
+        // Phase 2: In-Transit Phase — Shuttle has departed student's stop, now targeting Campus!
+        targetStopHeader = (_shiftTimelineDirection == 'dropoff')
+            ? 'DEPARTED YOUR STOP • TRIP CONCLUDING'
+            : 'DEPARTED YOUR STOP • EN ROUTE TO CAMPUS';
+        final terminalName = (_shiftTimelineDirection == 'dropoff')
+            ? (_selectedRoute?.stops.first['name'] ?? 'ROUTE TERMINAL').toString().toUpperCase()
+            : (_selectedRoute?.stops.last['name'] ?? 'SISTEC CAMPUS').toString().toUpperCase();
+        targetStopLabel = terminalName;
+        mins = _calculateCampusDestinationETA(bus, _selectedRoute);
       } else {
         // Guest or unassigned student commuter: target the next upcoming stop
         targetStopHeader = 'NEXT UPCOMING STOP • LIVE ETA';
-        if (bus.etas.isNotEmpty) {
-          final nextEta = bus.etas.first;
+        final unreachedEtas = bus.etas.where(
+          (e) => !bus.reachedStops.any((r) => r.trim().toLowerCase() == e.stopName.trim().toLowerCase()),
+        ).toList();
+        final bool isNextPassed = bus.nextStop != null && bus.reachedStops.any((r) => r.trim().toLowerCase() == bus.nextStop!.trim().toLowerCase());
+
+        if (unreachedEtas.isNotEmpty) {
+          final nextEta = unreachedEtas.first;
           targetStopLabel = nextEta.stopName.toUpperCase();
           mins = nextEta.minutes;
-        } else if (bus.nextStop != null && bus.nextStop!.isNotEmpty) {
+        } else if (bus.nextStop != null && bus.nextStop!.isNotEmpty && !isNextPassed) {
           targetStopLabel = bus.nextStop!.toUpperCase();
           if (bus.distanceToNextStopMeters != null && bus.distanceToNextStopMeters! > 0) {
             // distanceToNextStopMeters is already road-adjusted from driver broadcast
@@ -1862,7 +2081,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
       if (mins != null) {
         etaDisplay = '$mins';
         etaUnit = 'MIN';
-      } else if (_etaMinutes != null) {
+      } else if (_etaMinutes != null && !pickupPassed) {
         etaDisplay = '$_etaMinutes';
         etaUnit = 'MIN';
       }
@@ -1945,19 +2164,21 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                             Container(
                               width: 7,
                               height: 7,
-                              decoration: const BoxDecoration(
-                                color: AppColors.accentGreen,
+                              decoration: BoxDecoration(
+                                color: pickupPassed ? const Color(0xFF00E5FF) : AppColors.accentGreen,
                                 shape: BoxShape.circle,
                               ),
                             ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(duration: 800.ms, begin: const Offset(0.8, 0.8), end: const Offset(1.3, 1.3)),
                             const SizedBox(width: 6),
                             Flexible(
                               child: Text(
-                                'Approaching ${targetStopLabel.toLowerCase()}',
+                                pickupPassed 
+                                    ? 'En route to ${targetStopLabel.toLowerCase()} • Reaching at ~${_formatEstimatedTime(mins)}'
+                                    : 'Approaching ${targetStopLabel.toLowerCase()}',
                                 style: GoogleFonts.plusJakartaSans(
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.accentGreen,
+                                  color: pickupPassed ? const Color(0xFF00E5FF) : AppColors.accentGreen,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -2029,11 +2250,38 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
 
                 const SizedBox(width: 12),
 
-                // Right Side Widget: Speedometer or Refresh
+                // Right Side Widget: Status Badge & Speedometer
                 if (isLive) ...[
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
+                      if (pickupPassed) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF00E5FF).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF00E5FF).withValues(alpha: 0.4)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.school_rounded, color: Color(0xFF00E5FF), size: 11),
+                              const SizedBox(width: 4),
+                              Text(
+                                'CAMPUS BOUND',
+                                style: GoogleFonts.plusJakartaSans(
+                                  color: const Color(0xFF00E5FF),
+                                  fontSize: 8.5,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.4,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 5),
+                      ],
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
@@ -2072,6 +2320,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                           onTap: () {
                             HapticFeedback.lightImpact();
                             _fetchETA();
+                            _fetchUserLocationForWalkingETA();
                           },
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -2097,6 +2346,44 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                           ),
                         ),
                       ],
+                      const SizedBox(height: 5),
+                      Builder(
+                        builder: (context) {
+                          final diffSec = DateTime.now().difference(bus.lastUpdated).inSeconds;
+                          final isVeryFresh = diffSec < 15;
+                          final isStale = diffSec > 45;
+                          final color = isVeryFresh ? AppColors.accentGreen : (isStale ? AppColors.warning : AppColors.primaryLight);
+                          final label = isVeryFresh ? 'LIVE • ${diffSec}s' : (isStale ? 'WAITING PING' : '${diffSec}s AGO');
+                          return Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2.5),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: color.withValues(alpha: 0.25)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 5,
+                                  height: 5,
+                                  decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  label,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    color: color,
+                                    fontSize: 8.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
                     ],
                   ),
                 ] else ...[
@@ -2122,15 +2409,76 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
             ),
           ),
 
+          // Route Progression Segmented Bar (Stop X of Y)
+          if (isLive && _selectedRoute != null && _selectedRoute!.stops.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                decoration: BoxDecoration(
+                  color: AppColors.bgSecondary.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.alt_route_rounded, size: 13, color: Color(0xFF00E5FF)),
+                            const SizedBox(width: 6),
+                            Text(
+                              'ROUTE PROGRESSION',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: const Color(0xFF00E5FF),
+                                fontSize: 9.0,
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 0.9,
+                              ),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          'Stop ${math.min(bus.reachedStops.length + 1, _selectedRoute!.stops.length)} of ${_selectedRoute!.stops.length}',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 7),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (bus.reachedStops.length / math.max(1, _selectedRoute!.stops.length)).clamp(0.06, 1.0),
+                        backgroundColor: Colors.white.withValues(alpha: 0.08),
+                        valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF00E5FF)),
+                        minHeight: 4,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
           // Assigned Stop Sub-Card inside Hero
           Padding(
-            padding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+            padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppColors.bgSecondary,
                 borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+                border: Border.all(
+                  color: (hasPickup && pickupPassed)
+                      ? const Color(0xFF10B981).withValues(alpha: 0.25)
+                      : Colors.white.withValues(alpha: 0.06),
+                ),
               ),
               child: Row(
                 children: [
@@ -2138,18 +2486,24 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                     width: 34,
                     height: 34,
                     decoration: BoxDecoration(
-                      color: hasPickup 
-                          ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))
-                          : (isLive ? AppColors.accentGreen.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15)),
+                      color: (hasPickup && pickupPassed)
+                          ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                          : (hasPickup 
+                              ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))
+                              : (isLive ? AppColors.accentGreen.withValues(alpha: 0.15) : AppColors.primary.withValues(alpha: 0.15))),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      hasPickup 
-                          ? (_shiftTimelineDirection == 'dropoff' ? Icons.departure_board_rounded : Icons.my_location_rounded) 
-                          : (isLive ? Icons.near_me_rounded : Icons.location_on_rounded),
-                      color: hasPickup 
-                          ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primaryLight) 
-                          : (isLive ? AppColors.accentGreen : AppColors.primaryLight),
+                      (hasPickup && pickupPassed)
+                          ? Icons.check_circle_rounded
+                          : (hasPickup 
+                              ? (_shiftTimelineDirection == 'dropoff' ? Icons.departure_board_rounded : Icons.my_location_rounded) 
+                              : (isLive ? Icons.near_me_rounded : Icons.location_on_rounded)),
+                      color: (hasPickup && pickupPassed)
+                          ? const Color(0xFF10B981)
+                          : (hasPickup 
+                              ? (_shiftTimelineDirection == 'dropoff' ? AppColors.accent : AppColors.primaryLight) 
+                              : (isLive ? AppColors.accentGreen : AppColors.primaryLight)),
                       size: 17,
                     ),
                   ),
@@ -2159,9 +2513,13 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          targetStopHeader,
+                          (hasPickup && pickupPassed)
+                              ? 'ASSIGNED PICKUP STOP (DEPARTED)'
+                              : targetStopHeader,
                           style: GoogleFonts.plusJakartaSans(
-                            color: (isLive && !hasPickup) ? AppColors.accentGreen : AppColors.textMuted,
+                            color: (hasPickup && pickupPassed)
+                                ? const Color(0xFF10B981)
+                                : ((isLive && !hasPickup) ? AppColors.accentGreen : AppColors.textMuted),
                             fontSize: 9.0,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.8,
@@ -2169,7 +2527,7 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          targetStopLabel,
+                          (hasPickup && pickupPassed) ? pickupName.toUpperCase() : targetStopLabel,
                           style: GoogleFonts.plusJakartaSans(
                             color: Colors.white,
                             fontSize: 13.5,
@@ -2181,7 +2539,32 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                       ],
                     ),
                   ),
-                  if (hasPickup)
+                  if (hasPickup && pickupPassed)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: const Color(0xFF10B981).withValues(alpha: 0.35)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_rounded, size: 10, color: Color(0xFF10B981)),
+                          const SizedBox(width: 3),
+                          Text(
+                            'PASSED',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: const Color(0xFF10B981),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (hasPickup)
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
@@ -2223,6 +2606,30 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
               ),
             ),
           ),
+
+          // Smart Time-to-Leave Walking Departure Bar or Post-Departure In-Transit Card
+          if (hasPickup && pickupPassed)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: _buildPostDepartureStatusCard(
+                destinationEtaMinutes: mins ?? 18,
+                destinationName: targetStopLabel,
+                pickupName: pickupName,
+                walkingDistanceMeters: _walkingDistanceMeters,
+                bus: bus,
+              ),
+            )
+          else if (hasPickup && _walkingMinutesToPickup != null)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+              child: _buildTimeToLeaveCard(
+                busEtaMinutes: mins ?? (isLive ? (_etaMinutes ?? 10) : 15),
+                walkingMinutes: _walkingMinutesToPickup!,
+                walkingDistanceMeters: _walkingDistanceMeters,
+                pickupName: pickupName,
+                isLive: isLive,
+              ),
+            ),
           // Official Vehicle & Driver Information Bar from Institutional Roster
           Builder(
             builder: (context) {
@@ -2308,6 +2715,351 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
                 ),
               );
             },
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _formatDistance(double? meters) {
+    if (meters == null) return '';
+    return meters < 1000 ? '${meters.round()} m' : '${(meters / 1000).toStringAsFixed(1)} km';
+  }
+
+  Widget _buildTimeToLeaveCard({
+    required int busEtaMinutes,
+    required int walkingMinutes,
+    required double? walkingDistanceMeters,
+    required String pickupName,
+    required bool isLive,
+  }) {
+    final int bufferMinutes = busEtaMinutes - walkingMinutes;
+    final bool isAtStop = walkingDistanceMeters != null && walkingDistanceMeters < 80;
+    final bool isUrgent = isLive && bufferMinutes <= 2;
+
+    Color cardBg;
+    Color borderColor;
+    Color accentColor;
+    IconData icon;
+    String title;
+    String subtitle;
+    String tagLabel;
+
+    if (isAtStop) {
+      cardBg = const Color(0xFF07272D).withValues(alpha: 0.9);
+      borderColor = const Color(0xFF00E5FF).withValues(alpha: 0.4);
+      accentColor = const Color(0xFF00E5FF);
+      icon = Icons.check_circle_rounded;
+      title = 'AT PICKUP POINT';
+      subtitle = 'You are waiting at your assigned stop ($pickupName)';
+      tagLabel = 'READY';
+    } else if (isUrgent) {
+      cardBg = const Color(0xFF33160D).withValues(alpha: 0.95);
+      borderColor = const Color(0xFFF97316).withValues(alpha: 0.6);
+      accentColor = const Color(0xFFF97316);
+      icon = Icons.directions_run_rounded;
+      title = 'LEAVE NOW TO CATCH SHUTTLE';
+      final distStr = _formatDistance(walkingDistanceMeters);
+      subtitle = 'Walk: ~$walkingMinutes min ($distStr) • Shuttle arrives in ~$busEtaMinutes min';
+      tagLabel = bufferMinutes <= 0 ? 'URGENT' : '$bufferMinutes MIN BUFFER';
+    } else {
+      cardBg = const Color(0xFF0B2418).withValues(alpha: 0.9);
+      borderColor = const Color(0xFF10B981).withValues(alpha: 0.4);
+      accentColor = const Color(0xFF10B981);
+      icon = Icons.directions_walk_rounded;
+      title = isLive ? 'LEAVE IN $bufferMinutes MINS' : 'WALK TO STOP: ~$walkingMinutes MIN';
+      final distStr = _formatDistance(walkingDistanceMeters);
+      subtitle = isLive
+          ? 'Walk: ~$walkingMinutes min ($distStr) • Departure buffer: $bufferMinutes min'
+          : '$distStr walk to $pickupName';
+      tagLabel = isLive ? 'ON TIME' : 'PEDESTRIAN ETA';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderColor, width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: accentColor.withValues(alpha: 0.15),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: accentColor, size: 18),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: accentColor,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: accentColor.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        tagLabel,
+                        style: GoogleFonts.plusJakartaSans(
+                          color: accentColor,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white.withValues(alpha: 0.85),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Formats arrival time from current minute countdown (e.g. 08:45 AM).
+  String _formatEstimatedTime(int? minutesFromNow) {
+    if (minutesFromNow == null) return '--:--';
+    final target = DateTime.now().add(Duration(minutes: minutesFromNow));
+    final hour = target.hour % 12 == 0 ? 12 : target.hour % 12;
+    final minute = target.minute.toString().padLeft(2, '0');
+    final ampm = target.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $ampm';
+  }
+
+  /// Intelligent Trip Phase Transition & Stop Crossing Detector.
+  /// Determines if the bus has departed / crossed the commuter's assigned stop.
+  bool _hasPassedPickupStop(Bus? bus, String pickupName, RouteModel? route) {
+    if (bus == null || pickupName.isEmpty || route == null || route.stops.isEmpty) {
+      return false;
+    }
+
+    final cleanPickup = pickupName.toLowerCase().trim();
+    final isDropoff = _shiftTimelineDirection == 'dropoff';
+    final List<Map<String, dynamic>> routeStops = isDropoff 
+        ? route.stops.reversed.toList() 
+        : route.stops;
+
+    // 1. Explicit check in reachedStops from driver telemetry
+    if (bus.reachedStops.any((s) => s.toLowerCase().trim() == cleanPickup)) {
+      return true;
+    }
+
+    // 2. Stop index check in ordered route sequence
+    final pickupIndex = routeStops.indexWhere(
+      (s) => (s['name'] ?? '').toString().toLowerCase().trim() == cleanPickup,
+    );
+    if (pickupIndex == -1) return false;
+
+    // 3. If any stop AFTER the pickup stop has already been reached
+    for (int i = pickupIndex + 1; i < routeStops.length; i++) {
+      final laterStopName = (routeStops[i]['name'] ?? '').toString().toLowerCase().trim();
+      if (bus.reachedStops.any((s) => s.toLowerCase().trim() == laterStopName)) {
+        return true;
+      }
+    }
+
+    // 4. If driver's nextStop is sequentially after the pickup stop
+    if (bus.nextStop != null && bus.nextStop!.isNotEmpty) {
+      final nextStopClean = bus.nextStop!.toLowerCase().trim();
+      final nextStopIndex = routeStops.indexWhere(
+        (s) => (s['name'] ?? '').toString().toLowerCase().trim() == nextStopClean,
+      );
+      if (nextStopIndex > pickupIndex) {
+        return true;
+      }
+    }
+
+    // 5. If completedStops count exceeds the pickup stop sequence index
+    if (bus.completedStops > pickupIndex + 1) {
+      return true;
+    }
+
+    // 6. Forward distance check to final destination terminal
+    final pickupStopData = routeStops[pickupIndex];
+    if (pickupStopData['lat'] != null && pickupStopData['lng'] != null && bus.currentLat != 0.0) {
+      final pickupLat = (pickupStopData['lat'] as num).toDouble();
+      final pickupLng = (pickupStopData['lng'] as num).toDouble();
+      final distToPickup = Geolocator.distanceBetween(bus.currentLat, bus.currentLng, pickupLat, pickupLng);
+
+      final terminalStop = routeStops.last;
+      if (terminalStop['lat'] != null && terminalStop['lng'] != null) {
+        final termLat = (terminalStop['lat'] as num).toDouble();
+        final termLng = (terminalStop['lng'] as num).toDouble();
+        final busDistToTerm = Geolocator.distanceBetween(bus.currentLat, bus.currentLng, termLat, termLng);
+        final pickupDistToTerm = Geolocator.distanceBetween(pickupLat, pickupLng, termLat, termLng);
+
+        // If the bus is significantly closer to terminal than pickup stop was, and > 300m away from pickup:
+        if (busDistToTerm < (pickupDistToTerm - 250) && distToPickup > 300) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  }
+
+  /// Calculates accurate road ETA to the final destination (Campus in morning, route terminal in dropoff).
+  int _calculateCampusDestinationETA(Bus bus, RouteModel? route) {
+    if (bus.distanceToFinalStopMeters != null && bus.distanceToFinalStopMeters! > 0) {
+      final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+      final speedMps = (speedKmh * 1000) / 3600;
+      return math.max(1, (bus.distanceToFinalStopMeters! / speedMps / 60).round());
+    }
+
+    if (route != null && route.stops.isNotEmpty) {
+      final isDropoff = _shiftTimelineDirection == 'dropoff';
+      final terminalStop = isDropoff ? route.stops.first : route.stops.last;
+      if (terminalStop['lat'] != null && terminalStop['lng'] != null) {
+        final straightDistM = Geolocator.distanceBetween(
+          bus.currentLat, bus.currentLng,
+          (terminalStop['lat'] as num).toDouble(), (terminalStop['lng'] as num).toDouble(),
+        );
+        final roadDistM = straightDistM * 1.5;
+        final speedKmh = bus.speed > 5 ? bus.speed : 25.0;
+        final speedMps = (speedKmh * 1000) / 3600;
+        return math.max(1, (roadDistM / speedMps / 60).round());
+      }
+    }
+
+    return 20; // safe fallback institutional transit time
+  }
+
+  /// Post-Departure In-Transit Card shown once the shuttle departs the commuter's stop.
+  Widget _buildPostDepartureStatusCard({
+    required int destinationEtaMinutes,
+    required String destinationName,
+    required String pickupName,
+    required double? walkingDistanceMeters,
+    required Bus? bus,
+  }) {
+    final bool isOnboard = walkingDistanceMeters != null && walkingDistanceMeters < 450;
+    final color = isOnboard ? const Color(0xFF00E5FF) : const Color(0xFF10B981);
+    final cardBg = isOnboard ? const Color(0xFF06282E).withValues(alpha: 0.95) : const Color(0xFF0B261A).withValues(alpha: 0.95);
+    final arrivalTimeStr = _formatEstimatedTime(destinationEtaMinutes);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withValues(alpha: 0.4), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: color.withValues(alpha: 0.15),
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 34,
+            height: 34,
+            decoration: BoxDecoration(
+              color: color.withValues(alpha: 0.18),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isOnboard ? Icons.school_rounded : Icons.departure_board_rounded,
+              color: color,
+              size: 19,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        isOnboard ? 'ONBOARD SHUTTLE • EN ROUTE' : 'DEPARTED ${pickupName.toUpperCase()}',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: color,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        isOnboard ? 'ONBOARD' : 'PASSED',
+                        style: GoogleFonts.plusJakartaSans(
+                          color: color,
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'Reaching $destinationName at ~$arrivalTimeStr (~$destinationEtaMinutes min)',
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white.withValues(alpha: 0.9),
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -3824,55 +4576,61 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
 
   Widget _buildNavItem(int index, IconData icon, String label, int badge) {
     bool isSel = _currentIndex == index;
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        setState(() => _currentIndex = index);
-      },
-      child: AnimatedContainer(
-        duration: 300.ms,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        decoration: BoxDecoration(
-          color: isSel ? AppColors.primary.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(16),
-          border: isSel ? Border.all(color: AppColors.primary.withValues(alpha: 0.35)) : null,
-        ),
-        child: Row(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Icon(icon, color: isSel ? AppColors.primary : AppColors.textMuted, size: 22),
-                if (badge > 0)
-                  Positioned(
-                    top: -4, right: -6,
-                    child: Container(
-                      padding: const EdgeInsets.all(3),
-                      decoration: const BoxDecoration(
-                        color: AppColors.danger,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Text(
-                        badge > 9 ? '9+' : '$badge',
-                        style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900),
+    final semanticLabel = '$label tab${badge > 0 ? ", $badge unread notifications" : ""}${isSel ? ", currently selected" : ""}';
+    return Semantics(
+      button: true,
+      selected: isSel,
+      label: semanticLabel,
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.lightImpact();
+          setState(() => _currentIndex = index);
+        },
+        child: AnimatedContainer(
+          duration: 300.ms,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: isSel ? AppColors.primary.withValues(alpha: 0.15) : Colors.transparent,
+            borderRadius: BorderRadius.circular(16),
+            border: isSel ? Border.all(color: AppColors.primary.withValues(alpha: 0.35)) : null,
+          ),
+          child: Row(
+            children: [
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Icon(icon, color: isSel ? AppColors.primary : AppColors.textMuted, size: 22),
+                  if (badge > 0)
+                    Positioned(
+                      top: -4, right: -6,
+                      child: Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: const BoxDecoration(
+                          color: AppColors.danger,
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          badge > 9 ? '9+' : '$badge',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w900),
+                        ),
                       ),
                     ),
-                  ),
-              ],
-            ),
-            if (isSel) ...[
-              const SizedBox(width: 8),
-              Text(
-                label, 
-                style: GoogleFonts.plusJakartaSans(
-                  color: Colors.white, 
-                  fontWeight: FontWeight.w900, 
-                  fontSize: 11,
-                  letterSpacing: 0.8,
-                ),
+                ],
               ),
-            ]
-          ],
+              if (isSel) ...[
+                const SizedBox(width: 8),
+                Text(
+                  label, 
+                  style: GoogleFonts.plusJakartaSans(
+                    color: Colors.white, 
+                    fontWeight: FontWeight.w900, 
+                    fontSize: 11,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ]
+            ],
+          ),
         ),
       ),
     );
@@ -4237,56 +4995,68 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
     // ── Real-Time Positioning & Telemetry Math ──────────────────────
     int nextStopIndex = 0;
     if (isBusLive) {
+      final live = activeBus;
       int? matchedIndex;
 
-      // 1. Match by bus.nextStop
-      if (activeBus.nextStop != null && activeBus.nextStop!.trim().isNotEmpty) {
-        final target = activeBus.nextStop!.trim().toLowerCase();
+      bool isStopPassed(String name) {
+        if (live.reachedStops.isEmpty) return false;
+        final clean = name.trim().toLowerCase();
+        return live.reachedStops.any((r) {
+          final rTrim = r.trim().toLowerCase();
+          return rTrim == clean || (rTrim.length > 2 && (clean.contains(rTrim) || rTrim.contains(clean)));
+        });
+      }
+
+      // 1. Match by bus.nextStop ONLY IF NOT ALREADY PASSED
+      if (live.nextStop != null && live.nextStop!.trim().isNotEmpty && !isStopPassed(live.nextStop!)) {
+        final target = live.nextStop!.trim().toLowerCase();
         for (int i = 0; i < totalStops; i++) {
           final sName = (displayedStops[i]['name'] ?? '').toString().trim().toLowerCase();
-          if (sName == target || sName.contains(target) || target.contains(sName)) {
+          if ((sName == target || sName.contains(target) || target.contains(sName)) && !isStopPassed(sName)) {
             matchedIndex = i;
             break;
           }
         }
       }
 
-      // 2. Match by first ETA stop
-      if (matchedIndex == null && activeBus.etas.isNotEmpty) {
-        final target = activeBus.etas.first.stopName.trim().toLowerCase();
+      // 2. Match by first unreached ETA stop
+      if (matchedIndex == null && live.etas.isNotEmpty) {
+        for (final eta in live.etas) {
+          final target = eta.stopName.trim().toLowerCase();
+          if (isStopPassed(target)) continue;
+          for (int i = 0; i < totalStops; i++) {
+            final sName = (displayedStops[i]['name'] ?? '').toString().trim().toLowerCase();
+            if ((sName == target || sName.contains(target) || target.contains(sName)) && !isStopPassed(sName)) {
+              matchedIndex = i;
+              break;
+            }
+          }
+          if (matchedIndex != null) break;
+        }
+      }
+
+      // 3. Match by first unreached stop in sequence
+      if (matchedIndex == null) {
         for (int i = 0; i < totalStops; i++) {
-          final sName = (displayedStops[i]['name'] ?? '').toString().trim().toLowerCase();
-          if (sName == target || sName.contains(target) || target.contains(sName)) {
+          final sName = (displayedStops[i]['name'] ?? '').toString();
+          if (!isStopPassed(sName)) {
             matchedIndex = i;
             break;
           }
         }
       }
 
-      // 3. Match by first unreached stop in order
-      if (matchedIndex == null && activeBus.reachedStops.isNotEmpty) {
-        for (int i = 0; i < totalStops; i++) {
-          final sName = (displayedStops[i]['name'] ?? '').toString().trim().toLowerCase();
-          final reached = activeBus.reachedStops.any((r) {
-            final rTrim = r.trim().toLowerCase();
-            return rTrim == sName || sName.contains(rTrim) || rTrim.contains(sName);
-          });
-          if (!reached) {
-            matchedIndex = i;
-            break;
-          }
-        }
-      }
-
-      // 4. Match by closest GPS distance
+      // 4. Fallback: match by closest GPS distance among unreached stops
       if (matchedIndex == null) {
         double minDistance = double.infinity;
-        int closestIndex = 0;
+        int closestIndex = totalStops;
         for (int i = 0; i < totalStops; i++) {
+          final sName = (displayedStops[i]['name'] ?? '').toString();
+          if (isStopPassed(sName)) continue;
           final lat = (displayedStops[i]['lat'] as num?)?.toDouble();
           final lng = (displayedStops[i]['lng'] as num?)?.toDouble();
           if (lat != null && lng != null && lat != 0.0 && lng != 0.0) {
-            final d = Geolocator.distanceBetween(activeBus.currentLat, activeBus.currentLng, lat, lng);
+            final d = Geolocator.distanceBetween(live.currentLat, live.currentLng, lat, lng);
             if (d < minDistance) {
               minDistance = d;
               closestIndex = i;
@@ -4353,7 +5123,15 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
         final bLat = (displayedStops[j + 1]['lat'] as num?)?.toDouble();
         final bLng = (displayedStops[j + 1]['lng'] as num?)?.toDouble();
         if (aLat != null && aLng != null && bLat != null && bLng != null && aLat != 0 && bLat != 0) {
-          cumDist += Geolocator.distanceBetween(aLat, aLng, bLat, bLng);
+          final legDist = Geolocator.distanceBetween(aLat, aLng, bLat, bLng);
+          // Outlier protection: city stops are ~500m to 1.8km apart. If distance exceeds 5.5km
+          // between non-terminal stops, it's an un-geocoded default to Ratibad Campus!
+          final bool isTerminalLeg = (j + 1 == totalStops - 1);
+          if (legDist > 5500 && !isTerminalLeg) {
+            cumDist += 850;
+          } else {
+            cumDist += legDist;
+          }
         } else {
           cumDist += 850;
         }
@@ -4366,16 +5144,22 @@ class _UserDashboardState extends State<UserDashboard> with WidgetsBindingObserv
       if (index < nextStopIndex) return 0;
       if (index == nextStopIndex) return etaToNextMins;
 
+      final totalDist = getDistanceToStop(index);
+      final fallbackMins = math.max(1, (totalDist / busSpeedMps / 60).round());
+
       final sName = (displayedStops[index]['name'] ?? '').toString().trim().toLowerCase();
       for (final e in activeBus.etas) {
         final eName = e.stopName.trim().toLowerCase();
         if (eName == sName || sName.contains(eName) || eName.contains(sName)) {
+          // If server ETA is blown out due to stale server cache, clamp to physical road distance
+          if (e.minutes > fallbackMins * 2.5 && totalDist < 12000) {
+            return fallbackMins;
+          }
           return e.minutes;
         }
       }
 
-      final totalDist = getDistanceToStop(index);
-      return math.max(1, (totalDist / busSpeedMps / 60).round());
+      return fallbackMins;
     }
 
     return Column(

@@ -492,23 +492,39 @@ async function calculateAccurateETA(busLat, busLng, stopLat, stopLng, currentSpe
  * Compute true road ETAs and progress for all stops along a bus route.
  * Determines which stops are upcoming based on current bus position along the polyline.
  */
-function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = [], coordinates = [], tripType = 'pickup') {
+function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = [], coordinates = [], tripType = 'pickup', reachedStops = []) {
     if (!stops || stops.length === 0) return { etas: [], currentStopIndex: 0, nextStopName: '' };
+
+    const reachedSet = new Set((reachedStops || []).map(s => String(s).trim().toLowerCase()));
+    const isStopPassed = (name) => {
+        if (!name) return false;
+        const n = String(name).trim().toLowerCase();
+        if (reachedSet.has(n)) return true;
+        for (const r of reachedSet) {
+            if (r.length > 2 && (n === r || n.includes(r) || r.includes(n))) return true;
+        }
+        return false;
+    };
 
     const orderedStops = tripType === 'dropoff' ? [...stops].reverse() : [...stops];
     // Use actual broadcast speed with 8 km/h floor (crawling traffic) and 60 km/h ceiling
     const speedKmh = (currentSpeed && currentSpeed >= 8) ? Math.min(currentSpeed, 60) : 25;
     const speedMps = (speedKmh * 1000) / 3600;
 
+    // In dropoff (Campus -> Stops), polyline coordinates must run in reverse direction
+    const activeCoords = (tripType === 'dropoff' && coordinates && coordinates.length > 10)
+        ? [...coordinates].reverse()
+        : coordinates;
+
     // If we have a high-resolution road polyline
-    if (coordinates && coordinates.length > 10) {
-        const busNearest = findNearestCoordIndex(busLat, busLng, coordinates);
+    if (activeCoords && activeCoords.length > 10) {
+        const busNearest = findNearestCoordIndex(busLat, busLng, activeCoords);
         const busIdx = busNearest.index;
 
         // Map each stop to its nearest point along the route polyline
         const stopsWithIndex = orderedStops.map((stop, origIndex) => {
             if (!stop.lat || !stop.lng) return { stop, index: -1, origIndex };
-            const n = findNearestCoordIndex(stop.lat, stop.lng, coordinates);
+            const n = findNearestCoordIndex(stop.lat, stop.lng, activeCoords);
             return { stop, index: n.index, origIndex };
         });
 
@@ -519,9 +535,12 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
         for (const item of stopsWithIndex) {
             if (item.index === -1) continue;
 
+            // Skip if stop has already been reached by the bus
+            if (isStopPassed(item.stop.name)) continue;
+
             // Stop is upcoming if it lies ahead of the bus (with 5-point grace threshold ~100m for current stop)
             if (item.index >= busIdx - 5) {
-                const distMeters = measurePolylineDistanceMeters(coordinates, busIdx, item.index);
+                const distMeters = measurePolylineDistanceMeters(activeCoords, busIdx, item.index);
                 const dwellTimeSec = intermediateStopCount * 30; // 30 seconds boarding dwell per intermediate stop
                 const travelTimeSec = (distMeters / speedMps) + dwellTimeSec;
                 const minutes = Math.max(1, Math.round(travelTimeSec / 60));
@@ -531,6 +550,7 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
                 }
 
                 upcomingETAs.push({
+                    name: item.stop.name,
                     stopName: item.stop.name,
                     minutes: minutes,
                     distanceKm: (distMeters / 1000).toFixed(1),
@@ -546,6 +566,7 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
         if (upcomingETAs.length === 0 && orderedStops.length > 0) {
             const lastStop = orderedStops[orderedStops.length - 1];
             upcomingETAs.push({
+                name: lastStop.name,
                 stopName: lastStop.name,
                 minutes: 1,
                 distanceKm: '0.1',
@@ -571,16 +592,23 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
     for (let i = 0; i < orderedStops.length; i++) {
         const stop = orderedStops[i];
         if (!stop.lat || !stop.lng) continue;
+
+        // Skip already reached stops in fallback mode too
+        if (isStopPassed(stop.name)) continue;
+
         const dM = haversineDistMeters(prevLat, prevLng, stop.lat, stop.lng);
-        const roadDistKm = (dM * 1.5) / 1000.0; // 1.5× for Indian road curvature
+        // Avoid unrealistic leaps if stop has far-away coordinates (> 6km inside city)
+        const effectiveDistM = dM > 7000 ? 900 : dM;
+        const roadDistKm = (effectiveDistM * 1.5) / 1000.0; // 1.5× for Indian road curvature
         const legMins = Math.max(1, Math.round((roadDistKm / speedKmh) * 60));
         cumulativeMins += legMins;
-        if (i > 0) cumulativeMins += 0.5; // 30s dwell per stop
+        if (fallbackETAs.length > 0) cumulativeMins += 0.5; // 30s dwell per intermediate stop
 
         fallbackETAs.push({
+            name: stop.name,
             stopName: stop.name,
-            minutes: cumulativeMins,
-            distanceKm: roadDistKm.toFixed(1),
+            minutes: Math.max(1, Math.round(cumulativeMins)),
+            distanceKm: (roadDistKm).toFixed(1),
             lat: stop.lat,
             lng: stop.lng
         });

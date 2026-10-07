@@ -280,6 +280,11 @@ class BusStore extends ChangeNotifier {
 
       final now = DateTime.now();
       final existing = _buses[incoming.id];
+      final bool hasReachedStopsKey = data is Map && (data.containsKey('reachedStops') || data.containsKey('completedStops'));
+      final bool hasEtasKey = data is Map && data.containsKey('etas');
+      final bool hasNextStopKey = data is Map && data.containsKey('nextStop');
+      final bool isOffline = incoming.status.toLowerCase().trim() == 'offline';
+
       if (existing != null) {
         _buses[incoming.id] = existing.copyWith(
           busNumber: (incoming.busNumber != null && incoming.busNumber!.isNotEmpty && incoming.busNumber != 'N/A')
@@ -298,17 +303,22 @@ class BusStore extends ChangeNotifier {
           driverId: incoming.driverId ?? existing.driverId,
           occupancy: incoming.occupancy,
           tripType: incoming.tripType,
-          reachedStops: incoming.reachedStops.isNotEmpty ? incoming.reachedStops : existing.reachedStops,
-          completedStops: incoming.completedStops > 0 ? incoming.completedStops : existing.completedStops,
-          nextStop: incoming.nextStop ?? existing.nextStop,
-          distanceToNextStopMeters: incoming.distanceToNextStopMeters ?? existing.distanceToNextStopMeters,
-          distanceToFinalStopMeters: incoming.distanceToFinalStopMeters ?? existing.distanceToFinalStopMeters,
-          etas: incoming.etas.isNotEmpty ? incoming.etas : existing.etas,
+          reachedStops: isOffline ? const [] : (hasReachedStopsKey ? incoming.reachedStops : existing.reachedStops),
+          completedStops: isOffline ? 0 : (hasReachedStopsKey ? incoming.completedStops : existing.completedStops),
+          nextStop: isOffline ? null : (hasNextStopKey ? incoming.nextStop : existing.nextStop),
+          distanceToNextStopMeters: isOffline ? null : (incoming.distanceToNextStopMeters ?? existing.distanceToNextStopMeters),
+          distanceToFinalStopMeters: isOffline ? null : (incoming.distanceToFinalStopMeters ?? existing.distanceToFinalStopMeters),
+          etas: isOffline ? const [] : (hasEtasKey ? incoming.etas : existing.etas),
           lastUpdated: now,
           gpsAccuracy: (incoming.gpsAccuracy != null && incoming.gpsAccuracy! > 0) ? incoming.gpsAccuracy : existing.gpsAccuracy,
         );
       } else {
-        _buses[incoming.id] = incoming.copyWith(lastUpdated: now);
+        _buses[incoming.id] = incoming.copyWith(
+          reachedStops: isOffline ? const [] : incoming.reachedStops,
+          completedStops: isOffline ? 0 : incoming.completedStops,
+          etas: isOffline ? const [] : incoming.etas,
+          lastUpdated: now,
+        );
       }
       _cachedSortedBuses = null; // Invalidate cache so all getters return fresh state immediately
       _lastUpdateTime = now;

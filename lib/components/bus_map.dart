@@ -1690,6 +1690,27 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
 
   Future<void> _getCurrentLocation() async {
     try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              backgroundColor: const Color(0xFF1E293B),
+              behavior: SnackBarBehavior.floating,
+              content: Text(
+                'Device GPS is turned off. Please enable location services.',
+                style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold),
+              ),
+              action: SnackBarAction(
+                label: 'SETTINGS',
+                textColor: const Color(0xFF38EF7D),
+                onPressed: () => Geolocator.openLocationSettings(),
+              ),
+            ),
+          );
+        }
+        return;
+      }
       if (!await Permission.location.isGranted) {
         await _requestPermissions();
         return;
@@ -1996,31 +2017,42 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                Row(
-                                  children: [
-                                    Container(
-                                      width: 8,
-                                      height: 8,
-                                      decoration: const BoxDecoration(
-                                        color: Color(0xFF38EF7D),
-                                        shape: BoxShape.circle,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        'ONLINE  •  ${_focusedBus!.routeName.isNotEmpty ? _focusedBus!.routeName : "Commute Route"}',
-                                        style: GoogleFonts.plusJakartaSans(
-                                          color: Colors.white38,
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.bold,
-                                          letterSpacing: 0.8,
+                                Builder(
+                                  builder: (context) {
+                                    final diffSec = DateTime.now().difference(_focusedBus!.lastUpdated).inSeconds;
+                                    final Color dotColor = diffSec < 10
+                                        ? const Color(0xFF38EF7D)
+                                        : (diffSec < 25 ? const Color(0xFFF59E0B) : const Color(0xFFFF2E63));
+                                    final String freshnessLabel = diffSec < 5
+                                        ? 'LIVE'
+                                        : (diffSec < 60 ? 'LIVE ($diffSec s ago)' : '${diffSec ~/ 60}m ago');
+                                    return Row(
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: dotColor,
+                                            shape: BoxShape.circle,
+                                          ),
                                         ),
-                                        overflow: TextOverflow.ellipsis,
-                                        maxLines: 1,
-                                      ),
-                                    ),
-                                  ],
+                                        const SizedBox(width: 6),
+                                        Flexible(
+                                          child: Text(
+                                            '$freshnessLabel  •  ${_focusedBus!.routeName.isNotEmpty ? _focusedBus!.routeName : "Commute Route"}',
+                                            style: GoogleFonts.plusJakartaSans(
+                                              color: Colors.white70,
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.bold,
+                                              letterSpacing: 0.8,
+                                            ),
+                                            overflow: TextOverflow.ellipsis,
+                                            maxLines: 1,
+                                          ),
+                                        ),
+                                      ],
+                                    );
+                                  },
                                 ),
                               ],
                             ),
@@ -2237,40 +2269,44 @@ class BusMapState extends State<BusMap> with TickerProviderStateMixin {
   // Icon-only map button — distinct icon + color per action
   Widget _buildMapBtn({
     required IconData     icon,
-    required String       label,   // used as tooltip only
+    required String       label,   // used as tooltip and accessibility announcement
     required Color        color,
     required VoidCallback onTap,
     bool isActive = false,
   }) {
-    return Tooltip(
-      message: label,
-      preferBelow: false,
-      child: GestureDetector(
-        onTap: onTap,
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 200),
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: isActive
-                ? color.withValues(alpha: 0.90)
-                : const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(
+    return Semantics(
+      button: true,
+      label: label,
+      child: Tooltip(
+        message: label,
+        preferBelow: false,
+        child: GestureDetector(
+          onTap: onTap,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
               color: isActive
-                  ? color.withValues(alpha: 0.50)
-                  : Colors.white.withValues(alpha: 0.08),
-              width: 1.0,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.30),
-                blurRadius: 10,
-                offset: const Offset(0, 3),
+                  ? color.withValues(alpha: 0.90)
+                  : const Color(0xFF0F172A),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isActive
+                    ? color.withValues(alpha: 0.50)
+                    : Colors.white.withValues(alpha: 0.08),
+                width: 1.0,
               ),
-            ],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.30),
+                  blurRadius: 10,
+                  offset: const Offset(0, 3),
+                ),
+              ],
+            ),
+            child: Icon(icon, color: Colors.white, size: 20),
           ),
-          child: Icon(icon, color: Colors.white, size: 20),
         ),
       ),
     );
