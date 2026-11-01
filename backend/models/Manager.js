@@ -8,7 +8,12 @@ const managerSchema = new mongoose.Schema({
   department: String,
   // Managers can grant specific rights or manage specific areas
   canManage: { type: [String], default: ['students', 'drivers', 'buses'] }, 
+  status: { type: String, enum: ['Active', 'Suspended'], default: 'Active' },
   mustChangePassword: { type: Boolean, default: true },
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordCode: { type: String, default: null },
+  resetPasswordExpires: { type: Date, default: null },
+  tokenVersion: { type: Number, default: 0 },
   loginAttempts: { type: Number, default: 0 },
   lockUntil: { type: Date, default: null },
   createdAt: { type: Date, default: Date.now }

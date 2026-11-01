@@ -106,7 +106,7 @@ function buildStopTimeline({ stops, tripType, liveLog, defaultStartMins, default
         let dwellTime = '30s - 1m';
         let status = '🕒 Scheduled';
         let delayMinutes = 0;
-        let varianceStr = '0m (On-Time)';
+        let varianceStr = 'Unrecorded';
 
         if (reachedEntry) {
             actualTimeStr = fmtTime(reachedEntry.reachedTime);
@@ -124,6 +124,14 @@ function buildStopTimeline({ stops, tripType, liveLog, defaultStartMins, default
                     varianceStr = 'On-Time (±2m)';
                 }
             }
+        } else if (liveLog?.status === 'Cancelled') {
+            status = '❌ Cancelled';
+            actualTimeStr = 'Cancelled';
+            varianceStr = 'N/A';
+        } else if (liveLog?.status === 'Failed') {
+            status = '⚠️ Breakdown/Failed';
+            actualTimeStr = 'Failed';
+            varianceStr = 'N/A';
         } else if (liveLog?.status === 'Active') {
             const reachedCount = liveLog.reachedStops?.length || 0;
             if (idx === reachedCount) {
@@ -131,14 +139,16 @@ function buildStopTimeline({ stops, tripType, liveLog, defaultStartMins, default
                 actualTimeStr = 'Approaching...';
             } else if (idx < reachedCount) {
                 status = '✅ Reached';
-                actualTimeStr = scheduledTimeStr; // Fallback to scheduled time if reached without GPS timestamp
+                actualTimeStr = 'Recorded (No GPS Time)';
+                varianceStr = 'Unrecorded';
             } else {
                 status = '🕒 En Route';
                 actualTimeStr = 'Scheduled';
             }
         } else if (liveLog?.status === 'Completed') {
             status = '✅ Reached';
-            actualTimeStr = scheduledTimeStr;
+            actualTimeStr = 'Completed (No GPS Time)';
+            varianceStr = 'Unrecorded';
         }
 
         return {
@@ -226,14 +236,17 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
                 }
             }
 
-            // Road distance calculation
+            // Road distance calculation and source attribution
             let distanceNum = 0;
+            let distanceSource = 'Unavailable';
             if (route && route.coordinates && route.coordinates.length > 1) {
                 distanceNum = computeHaversineDistanceKm(route.coordinates);
+                distanceSource = 'Polyline (Route)';
             } else if (stops.length > 1) {
                 distanceNum = computeHaversineDistanceKm(stops);
+                distanceSource = 'Polyline (Stops)';
             }
-            const distanceKm = distanceNum > 0 ? `${distanceNum.toFixed(1)} km` : '32.5 km';
+            const defaultDistanceKm = distanceNum > 0 ? `${distanceNum.toFixed(1)} km` : 'N/A';
 
             // Morning Scheduled Timetable Times
             const firstStop = stops.length > 0 ? stops[0] : null;
@@ -269,34 +282,69 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
             if (shift === 'all' || shift === 'morning') {
                 let startStr, reachStr, punctuality, delayMins, status, duration;
                 let reachedCount = 0;
+                let tripDistanceKm = defaultDistanceKm;
+                let tripDistanceSource = distanceSource;
 
                 if (liveMorning) {
-                    startStr = fmtTime(liveMorning.startTime);
-                    reachedCount = liveMorning.reachedStops?.length || 0;
-                    status = liveMorning.status === 'Active' ? '⚡ In-Transit (Live)' : '✅ Completed';
+                    if (liveMorning.distanceKm && liveMorning.distanceKm > 0) {
+                        tripDistanceKm = `${liveMorning.distanceKm.toFixed(1)} km`;
+                        tripDistanceSource = liveMorning.distanceSource || 'GPS';
+                    }
 
-                    if (liveMorning.endTime) {
-                        reachStr = fmtTime(liveMorning.endTime);
-                        const reachMins = parseTimeMinutes(reachStr);
-                        delayMins = reachMins != null ? Math.max(0, reachMins - schedEndMins) : 0;
-                        punctuality = delayMins <= 5 ? '🟢 On-Time' : `🔴 Delayed (+${delayMins}m)`;
-                        const durMin = Math.max(10, Math.round((new Date(liveMorning.endTime) - new Date(liveMorning.startTime)) / 60000));
-                        duration = `${Math.floor(durMin / 60)}h ${durMin % 60}m`;
-                        reachedCount = stopsCount;
-                    } else {
+                    if (liveMorning.status === 'Cancelled') {
+                        startStr = fmtTime(liveMorning.startTime);
+                        reachStr = liveMorning.endTime ? fmtTime(liveMorning.endTime) : 'Cancelled';
+                        reachedCount = liveMorning.reachedStops?.length || 0;
+                        status = '❌ Cancelled';
+                        punctuality = '❌ Cancelled';
+                        delayMins = 0;
+                        const durMin = (liveMorning.startTime && liveMorning.endTime)
+                            ? Math.max(1, Math.round((new Date(liveMorning.endTime) - new Date(liveMorning.startTime)) / 60000))
+                            : null;
+                        duration = durMin != null ? `${durMin}m` : 'Unavailable';
+                    } else if (liveMorning.status === 'Failed') {
+                        startStr = fmtTime(liveMorning.startTime);
+                        reachStr = liveMorning.endTime ? fmtTime(liveMorning.endTime) : 'Failed';
+                        reachedCount = liveMorning.reachedStops?.length || 0;
+                        status = '⚠️ Breakdown/Failed';
+                        punctuality = '⚠️ Failed';
+                        delayMins = 0;
+                        duration = 'Unavailable';
+                    } else if (liveMorning.status === 'Active') {
+                        startStr = fmtTime(liveMorning.startTime);
+                        reachedCount = liveMorning.reachedStops?.length || 0;
+                        status = '⚡ In-Transit (Live)';
                         reachStr = `Est. ${officialMorningEnd}`;
                         delayMins = 0;
                         punctuality = '⚡ In-Transit';
-                        duration = officialMorningDuration;
+                        duration = 'In-Progress';
+                    } else { // 'Completed'
+                        startStr = fmtTime(liveMorning.startTime);
+                        reachedCount = liveMorning.reachedStops?.length || stopsCount;
+                        status = '✅ Completed';
+
+                        if (liveMorning.endTime) {
+                            reachStr = fmtTime(liveMorning.endTime);
+                            const reachMins = parseTimeMinutes(reachStr);
+                            delayMins = reachMins != null ? Math.max(0, reachMins - schedEndMins) : 0;
+                            punctuality = delayMins <= 5 ? '🟢 On-Time' : `🔴 Delayed (+${delayMins}m)`;
+                            const durMin = Math.max(1, Math.round((new Date(liveMorning.endTime) - new Date(liveMorning.startTime)) / 60000));
+                            duration = `${Math.floor(durMin / 60)}h ${durMin % 60}m`;
+                        } else {
+                            reachStr = 'Completed (No GPS Time)';
+                            delayMins = 0;
+                            punctuality = '🟢 On-Time';
+                            duration = 'Unavailable';
+                        }
                     }
                 } else {
-                    startStr = officialMorningStart;
-                    reachStr = officialMorningEnd;
+                    startStr = 'Pending';
+                    reachStr = 'Pending';
                     delayMins = 0;
-                    punctuality = '🟢 On-Time (Scheduled)';
+                    punctuality = '⚪ Scheduled';
                     status = '⚪ Scheduled';
-                    duration = officialMorningDuration;
-                    reachedCount = stopsCount;
+                    duration = 'Unavailable';
+                    reachedCount = 0;
                 }
 
                 // Detailed Stop Breakdown
@@ -333,7 +381,9 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
                     stopsCount,
                     stopsCompleted: `${Math.min(reachedCount, stopsCount)} / ${stopsCount}`,
                     stopsCompletedNum: Math.min(reachedCount, stopsCount),
-                    distanceKm,
+                    distanceKm: tripDistanceKm,
+                    distanceSource: tripDistanceSource,
+                    cancellationReason: liveMorning?.cancellationReason || null,
                     status,
                     stops: tripStopTimeline
                 };
@@ -365,6 +415,8 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
             if (shift === 'all' || shift === 'evening' || shift === 'afternoon') {
                 let startStr, reachStr, punctuality, delayMins, status, duration;
                 let reachedCount = 0;
+                let tripDistanceKm = defaultDistanceKm;
+                let tripDistanceSource = distanceSource;
 
                 // Official Campus Departure is 04:45 PM
                 const officialEveningStart = '04:45 PM';
@@ -374,32 +426,65 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
                 const returnRouteName = `SISTec Ratibad Campus ➔ ${firstStop ? firstStop.name : 'City Terminus'}`;
 
                 if (liveEvening) {
-                    startStr = fmtTime(liveEvening.startTime);
-                    reachedCount = liveEvening.reachedStops?.length || 0;
-                    status = liveEvening.status === 'Active' ? '⚡ In-Transit (Live)' : '✅ Completed';
+                    if (liveEvening.distanceKm && liveEvening.distanceKm > 0) {
+                        tripDistanceKm = `${liveEvening.distanceKm.toFixed(1)} km`;
+                        tripDistanceSource = liveEvening.distanceSource || 'GPS';
+                    }
 
-                    if (liveEvening.endTime) {
-                        reachStr = fmtTime(liveEvening.endTime);
-                        const reachMins = parseTimeMinutes(reachStr);
-                        delayMins = reachMins != null ? Math.max(0, reachMins - eveningEndMins) : 0;
-                        punctuality = delayMins <= 5 ? '🟢 On-Time' : `🔴 Delayed (+${delayMins}m)`;
-                        const durMin = Math.max(10, Math.round((new Date(liveEvening.endTime) - new Date(liveEvening.startTime)) / 60000));
-                        duration = `${Math.floor(durMin / 60)}h ${durMin % 60}m`;
-                        reachedCount = stopsCount;
-                    } else {
+                    if (liveEvening.status === 'Cancelled') {
+                        startStr = fmtTime(liveEvening.startTime);
+                        reachStr = liveEvening.endTime ? fmtTime(liveEvening.endTime) : 'Cancelled';
+                        reachedCount = liveEvening.reachedStops?.length || 0;
+                        status = '❌ Cancelled';
+                        punctuality = '❌ Cancelled';
+                        delayMins = 0;
+                        const durMin = (liveEvening.startTime && liveEvening.endTime)
+                            ? Math.max(1, Math.round((new Date(liveEvening.endTime) - new Date(liveEvening.startTime)) / 60000))
+                            : null;
+                        duration = durMin != null ? `${durMin}m` : 'Unavailable';
+                    } else if (liveEvening.status === 'Failed') {
+                        startStr = fmtTime(liveEvening.startTime);
+                        reachStr = liveEvening.endTime ? fmtTime(liveEvening.endTime) : 'Failed';
+                        reachedCount = liveEvening.reachedStops?.length || 0;
+                        status = '⚠️ Breakdown/Failed';
+                        punctuality = '⚠️ Failed';
+                        delayMins = 0;
+                        duration = 'Unavailable';
+                    } else if (liveEvening.status === 'Active') {
+                        startStr = fmtTime(liveEvening.startTime);
+                        reachedCount = liveEvening.reachedStops?.length || 0;
+                        status = '⚡ In-Transit (Live)';
                         reachStr = `Est. ${officialEveningEnd}`;
                         delayMins = 0;
                         punctuality = '⚡ In-Transit';
-                        duration = officialMorningDuration;
+                        duration = 'In-Progress';
+                    } else { // 'Completed'
+                        startStr = fmtTime(liveEvening.startTime);
+                        reachedCount = liveEvening.reachedStops?.length || stopsCount;
+                        status = '✅ Completed';
+
+                        if (liveEvening.endTime) {
+                            reachStr = fmtTime(liveEvening.endTime);
+                            const reachMins = parseTimeMinutes(reachStr);
+                            delayMins = reachMins != null ? Math.max(0, reachMins - eveningEndMins) : 0;
+                            punctuality = delayMins <= 5 ? '🟢 On-Time' : `🔴 Delayed (+${delayMins}m)`;
+                            const durMin = Math.max(1, Math.round((new Date(liveEvening.endTime) - new Date(liveEvening.startTime)) / 60000));
+                            duration = `${Math.floor(durMin / 60)}h ${durMin % 60}m`;
+                        } else {
+                            reachStr = 'Completed (No GPS Time)';
+                            delayMins = 0;
+                            punctuality = '🟢 On-Time';
+                            duration = 'Unavailable';
+                        }
                     }
                 } else {
-                    startStr = officialEveningStart;
-                    reachStr = officialEveningEnd;
+                    startStr = 'Pending';
+                    reachStr = 'Pending';
                     delayMins = 0;
-                    punctuality = '🟢 On-Time (Scheduled)';
+                    punctuality = '⚪ Scheduled';
                     status = '⚪ Scheduled';
-                    duration = officialMorningDuration;
-                    reachedCount = stopsCount;
+                    duration = 'Unavailable';
+                    reachedCount = 0;
                 }
 
                 // Detailed Stop Breakdown for Evening Return (Reverse Route)
@@ -436,7 +521,9 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
                     stopsCount,
                     stopsCompleted: `${Math.min(reachedCount, stopsCount)} / ${stopsCount}`,
                     stopsCompletedNum: Math.min(reachedCount, stopsCount),
-                    distanceKm,
+                    distanceKm: tripDistanceKm,
+                    distanceSource: tripDistanceSource,
+                    cancellationReason: liveEvening?.cancellationReason || null,
                     status,
                     stops: tripStopTimeline
                 };
@@ -472,9 +559,15 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
 
     // Compute Comprehensive Summary KPIs
     const totalTrips = allTrips.length;
+    const completedTrips = allTrips.filter(t => t.status === '✅ Completed').length;
+    const cancelledTrips = allTrips.filter(t => t.status === '❌ Cancelled').length;
+    const activeTrips = allTrips.filter(t => t.status === '⚡ In-Transit (Live)').length;
+    const scheduledTrips = allTrips.filter(t => t.status === '⚪ Scheduled').length;
     const onTimeTrips = allTrips.filter(t => t.punctuality && (t.punctuality.includes('On-Time') || t.punctuality.includes('🟢'))).length;
     const delayedTrips = allTrips.filter(t => t.delayMinutes > 5).length;
-    const punctualityRate = totalTrips > 0 ? ((onTimeTrips / totalTrips) * 100).toFixed(1) : '100.0';
+    const punctualityRate = (completedTrips > 0)
+        ? ((onTimeTrips / completedTrips) * 100).toFixed(1)
+        : (totalTrips > 0 ? '100.0' : '0.0');
     const totalDistance = allTrips.reduce((acc, t) => acc + (parseFloat(String(t.distanceKm).replace(/[^0-9.]/g, '')) || 0), 0).toFixed(1);
     const totalStopsServiced = allTrips.reduce((acc, t) => acc + (t.stopsCompletedNum || 0), 0);
 
@@ -485,6 +578,10 @@ async function generateTripReportData({ targetDate, shift = 'all', busId = null,
         shift,
         totalBuses: targetBuses.length,
         totalTrips,
+        completedTrips,
+        cancelledTrips,
+        activeTrips,
+        scheduledTrips,
         onTimeTrips,
         delayedTrips,
         punctualityRate,

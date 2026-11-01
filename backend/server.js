@@ -5,11 +5,18 @@ if (!fs.existsSync(envPath)) {
     envPath = path.resolve(__dirname, 'SISTecChalo', 'backend', '.env');
 }
 require('dotenv').config({ path: envPath });
+
+if ((process.env.NODE_ENV === 'production' || process.env.NODE_ENV === 'staging') && !process.env.JWT_SECRET) {
+    console.error(`FATAL: JWT_SECRET environment variable is strictly required in ${process.env.NODE_ENV} mode.`);
+    process.exit(1);
+}
+const { resolveDatabaseConfig, sanitizeUriForLogging } = require('./services/db_config');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const compression = require('compression');
 const http = require('http');
+const EventEmitter = require('events');
 const { Server } = require('socket.io');
 const argon2 = require('argon2');
 const jwt = require('jsonwebtoken');
@@ -21,36 +28,93 @@ const crypto = require('crypto');
 const { generateTripReportData, generateTripReportExcelBuffer } = require('./services/trip_report_generator');
 const { syncDailyTripReportsToGoogleSheets, SPREADSHEET_ID } = require('./services/google_sheets_service');
 
-// Load Firebase service account credentials
-if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-    try {
-        const credentials = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-        admin.initializeApp({
-            credential: admin.credential.cert(credentials)
-        });
-        console.log('🔥 [Firebase] SDK Initialized successfully via environment variable.');
-    } catch (err) {
-        console.error('❌ [Firebase] SDK Initialization via env failed:', err.message);
+function areExternalNotificationsSuppressed(env = process.env) {
+    const nodeEnv = (env.NODE_ENV || '').toLowerCase().trim();
+    return (
+        nodeEnv === 'test' ||
+        nodeEnv === 'staging' ||
+        String(env.DISABLE_EXTERNAL_NOTIFICATIONS || '').toLowerCase().trim() === 'true' ||
+        String(env.MOCK_NOTIFICATIONS || '').toLowerCase().trim() === 'true'
+    );
+}
+
+function initializeFirebaseAdmin(env = process.env, adminSdk = admin, fsMod = fs) {
+    if (areExternalNotificationsSuppressed(env)) {
+        console.log('🛡️ [Firebase] External notifications suppressed in current environment — skipping Firebase Admin initialization.');
+        return { initialized: false, suppressed: true, provider: 'Mock Dispatcher' };
     }
-} else {
-    let serviceAccountPath = path.resolve(__dirname, 'firebase-service-account.json');
-    if (!fs.existsSync(serviceAccountPath)) {
-        const altPath = path.resolve(__dirname, 'firebase-service-account.json.json');
-        if (fs.existsSync(altPath)) serviceAccountPath = altPath;
+    if (adminSdk.apps && adminSdk.apps.length > 0) {
+        return { initialized: true, suppressed: false, source: 'existing' };
     }
-    if (fs.existsSync(serviceAccountPath)) {
+    if (env.FIREBASE_SERVICE_ACCOUNT) {
         try {
-            admin.initializeApp({
-                credential: admin.credential.cert(require(serviceAccountPath))
+            const credentials = JSON.parse(env.FIREBASE_SERVICE_ACCOUNT);
+            adminSdk.initializeApp({
+                credential: adminSdk.credential.cert(credentials)
             });
-            console.log('🔥 [Firebase] SDK Initialized successfully via file.');
+            console.log('🔥 [Firebase] SDK Initialized successfully via environment variable.');
+            return { initialized: true, suppressed: false, source: 'env' };
         } catch (err) {
-            console.error('❌ [Firebase] SDK Initialization via file failed:', err.message);
+            console.error('❌ [Firebase] SDK Initialization via env failed:', err.message);
+            return { initialized: false, suppressed: false, error: 'env_init_failed' };
         }
     } else {
-        console.log('⚠️ [Firebase] Service Account JSON not found (no env var or file). Background push notifications will be inactive.');
+        let serviceAccountPath = path.resolve(__dirname, 'firebase-service-account.json');
+        if (!fsMod.existsSync(serviceAccountPath)) {
+            const altPath = path.resolve(__dirname, 'firebase-service-account.json.json');
+            if (fsMod.existsSync(altPath)) serviceAccountPath = altPath;
+        }
+        if (fsMod.existsSync(serviceAccountPath)) {
+            try {
+                adminSdk.initializeApp({
+                    credential: adminSdk.credential.cert(require(serviceAccountPath))
+                });
+                console.log('🔥 [Firebase] SDK Initialized successfully via file.');
+                return { initialized: true, suppressed: false, source: 'file' };
+            } catch (err) {
+                console.error('❌ [Firebase] SDK Initialization via file failed:', err.message);
+                return { initialized: false, suppressed: false, error: 'file_init_failed' };
+            }
+        } else {
+            console.log('⚠️ [Firebase] Service Account JSON not found (no env var or file). Background push notifications will be inactive.');
+            return { initialized: false, suppressed: false, reason: 'no_credentials' };
+        }
     }
 }
+
+async function dispatchFcmMulticast(messagePayload, env = process.env, adminSdk = admin) {
+    const tokens = (messagePayload && Array.isArray(messagePayload.tokens)) ? messagePayload.tokens.filter(Boolean) : [];
+    if (areExternalNotificationsSuppressed(env)) {
+        return {
+            suppressed: true,
+            provider: 'Mock Dispatcher',
+            successCount: 0,
+            failureCount: 0,
+            responses: []
+        };
+    }
+    if (!adminSdk.apps || adminSdk.apps.length === 0 || tokens.length === 0) {
+        return {
+            suppressed: false,
+            skipped: true,
+            successCount: 0,
+            failureCount: 0,
+            responses: []
+        };
+    }
+    const response = await adminSdk.messaging().sendEachForMulticast({
+        ...messagePayload,
+        tokens
+    });
+    return {
+        suppressed: false,
+        provider: 'Firebase Admin FCM',
+        ...response
+    };
+}
+
+// Load Firebase service account credentials (only when external notifications are permitted)
+initializeFirebaseAdmin();
 
 const { sendCredentialsEmail, buildCredentialsEmailHtml, sendPasswordResetEmail } = require('./services/email_service');
 
@@ -88,41 +152,135 @@ const FuelLog = require('./models/FuelLog');
 const StopFeedback = require('./models/StopFeedback');
 const { processStopFeedback, getRouteFeedbackSummary } = require('./services/stop_consensus_service');
 
-const authMiddleware = require('./middleware/authMiddleware');
+const { authMiddleware, passwordChangeAuth, optionalAuth, adminMiddleware, managerMiddleware, driverMiddleware, studentMiddleware, getAccountByIdAndRole, getJwtSecret } = require('./middleware/authMiddleware');
 
-const optionalAuth = (req, res, next) => {
-    const token = req.header('Authorization');
-    if (!token) return next();
-    try {
-        const tokenString = token.startsWith('Bearer ') ? token.slice(7) : token;
-        const decoded = jwt.verify(tokenString, process.env.JWT_SECRET || 'SISTecChalo_secret_key_777');
-        req.user = decoded.user;
-    } catch (_) {}
-    next();
-};
+const defaultCorsAllowlist = [
+    'http://localhost',
+    'http://127.0.0.1',
+    'https://smart-shuttle-backend-2h13.onrender.com'
+];
+
+function getCorsOptions(nodeEnv = process.env.NODE_ENV) {
+    const env = (nodeEnv || 'development').toLowerCase().trim();
+    if (env === 'development' || env === 'test') {
+        return {
+            origin: true,
+            methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+            credentials: true
+        };
+    }
+
+    const configuredOrigins = (process.env.ALLOWED_ORIGINS || '')
+        .split(',')
+        .map(o => o.trim())
+        .filter(Boolean);
+
+    return {
+        origin: function (origin, callback) {
+            // Mobile apps, server-to-server, curl, Postman send no Origin header
+            if (!origin) return callback(null, true);
+
+            try {
+                const parsedUrl = new URL(origin);
+                const hostname = parsedUrl.hostname;
+
+                const isAllowed = defaultCorsAllowlist.some(allowed => origin === allowed || origin.startsWith(allowed + ':')) ||
+                    configuredOrigins.some(allowed => origin === allowed || origin.endsWith(allowed)) ||
+                    hostname === 'sistec.ac.in' ||
+                    hostname.endsWith('.sistec.ac.in') ||
+                    hostname.endsWith('.onrender.com');
+
+                if (isAllowed) {
+                    callback(null, true);
+                } else {
+                    callback(new Error(`CORS blocked for unauthorized origin: ${origin}`));
+                }
+            } catch (_) {
+                callback(new Error(`CORS blocked for malformed origin: ${origin}`));
+            }
+        },
+        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        credentials: true
+    };
+}
+
+const corsOptions = getCorsOptions();
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: {
-        origin: "*",
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-        credentials: true
-    },
+    cors: corsOptions,
     transports: ['websocket', 'polling'],
     allowEIO3: true,
     pingTimeout: 60000,
     pingInterval: 25000
 });
 
-// Security Hashing Options (Argon2id - Immune to GPU & ASIC offline cracking)
+// ─── Production Graceful Shutdown & Async Operation Drain Controller ──────
+class AsyncOperationTracker {
+    constructor() {
+        this.activeCount = 0;
+        this.emitter = new EventEmitter();
+    }
+
+    begin() {
+        this.activeCount++;
+    }
+
+    end() {
+        this.activeCount = Math.max(0, this.activeCount - 1);
+        if (this.activeCount === 0) {
+            this.emitter.emit('drained');
+        }
+    }
+
+    getActiveCount() {
+        return this.activeCount;
+    }
+
+    waitForDrain(timeoutMs = 5000) {
+        if (this.activeCount === 0) return Promise.resolve({ drained: true, remaining: 0 });
+
+        return new Promise((resolve) => {
+            let timer = null;
+
+            const onDrained = () => {
+                if (timer) clearTimeout(timer);
+                resolve({ drained: true, remaining: 0 });
+            };
+
+            timer = setTimeout(() => {
+                this.emitter.removeListener('drained', onDrained);
+                resolve({ drained: false, remaining: this.activeCount });
+            }, timeoutMs);
+
+            this.emitter.once('drained', onDrained);
+        });
+    }
+}
+
+let isShuttingDown = false;
+const operationTracker = new AsyncOperationTracker();
+let watchdogIntervalId = null;
+let keepAliveIntervalId = null;
+let keepAliveTimeoutId = null;
+
+// Security Hashing Options (Argon2id - Immune to GPU & ASIC offline cracking, calibrated for high-concurrency cloud production)
 const ARGON2_SECURITY_OPTIONS = {
     type: argon2.argon2id,
-    memoryCost: 65536, // 64 MB Dedicated RAM per hash
-    timeCost: 3,       // 3 Iterations
+    memoryCost: 19456, // 19 MB per hash (OWASP recommended balance to avoid server OOM under 10k-user morning rush)
+    timeCost: 2,       // 2 Iterations
     parallelism: 1
 };
-const DUMMY_HASH = '$argon2id$v=19$m=65536,t=3,p=1$4Y/a5N5c2V5X8P8K$kZ7y5kL9bW0xV3tY8uQ2mP5vR1sT4wX7zA0bC3dE6fG';
+const DUMMY_HASH = '$argon2id$v=19$m=19456,t=2,p=1$5yp8+T80L+ifnYMzqwbm9Q$b/rlskYRqNiOyHDvvgNTyLnPDiYQ/735LyMIRnYCf1g';
+
+const recoveryLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many recovery requests. Please try again after 15 minutes.' }
+});
 
 const secureHashPassword = async (rawPassword) => {
     return await argon2.hash(rawPassword, ARGON2_SECURITY_OPTIONS);
@@ -157,11 +315,41 @@ function generateStrongRandomPassword(length = 10) {
     return chars.join('');
 }
 
+// 🛑 Graceful Shutdown Ingress Barrier & Operation Tracker
+function shutdownIngressMiddleware(req, res, next) {
+    if (isShuttingDown) {
+        res.set('Connection', 'close');
+        if (req.path === '/api/health' || req.path === '/health' || req.path === '/') {
+            return res.status(503).json({ status: 'shutting_down', service: 'SISTecChalo Backend' });
+        }
+        if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+            res.set('Retry-After', '5');
+            return res.status(503).json({ error: 'SERVER_SHUTTING_DOWN', message: 'Server is restarting for deployment.' });
+        }
+    }
+
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+        operationTracker.begin();
+        let ended = false;
+        const onFinishOrClose = () => {
+            if (!ended) {
+                ended = true;
+                operationTracker.end();
+            }
+        };
+        res.once('finish', onFinishOrClose);
+        res.once('close', onFinishOrClose);
+    }
+    next();
+}
+
+app.use(shutdownIngressMiddleware);
+
 app.use(helmet({
     contentSecurityPolicy: false, // Allows cross-origin map tiles
     crossOriginEmbedderPolicy: false
 }));
-app.use(cors());
+app.use(cors(corsOptions));
 
 // ⚡ High-Performance Gzip/Brotli Compression (Compresses 3.2MB routes to <270KB)
 app.use(compression({
@@ -205,8 +393,8 @@ app.get(['/api/health', '/health'], (req, res) => {
 // 🚀 Public App Version & In-App Update Checker
 app.get('/api/app-version', (req, res) => {
     res.status(200).json({
-        latestVersion: "1.0.4",
-        latestBuildNumber: 18,
+        latestVersion: "1.0.8",
+        latestBuildNumber: 23,
         minSupportedBuildNumber: 1,
         title: "New Update Available! 🚀",
         message: "A new version of SISTec Chalo is ready on Google Play Store with Where-Is-My-Train Stop Calibration, Guest Mode Logout, and Notification Management.",
@@ -224,9 +412,10 @@ app.get('/api/app-version', (req, res) => {
 
 // Rate Limiting
 app.set('trust proxy', 1); // Trust reverse proxy (e.g. Render) to get correct client IP
+const isDevOrTest = process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 100, // Limit each IP to 100 requests per windowMs
+    max: isDevOrTest ? 10000 : 100, // Relaxed in staging/test for automated test runs; 100 in production
     message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
@@ -234,39 +423,47 @@ app.use('/api/', limiter);
 // Dedicated Brute-Force Rate Limiter for Login Endpoint
 const loginLimiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 15, // Max 15 login attempts per 15 minutes per IP
+    max: isDevOrTest ? 1000 : 15, // Relaxed in staging/test; max 15 attempts in production
     message: { error: 'Too many login attempts. Please try again after 15 minutes.' }
 });
 app.use('/api/auth/login', loginLimiter);
 
-// MongoDB Connection
-// Force 'SISTecChalo' database in the URI if it's missing or set to 'test'
-const rawUri = process.env.MONGODB_URI;
-if (!rawUri) {
-    console.error('\n❌ ERROR: MONGODB_URI environment variable is not defined!');
-    console.error('Please configure it in the .env file or environment variables.\n');
-    process.exit(1);
+// Pre-flight Configuration & Security Gate
+if (require.main === module && process.env.NODE_ENV !== 'test') {
+    let dbConfig;
+    try {
+        dbConfig = resolveDatabaseConfig({
+            rawUri: process.env.MONGODB_URI,
+            nodeEnv: process.env.NODE_ENV,
+            envDbName: process.env.MONGODB_DB_NAME
+        });
+        getJwtSecret();
+    } catch (configErr) {
+        console.error(`\n❌ [CONFIG ERROR] ${configErr.message}\n`);
+        process.exit(1);
+    }
+
+    const envLabel = (process.env.NODE_ENV || 'development').toLowerCase().trim();
+    console.log(`📡 [DB] Connecting to configured ${envLabel} database...`);
+
+    mongoose.connect(dbConfig.effectiveUri, dbConfig.options)
+        .then(async () => {
+            process.stdout.write(`\n\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
+            console.log(`✅ [DB] Connected to configured ${envLabel} database.`);
+            // Auto-seed real SGI routes on first boot if DB is empty
+            await autoSeedRoutes();
+            startServer();
+        })
+        .catch(err => {
+            const safeError = sanitizeConnectionError(err);
+            console.error(`\n❌ [DB FATAL] MongoDB Connection Error: ${safeError}`);
+            console.error('❌ [DB FATAL] Startup aborted — HTTP server and background timers were not started.\n');
+            process.exit(1);
+        });
 }
-const MONGODB_URI = rawUri.replace(/\/[^/?]*(\?|$)/, '/sistecChalo$1');
-
-console.log(`📡 [DB] Connecting to Cluster... (Target Database: SISTecChalo)`);
-console.log(`📡 [DB] URI (Sanitized): ${MONGODB_URI.replace(/\/\/.*@/, '//****:****@')}`);
-
-mongoose.connect(MONGODB_URI, { dbName: 'sistecChalo' })
-    .then(async () => {
-        const dbName = mongoose.connection.name;
-        process.stdout.write(`\n\x1b[32m✅ [DB] SUCCESSFULLY CONNECTED!\x1b[0m\n`);
-        process.stdout.write(`\x1b[32m✅ [DB] ACTIVE DATABASE: ${dbName}\x1b[0m\n`);
-        console.log(`✅ MongoDB Connected! Database: ${dbName}`);
-        // Auto-seed real SGI routes on first boot if DB is empty
-        await autoSeedRoutes();
-    })
-    .catch(err => {
-        console.error('❌ MongoDB Connection Error:', err);
-    });
 
 // ─── Auto-Seed: Seeds all 17 real Sagar Group of Institutions routes ──────────
-// Only runs if the Route collection is empty (safe to deploy multiple times)
+// Only runs if the Route collection is empty and AUTO_SEED_ROUTES=true is explicitly set
 async function autoSeedRoutes() {
     try {
         const Route = require('./models/Route');
@@ -275,12 +472,26 @@ async function autoSeedRoutes() {
             console.log(`🗂️  [SEED] ${count} routes already exist — skipping auto-seed.`);
             return;
         }
+
+        if (process.env.AUTO_SEED_ROUTES !== 'true') {
+            console.log('ℹ️  [SEED] Route collection is empty. Automatic route seeding is disabled (set AUTO_SEED_ROUTES=true to enable).');
+            return;
+        }
+
         console.log('🌱 [SEED] No routes found — seeding real SGI bus routes...');
-        const { seed: seedRealRoutes } = require('./seed_real_routes');
-        await seedRealRoutes(false); // false means do not disconnect Mongoose
-        console.log(`🎉 [SEED] Auto-seed completed successfully with 17 unique routes and 30 buses!`);
+        const seedModule = require('./seed_real_routes');
+        if (typeof seedModule.seed !== 'function') {
+            console.warn('⚠️ [SEED] seed_real_routes does not export a seed function — skipping.');
+            return;
+        }
+        const result = await seedModule.seed(false); // false means do not disconnect Mongoose
+        if (result && result.seeded > 0) {
+            console.log(`🎉 [SEED] Auto-seed completed successfully with ${result.seeded} routes!`);
+        } else {
+            console.log('ℹ️  [SEED] Auto-seed executed with 0 routes created (no-op). Staging routes must be set up explicitly.');
+        }
     } catch (_err) {
-        console.error('❌ [SEED] Auto-seed failed:', _err.message);
+        console.error('❌ [SEED] Auto-seed failed:', sanitizeConnectionError(_err));
     }
 }
 
@@ -288,7 +499,7 @@ async function autoSeedRoutes() {
 app.get('/', (req, res) => {
     res.json({
         status: 'SISTecChalo Backend Online',
-        database: mongoose.connection.name,
+        database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected',
         version: '2.4.0-RELEASE',
         timestamp: new Date().toISOString()
     });
@@ -738,15 +949,25 @@ app.get('/api/diagnostic-smtp', (req, res) => {
     });
 });
 
-// Helper to broadcast stats
-const broadcastStats = async () => {
+// Helper to broadcast stats to authorized manager/admin sockets
+const broadcastStats = async (ioInstance = io, models = { Bus, Route, User }) => {
     try {
-        const busCount = await Bus.countDocuments();
-        const routeCount = await Route.countDocuments();
-        const userCount = await User.countDocuments();
-        io.emit('statsUpdate', { busCount, routeCount, userCount });
+        const [busCount, routeCount, userCount] = await Promise.all([
+            models.Bus.countDocuments(),
+            models.Route.countDocuments(),
+            models.User.countDocuments()
+        ]);
+        const payload = { busCount, routeCount, userCount };
+        if (ioInstance && typeof ioInstance.to === 'function') {
+            const managersRoom = ioInstance.to('managers');
+            if (managersRoom && typeof managersRoom.emit === 'function') {
+                managersRoom.emit('statsUpdate', payload);
+            }
+        }
+        return payload;
     } catch (_err) {
         console.error('Stats broadcast error:', _err);
+        return null;
     }
 };
 
@@ -815,6 +1036,12 @@ app.post('/api/auth/login', async (req, res) => {
             return res.status(401).json({ error: 'Invalid username or password.' });
         }
 
+        // Check account status
+        if (user.status && user.status === 'Suspended') {
+            console.timeEnd('LoginRequest');
+            return res.status(403).json({ error: 'This account has been suspended. Please contact the administrator.' });
+        }
+
         // 🛡️ Account Lockout Protection (Prevents Brute Force & Password Spraying)
         if (user.lockUntil && user.lockUntil > Date.now()) {
             const minutesLeft = Math.ceil((user.lockUntil - Date.now()) / (60 * 1000));
@@ -825,10 +1052,7 @@ app.post('/api/auth/login', async (req, res) => {
         }
 
         // Validate Password with Argon2id
-        let isMatch = await argon2.verify(user.password, password);
-        if (!isMatch && (password === '123456' || password === 'Dea@19')) {
-            isMatch = true;
-        }
+        const isMatch = await argon2.verify(user.password, password);
         console.log(`🔐 [Auth] Password match result for ${username} (${matchedRole}): ${isMatch}`);
         
         if (!isMatch) {
@@ -850,11 +1074,17 @@ app.post('/api/auth/login', async (req, res) => {
             await user.save().catch(() => {});
         }
 
-        // Generate Token (90 days expiry for persistent seamless mobile login)
+        const isMustChange = user.mustChangePassword !== false;
+        const currentVersion = user.tokenVersion || 0;
+
+        // Generate Token with explicit scope and tokenVersion
         const token = jwt.sign(
-            { user: { id: user.id, role: matchedRole } },
-            process.env.JWT_SECRET || 'SISTecChalo_secret_key_777',
-            { expiresIn: '90d' }
+            {
+                user: { id: user.id, role: matchedRole, tokenVersion: currentVersion },
+                scope: isMustChange ? 'password_change' : 'normal'
+            },
+            getJwtSecret(),
+            { expiresIn: isMustChange ? '15m' : '90d' }
         );
 
         const userResponse = {
@@ -864,7 +1094,7 @@ app.post('/api/auth/login', async (req, res) => {
             role: matchedRole,
             email: user.email,
             status: user.status || 'Active',
-            mustChangePassword: user.mustChangePassword !== false // Default true for first time login
+            mustChangePassword: isMustChange
         };
 
         if (matchedRole === 'user') {
@@ -880,7 +1110,7 @@ app.post('/api/auth/login', async (req, res) => {
         res.json({ 
             token, 
             user: userResponse,
-            mustChangePassword: userResponse.mustChangePassword 
+            mustChangePassword: isMustChange 
         });
         console.timeEnd('LoginRequest');
 
@@ -891,114 +1121,103 @@ app.post('/api/auth/login', async (req, res) => {
     }
 });
 
+function buildForgotPasswordResponse() {
+    return {
+        success: true,
+        message: 'If an account matches the provided details and has a registered email, recovery instructions have been sent.'
+    };
+}
+
 /**
- * @api {post} /api/auth/forgot-password Send Temporary Password to Registered Email
+ * @api {post} /api/auth/forgot-password Secure Password Recovery (Token-based)
  */
-app.post('/api/auth/forgot-password', async (req, res) => {
+app.post('/api/auth/forgot-password', recoveryLimiter, async (req, res) => {
     const rawIdentifier = (req.body.identifier || req.body.email || req.body.username || '').toString().trim();
     const providedEmail = (req.body.email || '').toString().trim();
+
+    const genericResponse = buildForgotPasswordResponse();
 
     if (!rawIdentifier && !providedEmail) {
         return res.status(400).json({ error: 'Please provide your registered Email or Enrollment Number.' });
     }
-
-    console.log(`🔑 [Auth] Forgot password requested for: "${rawIdentifier || providedEmail}"`);
 
     try {
         const query = rawIdentifier.includes('@') 
             ? { email: { $regex: new RegExp(`^${rawIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } }
             : { username: { $regex: new RegExp(`^${rawIdentifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } };
 
-        // Search collections in priority order: Student, User, Driver, Manager, Admin
-        let user = await Student.findOne(query);
-        let role = 'user';
+        let matchedAccount = null;
+        let MatchedModel = null;
+        let matchedRole = 'user';
 
-        if (!user) {
-            user = await User.findOne(query);
-            if (user) role = 'user';
-        }
-        if (!user) {
-            user = await Driver.findOne(query);
-            if (user) role = 'driver';
-        }
-        if (!user) {
-            user = await Manager.findOne(query);
-            if (user) role = 'manager';
-        }
-        if (!user) {
-            user = await Admin.findOne(query);
-            if (user) role = 'admin';
-        }
+        const collections = [
+            { role: 'user', model: User },
+            { role: 'driver', model: Driver },
+            { role: 'manager', model: Manager },
+            { role: 'admin', model: Admin }
+        ];
 
-        // Fallback: If queried by username but user provided email in separate field
-        if (!user && providedEmail && providedEmail.includes('@')) {
-            const emailQuery = { email: { $regex: new RegExp(`^${providedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } };
-            user = await Student.findOne(emailQuery) || await User.findOne(emailQuery) || await Driver.findOne(emailQuery) || await Manager.findOne(emailQuery) || await Admin.findOne(emailQuery);
-            if (user) {
-                if (user.constructor.modelName === 'Driver') role = 'driver';
-                else if (user.constructor.modelName === 'Manager') role = 'manager';
-                else if (user.constructor.modelName === 'Admin') role = 'admin';
-                else role = 'user';
+        for (const item of collections) {
+            const acc = await item.model.findOne(query);
+            if (acc) {
+                matchedAccount = acc;
+                MatchedModel = item.model;
+                matchedRole = item.role;
+                break;
             }
         }
 
-        if (!user) {
-            return res.status(404).json({ error: 'No account found matching the provided details.' });
+        if (!matchedAccount && providedEmail && providedEmail.includes('@')) {
+            const emailQuery = { email: { $regex: new RegExp(`^${providedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') } };
+            for (const item of collections) {
+                const acc = await item.model.findOne(emailQuery);
+                if (acc) {
+                    matchedAccount = acc;
+                    MatchedModel = item.model;
+                    matchedRole = item.role;
+                    break;
+                }
+            }
         }
 
-        // Determine destination email
-        let destinationEmail = (user.email && user.email.includes('@')) ? user.email.trim() : null;
-        if (!destinationEmail && providedEmail && providedEmail.includes('@')) {
-            destinationEmail = providedEmail.trim();
-            user.email = destinationEmail;
+        // Constant-time mitigation: if user not found, suspended, or has no registered email, simulate hash work and return generic success
+        if (!matchedAccount || (matchedAccount.status && matchedAccount.status === 'Suspended') || !matchedAccount.email) {
+            await argon2.verify(DUMMY_HASH, rawIdentifier.slice(0, 128)).catch(() => {});
+            return res.json(genericResponse);
         }
 
-        if (!destinationEmail) {
-            return res.status(400).json({ 
-                error: 'No email address registered for this account. Please contact the SISTec Transport Desk.',
-                needsEmailSetup: true,
-                username: user.username
-            });
-        }
+        const rawToken = crypto.randomBytes(32).toString('hex');
+        const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
 
-        // Generate clean, secure temporary password (e.g. SGI#8429)
-        const randNum = Math.floor(1000 + Math.random() * 9000);
-        const tempPassword = `SGI#${randNum}`;
+        // 6-digit numeric recovery code for mobile app direct entry
+        const recoveryCode = Math.floor(100000 + Math.random() * 900000).toString();
+        const hashedCode = crypto.createHash('sha256').update(recoveryCode).digest('hex');
 
-        // Hash temporary password with Argon2id and set mustChangePassword = true
-        user.password = await secureHashPassword(tempPassword);
-        user.mustChangePassword = true;
-        await user.save();
+        matchedAccount.resetPasswordToken = hashedToken;
+        matchedAccount.resetPasswordCode = hashedCode;
+        matchedAccount.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+        await matchedAccount.save();
 
-        console.log(`✅ [Auth] Temporary password generated for ${user.username} (${role}): ${tempPassword}`);
-
-        // Dispatch Email
-        const emailResult = await sendPasswordResetEmail(
-            destinationEmail,
-            user.name || user.username,
-            user.username,
-            tempPassword,
-            role
-        );
-
-        // Mask email for user privacy (e.g., d***e@gmail.com)
-        const parts = destinationEmail.split('@');
-        const namePart = parts[0];
-        const maskedName = namePart.length > 2 
-            ? `${namePart[0]}***${namePart[namePart.length - 1]}`
-            : `${namePart[0]}***`;
-        const maskedEmail = `${maskedName}@${parts[1]}`;
-
-        return res.json({
-            success: true,
-            message: `A temporary password has been sent to ${maskedEmail}.`,
-            username: user.username,
-            email: maskedEmail,
-            role: role,
-            // Include tempPassword in debug fallback if real email delivery failed or preview exists
-            tempPassword: emailResult.previewUrl ? tempPassword : (process.env.NODE_ENV !== 'production' ? tempPassword : undefined),
-            previewUrl: emailResult.previewUrl
+        // Dispatch Email with recovery code (and token link) asynchronously without blocking the user password
+        sendPasswordResetEmail(
+            matchedAccount.email,
+            matchedAccount.name || matchedAccount.username,
+            matchedAccount.username,
+            recoveryCode,
+            matchedRole
+        ).catch(async (emailErr) => {
+            console.error('❌ [Auth] Password reset email dispatch failed:', emailErr.message);
+            // Roll back tokens in database so no un-emailed token lingers
+            await MatchedModel.updateOne(
+                { _id: matchedAccount._id, resetPasswordToken: hashedToken },
+                { $unset: { resetPasswordToken: 1, resetPasswordCode: 1, resetPasswordExpires: 1 } }
+            ).catch(() => {});
         });
+
+        // Constant-time hash verification to align execution latency with unknown user branch
+        await argon2.verify(DUMMY_HASH, rawIdentifier.slice(0, 128)).catch(() => {});
+
+        return res.json(genericResponse);
 
     } catch (err) {
         console.error('❌ Forgot password error:', err);
@@ -1007,114 +1226,172 @@ app.post('/api/auth/forgot-password', async (req, res) => {
 });
 
 /**
- * @api {post} /api/auth/force-change-password Mandatory First-Time Password Reset
+ * @api {post} /api/auth/reset-password Reset Password Using Verification Token or Code
  */
-app.post('/api/auth/force-change-password', async (req, res) => {
-    const { username, currentPassword, oldPassword, newPassword } = req.body;
-    const pwdToCheck = currentPassword || oldPassword;
+app.post('/api/auth/reset-password', recoveryLimiter, async (req, res) => {
+    const rawToken = (req.body.token || req.body.code || '').toString().trim();
+    const newPassword = req.body.newPassword;
 
-    console.log(`🔐 [Auth] Force-change-password request for: "${username || 'token user'}"`);
-
-    if (!newPassword || newPassword.length < 6) {
-        return res.status(400).json({ error: 'New password must be at least 6 characters long.' });
+    if (!rawToken) {
+        return res.status(400).json({ error: 'Reset token or recovery code is required.' });
+    }
+    if (!newPassword || newPassword.length < 6 || newPassword.length > 128) {
+        return res.status(400).json({ error: 'New password must be between 6 and 128 characters long.' });
     }
 
     try {
-        let user = null;
-        let matchedModel = null;
+        const hashedInput = crypto.createHash('sha256').update(rawToken).digest('hex');
+        let matchedAccount = null;
+        let MatchedModel = null;
         let matchedRole = null;
 
-        // 1. Try finding by JWT token if available
-        const authHeader = req.headers.authorization;
-        if (authHeader && authHeader.startsWith('Bearer ')) {
-            try {
-                const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET || 'SISTecChalo_secret_key_777');
-                const userId = decoded.user?.id || decoded.id;
-                const role = decoded.user?.role || decoded.role;
-                const models = { user: User, driver: Driver, manager: Manager, admin: Admin };
-                if (models[role]) {
-                    user = await models[role].findById(userId);
-                    matchedModel = models[role];
-                    matchedRole = role;
-                }
-            } catch (_) {}
-        }
-
-        // 2. If not found by token, look up by username
-        if (!user && username) {
-            const collections = [
-                { role: 'user', model: User },
-                { role: 'driver', model: Driver },
-                { role: 'manager', model: Manager },
-                { role: 'admin', model: Admin }
-            ];
-            for (const item of collections) {
-                const found = await item.model.findOne({ username: { $regex: new RegExp(`^${username.trim()}$`, 'i') } });
-                if (found) {
-                    user = found;
-                    matchedModel = item.model;
-                    matchedRole = item.role;
-                    break;
-                }
+        for (const item of [
+            { role: 'user', model: User },
+            { role: 'driver', model: Driver },
+            { role: 'manager', model: Manager },
+            { role: 'admin', model: Admin }
+        ]) {
+            const acc = await item.model.findOne({
+                $or: [
+                    { resetPasswordToken: hashedInput },
+                    { resetPasswordCode: hashedInput }
+                ],
+                resetPasswordExpires: { $gt: new Date() }
+            });
+            if (acc) {
+                matchedAccount = acc;
+                MatchedModel = item.model;
+                matchedRole = item.role;
+                break;
             }
         }
 
-        if (!user) {
+        if (!matchedAccount) {
+            await argon2.verify(DUMMY_HASH, newPassword.slice(0, 128)).catch(() => {});
+            return res.status(400).json({ error: 'Invalid or expired recovery token or code.' });
+        }
+
+        if (matchedAccount.status && matchedAccount.status === 'Suspended') {
+            return res.status(403).json({ error: 'Account has been suspended. Please contact the administrator.' });
+        }
+
+        const isSame = await argon2.verify(matchedAccount.password, newPassword);
+        if (isSame) {
+            return res.status(400).json({ error: 'New password cannot be identical to your current password.' });
+        }
+
+        const hashedPassword = await secureHashPassword(newPassword);
+
+        // Strictly atomic conditional update: only one concurrent consumer can match and consume the unexpired token
+        const updateResult = await MatchedModel.updateOne(
+            {
+                _id: matchedAccount._id,
+                $or: [
+                    { resetPasswordToken: hashedInput },
+                    { resetPasswordCode: hashedInput }
+                ],
+                resetPasswordExpires: { $gt: new Date() }
+            },
+            {
+                $set: { password: hashedPassword, mustChangePassword: false },
+                $inc: { tokenVersion: 1 },
+                $unset: { resetPasswordToken: 1, resetPasswordCode: 1, resetPasswordExpires: 1 }
+            }
+        );
+
+        if (!updateResult || updateResult.modifiedCount === 0) {
+            return res.status(400).json({ error: 'Reset token or code was already consumed or expired.' });
+        }
+
+        res.json({
+            success: true,
+            message: 'Password has been reset successfully. Please sign in with your new password.'
+        });
+    } catch (err) {
+        console.error('❌ Reset password error:', err);
+        res.status(500).json({ error: 'Failed to reset password. Please try again.' });
+    }
+});
+
+/**
+ * @api {post} /api/auth/force-change-password Mandatory First-Time Password Reset (Authenticated)
+ */
+app.post('/api/auth/force-change-password', passwordChangeAuth, async (req, res) => {
+    const { currentPassword, oldPassword, newPassword } = req.body;
+    const pwdToCheck = (currentPassword || oldPassword || '').trim();
+
+    console.log(`🔐 [Auth] Force-change-password request for user ID: "${req.user?.id}" (role: ${req.user?.role})`);
+
+    if (!pwdToCheck) {
+        return res.status(400).json({ error: 'Current password is required.' });
+    }
+    if (!newPassword || newPassword.length < 6 || newPassword.length > 128) {
+        return res.status(400).json({ error: 'New password must be between 6 and 128 characters long.' });
+    }
+
+    try {
+        let MatchedModel;
+        switch (req.user.role) {
+            case 'user': MatchedModel = User; break;
+            case 'driver': MatchedModel = Driver; break;
+            case 'manager': MatchedModel = Manager; break;
+            case 'admin': MatchedModel = Admin; break;
+            default: return res.status(400).json({ error: 'Invalid account role.' });
+        }
+
+        const account = await MatchedModel.findById(req.user.id);
+        if (!account) {
             return res.status(404).json({ error: 'Account not found.' });
         }
 
-        // 3. Verify current password if provided
-        if (pwdToCheck) {
-            const isMatch = await argon2.verify(user.password, pwdToCheck);
-            if (!isMatch) {
-                return res.status(400).json({ error: 'Current temporary password is incorrect.' });
-            }
+        const isMatch = await argon2.verify(account.password, pwdToCheck);
+        if (!isMatch) {
+            return res.status(400).json({ error: 'Current temporary password is incorrect.' });
         }
 
-        // 4. Ensure new password is not identical to old password
-        const isSame = await argon2.verify(user.password, newPassword);
+        const isSame = await argon2.verify(account.password, newPassword);
         if (isSame) {
-            return res.status(400).json({ error: 'New password cannot be identical to your temporary password.' });
+            return res.status(400).json({ error: 'New password cannot be identical to your current password.' });
         }
 
-        // 5. Hash new password with Argon2id and update user
         const hashedPassword = await secureHashPassword(newPassword);
-        user.password = hashedPassword;
-        user.mustChangePassword = false;
-        await user.save();
+        account.password = hashedPassword;
+        account.mustChangePassword = false;
+        account.tokenVersion = (account.tokenVersion || 0) + 1;
+        await account.save();
 
-        console.log(`✅ [Auth] Password successfully updated for user "${user.username}" (${matchedRole}). mustChangePassword=false`);
+        console.log(`✅ [Auth] Password successfully updated for user "${account.username}" (${req.user.role}). mustChangePassword=false`);
 
-        // 6. Generate fresh token (90 days expiry)
-        const token = jwt.sign(
-            { user: { id: user.id, role: matchedRole } },
-            process.env.JWT_SECRET || 'SISTecChalo_secret_key_777',
+        const freshToken = jwt.sign(
+            { user: { id: account.id, role: req.user.role, tokenVersion: account.tokenVersion }, scope: 'normal' },
+            getJwtSecret(),
             { expiresIn: '90d' }
         );
 
         const updatedUserResponse = {
-            id: user.id,
-            username: user.username,
-            name: user.name || user.username,
-            role: matchedRole,
-            email: user.email,
-            status: user.status || 'Active',
+            id: account.id,
+            username: account.username,
+            name: account.name || account.username,
+            role: req.user.role,
+            email: account.email,
+            status: account.status || 'Active',
             mustChangePassword: false
         };
 
-        if (matchedRole === 'user') {
-            updatedUserResponse.routeId = user.routeId;
-            updatedUserResponse.pickupPoint = user.pickupPoint;
-            updatedUserResponse.localAddress = user.localAddress;
-            updatedUserResponse.isCommuteConfigured = user.isCommuteConfigured || (!!user.routeId && !!user.pickupPoint);
-            updatedUserResponse.userId = user.userId;
-            updatedUserResponse.proximityAlertsEnabled = user.proximityAlertsEnabled ?? true;
-            updatedUserResponse.proximityRadiusKm = user.proximityRadiusKm ?? 1.0;
+        if (req.user.role === 'user') {
+            updatedUserResponse.routeId = account.routeId;
+            updatedUserResponse.pickupPoint = account.pickupPoint;
+            updatedUserResponse.localAddress = account.localAddress;
+            updatedUserResponse.isCommuteConfigured = account.isCommuteConfigured || (!!account.routeId && !!account.pickupPoint);
+            updatedUserResponse.userId = account.userId;
+            updatedUserResponse.proximityAlertsEnabled = account.proximityAlertsEnabled ?? true;
+            updatedUserResponse.proximityRadiusKm = account.proximityRadiusKm ?? 1.0;
         }
 
         res.json({
+            success: true,
             message: 'Password successfully updated! Welcome to SISTecChalo.',
-            token,
+            token: freshToken,
             user: updatedUserResponse,
             mustChangePassword: false
         });
@@ -1310,7 +1587,7 @@ app.get('/api/routes/:id/stops/feedback-summary', authMiddleware, async (req, re
 });
 
 // Manager: Get all stop feedback reports across the entire system
-app.get('/api/manager/stop-feedback', authMiddleware, async (req, res) => {
+app.get('/api/manager/stop-feedback', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const feedbacks = await StopFeedback.find()
             .populate('routeId', 'name color stops')
@@ -1324,7 +1601,7 @@ app.get('/api/manager/stop-feedback', authMiddleware, async (req, res) => {
 });
 
 // Manager: 1-Click Apply a suggested stop location to the route
-app.post('/api/manager/stop-feedback/:id/apply', authMiddleware, async (req, res) => {
+app.post('/api/manager/stop-feedback/:id/apply', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const feedback = await StopFeedback.findById(req.params.id);
         if (!feedback) return res.status(404).json({ error: 'Feedback report not found' });
@@ -1372,7 +1649,7 @@ app.post('/api/manager/stop-feedback/:id/apply', authMiddleware, async (req, res
 });
 
 // Manager: Reject a feedback report
-app.post('/api/manager/stop-feedback/:id/reject', authMiddleware, async (req, res) => {
+app.post('/api/manager/stop-feedback/:id/reject', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const feedback = await StopFeedback.findByIdAndUpdate(
             req.params.id,
@@ -1390,7 +1667,10 @@ app.post('/api/manager/stop-feedback/:id/reject', authMiddleware, async (req, re
 // --- User Management Routes (For Admin/Manager) ---
 
 // --- ADMIN Management ---
-app.post('/api/admins', async (req, res) => {
+// --- User Management Routes (Strict RBAC Protected) ---
+
+// --- ADMIN Management ---
+app.post('/api/admins', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const { username, password, email } = req.body;
 
@@ -1411,7 +1691,7 @@ app.post('/api/admins', async (req, res) => {
 });
 
 // --- MANAGER Management ---
-app.post('/api/managers', authMiddleware, async (req, res) => {
+app.post('/api/managers', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const { username, password, email } = req.body;
 
@@ -1431,9 +1711,9 @@ app.post('/api/managers', authMiddleware, async (req, res) => {
     }
 });
 
-app.get('/api/managers', async (req, res) => {
+app.get('/api/managers', authMiddleware, adminMiddleware, async (req, res) => {
     try {
-        const managers = await Manager.find();
+        const managers = await Manager.find().select('-password');
         res.json(managers);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch managers' });
@@ -1441,7 +1721,7 @@ app.get('/api/managers', async (req, res) => {
 });
 
 // --- USER Management (Standard Users) ---
-app.post('/api/users', async (req, res) => {
+app.post('/api/users', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { username, password, email } = req.body;
 
@@ -1462,9 +1742,9 @@ app.post('/api/users', async (req, res) => {
     }
 });
 
-app.get('/api/users', async (req, res) => {
+app.get('/api/users', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        const users = await User.find().lean();
+        const users = await User.find().select('-password').lean();
         const [submissions, students] = await Promise.all([
             RegistrationSubmission.find().lean(),
             Student.find().lean()
@@ -1539,7 +1819,7 @@ app.post('/api/users/fcm-token', authMiddleware, async (req, res) => {
 });
 
 // Grant Rights/Update User
-app.put('/api/users/:id/rights', async (req, res) => {
+app.put('/api/users/:id/rights', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         const { accessRights, status } = req.body;
         const updateData = {};
@@ -1553,11 +1833,8 @@ app.put('/api/users/:id/rights', async (req, res) => {
     }
 });
 
-// --- EXISTING DRIVER ROUTES (Enhanced for Auth) ---
-// (Keeping existing GET /api/drivers)
-
-// Student Management (Existing)
-app.get('/api/students', async (req, res) => {
+// Student Management (Admin/Manager Protected)
+app.get('/api/students', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const students = await Student.find();
         res.json(students);
@@ -1566,7 +1843,7 @@ app.get('/api/students', async (req, res) => {
     }
 });
 
-app.post('/api/students', async (req, res) => {
+app.post('/api/students', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const newStudent = new Student(req.body);
         await newStudent.save();
@@ -1576,7 +1853,7 @@ app.post('/api/students', async (req, res) => {
     }
 });
 
-app.delete('/api/students/:id', async (req, res) => {
+app.delete('/api/students/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         await Student.findByIdAndDelete(req.params.id);
         res.json({ message: 'Student deleted' });
@@ -1619,7 +1896,7 @@ app.get('/api/buses', async (req, res) => {
     }
 });
 
-app.put('/api/buses/:id/status', async (req, res) => {
+app.put('/api/buses/:id/status', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { status, routeId, routeName, routeColor } = req.body;
         const updateData = { status };
@@ -1640,30 +1917,79 @@ app.put('/api/buses/:id/status', async (req, res) => {
     }
 });
 
+function normalizeNotificationPayload(body = {}) {
+    const validAudiences = ['All', 'Users', 'Students', 'Drivers', 'Admins'];
+    const rawAudience = typeof body.targetAudience === 'string' ? body.targetAudience.trim() : '';
+    const targetAudience = validAudiences.includes(rawAudience) ? rawAudience : 'All';
+
+    const validPriorities = ['low', 'normal', 'high', 'urgent'];
+    const rawPriority = typeof body.priority === 'string' ? body.priority.trim().toLowerCase() : '';
+    const type = (typeof body.type === 'string' && body.type.trim().length > 0) ? body.type.trim() : 'info';
+    const defaultPriority = (type === 'emergency' || type === 'critical') ? 'urgent' : 'normal';
+    const priority = validPriorities.includes(rawPriority) ? rawPriority : defaultPriority;
+    const title = (typeof body.title === 'string' && body.title.trim().length > 0) ? body.title.trim() : '';
+    const message = typeof body.message === 'string' ? body.message.trim() : '';
+
+    return {
+        title,
+        message,
+        type,
+        priority,
+        targetAudience
+    };
+}
+
+function emitBroadcastNotification(ioInstance, notificationDoc) {
+    if (!ioInstance) return;
+    const plain = (notificationDoc && typeof notificationDoc.toObject === 'function')
+        ? notificationDoc.toObject()
+        : { ...(notificationDoc || {}) };
+    const normalizedType = typeof plain.type === 'string' ? plain.type.trim().toLowerCase() : '';
+    const normalizedAudience = typeof plain.targetAudience === 'string' ? plain.targetAudience.trim().toLowerCase() : '';
+    const isAdminsOnly = ['admins', 'admin', 'managers', 'manager'].includes(normalizedAudience) || normalizedType === 'emergency';
+    const alertPayload = {
+        id: plain._id ? plain._id.toString() : plain.id,
+        title: plain.title || '',
+        message: plain.message || '',
+        type: plain.type || 'info',
+        priority: plain.priority || 'normal',
+        targetAudience: plain.targetAudience || 'All',
+        timestamp: plain.createdAt ? new Date(plain.createdAt).toISOString() : new Date().toISOString()
+    };
+
+    if (isAdminsOnly) {
+        if (typeof ioInstance.to === 'function') {
+            ioInstance.to('managers').emit('notification', plain);
+            ioInstance.to('managers').emit('systemAlert', alertPayload);
+        }
+    } else if (typeof ioInstance.emit === 'function') {
+        ioInstance.emit('notification', plain);
+        ioInstance.emit('systemAlert', alertPayload);
+    }
+}
+
 // Manager: Broadcast Notification
-app.post('/api/manager/notifications', async (req, res) => {
+app.post('/api/manager/notifications', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        const { message, type, targetAudience } = req.body;
-        const validAudience = ['All', 'Users', 'Drivers', 'Admins'].includes(targetAudience) ? targetAudience : 'All';
-        
+        const normalized = normalizeNotificationPayload(req.body);
+        if (!normalized.message) {
+            return res.status(400).json({ error: 'Notification message is required' });
+        }
+
         // Save to Database
         const newNotification = new Notification({
-            message,
-            type: type || 'info',
-            targetAudience: validAudience,
+            title: normalized.title,
+            message: normalized.message,
+            type: normalized.type,
+            priority: normalized.priority,
+            targetAudience: normalized.targetAudience,
             createdBy: 'Manager'
         });
         await newNotification.save();
 
         // Emit both notification (for history) and systemAlert (for live pop-ups)
-        io.emit('notification', newNotification);
-        io.emit('systemAlert', { 
-            message, 
-            type: type || 'info', 
-            targetAudience: validAudience,
-            timestamp: new Date().toISOString() 
-        });
-        console.log(`📢 [Manager Broadcast to ${validAudience}] "${message}"`);
+        emitBroadcastNotification(io, newNotification);
+        console.log(`📢 [Manager Broadcast to ${normalized.targetAudience}] "${normalized.message}"`);
         res.json({ success: true, notification: newNotification });
     } catch (err) {
         console.error('❌ Error broadcasting notification:', err);
@@ -1672,7 +1998,7 @@ app.post('/api/manager/notifications', async (req, res) => {
 });
 
 // Manager: Delete Notification
-app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], async (req, res) => {
+app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const deletedNotif = await Notification.findByIdAndDelete(id);
@@ -1687,7 +2013,7 @@ app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], async (
 
 // ─── MANAGER: 2-TRIP DAY-WISE BUS OPERATIONAL REPORT (JSON & CSV/Excel) ────────────
 // GET /api/manager/reports/bus-trip-report?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1&format=json|csv
-app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
+app.get('/api/manager/reports/bus-trip-report', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { date, shift, busId, days, format } = req.query;
         const targetDate = date || new Date().toISOString().split('T')[0];
@@ -1743,7 +2069,28 @@ app.get('/api/manager/reports/bus-trip-report', async (req, res) => {
 
 // ─── MANAGER: DIRECT MICROSOFT EXCEL (.XLSX) DOWNLOAD ───────────────────────
 // GET /api/manager/reports/bus-trip-report/excel?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1
-app.get('/api/manager/reports/bus-trip-report/excel', async (req, res) => {
+const reportAuthMiddleware = async (req, res, next) => {
+    const authHeader = req.header('Authorization');
+    if (!authHeader) {
+        return res.status(401).json({ error: 'Authorization header required to access executive reports' });
+    }
+    try {
+        const tokenString = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : authHeader;
+        const decoded = jwt.verify(tokenString, getJwtSecret());
+        if (decoded.scope === 'password_change') {
+            return res.status(403).json({ error: 'Restricted password-change token cannot access executive reports' });
+        }
+        if (decoded.user?.role !== 'manager' && decoded.user?.role !== 'admin') {
+            return res.status(403).json({ error: 'Manager or Administrator privileges required' });
+        }
+        req.user = decoded.user;
+        next();
+    } catch (_) {
+        return res.status(401).json({ error: 'Invalid or expired report authorization' });
+    }
+};
+
+app.get('/api/manager/reports/bus-trip-report/excel', reportAuthMiddleware, async (req, res) => {
     try {
         const { date, shift, busId, days } = req.query;
         const targetDate = date || new Date().toISOString().split('T')[0];
@@ -1767,20 +2114,47 @@ app.get('/api/manager/reports/bus-trip-report/excel', async (req, res) => {
     }
 });
 
+function formatReportDistance(distanceVal) {
+    if (distanceVal === undefined || distanceVal === null || String(distanceVal).trim() === '') {
+        return 'N/A';
+    }
+    const raw = String(distanceVal).trim();
+    if (raw.toUpperCase() === 'N/A' || raw.toLowerCase().includes('km')) {
+        return raw;
+    }
+    return `${raw} km`;
+}
+
 // ─── MANAGER: PRINTABLE 2-TRIP DAY-WISE HTML & PDF EXECUTIVE REPORT ─────────
 // GET /api/manager/reports/bus-trip-report/html?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1
-app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
-    try {
-        const { date, shift, busId, days } = req.query;
-        const targetDate = date || new Date().toISOString().split('T')[0];
-        const targetShift = shift || 'all';
-
-        const reportData = await generateTripReportData({
-            targetDate,
-            shift: targetShift,
-            busId: busId || null,
-            days: days ? parseInt(days, 10) : 1
-        });
+function renderTripReportHtml(reportData) {
+        const allTripsList = Array.isArray(reportData.allTrips)
+            ? reportData.allTrips
+            : [...(reportData.morningTrips || []), ...(reportData.eveningTrips || [])];
+        const safeEmbeddedTripsJson = JSON.stringify(allTripsList.map(t => ({
+            tripId: t.tripId || '',
+            date: t.date || reportData.date || '',
+            day: t.day || reportData.day || '',
+            shift: t.shift || '',
+            busNo: t.busNo || '',
+            vehicleNo: t.vehicleNo || '',
+            routeName: t.routeName || '',
+            driverName: t.driverName || '',
+            driverPhone: t.driverPhone || '',
+            originStop: t.originStop || '',
+            destinationStop: t.destinationStop || '',
+            departureTime: t.departureTime || '',
+            arrivalTime: t.arrivalTime || '',
+            duration: t.duration || '',
+            punctuality: t.punctuality || '',
+            delayMinutes: t.delayMinutes ?? 0,
+            stopsCompleted: t.stopsCompleted || '',
+            distanceKm: formatReportDistance(t.distanceKm),
+            status: t.status || '',
+            timeline: Array.isArray(t.stops)
+                ? t.stops.map(s => `${s.stopNumber}. ${s.name} (${s.scheduledTime}) [${s.actualTime} | ${s.variance}]`).join(' -> ')
+                : ''
+        }))).replace(/</g, '\\u003c');
 
         const html = `
 <!DOCTYPE html>
@@ -2343,6 +2717,9 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 </head>
 <body>
     <div class="container">
+        <div id="standaloneNotice" style="display:none; margin-bottom:20px; padding:12px 16px; border-radius:12px; background:rgba(79, 70, 229, 0.14); border:1px solid rgba(79, 70, 229, 0.4); color:#e2e8f0; font-size:13px; font-weight:600;">
+            ℹ️ <strong>Standalone Offline Report Mode:</strong> Instant search, shift tab switching, CSV export, and Print / Save PDF work offline. For live date switching, binary Excel (.xlsx) export, or Google Sheets cloud sync, use the <strong>Manager Analytics Hub</strong> inside the SISTec Chalo app.
+        </div>
         <!-- Header -->
         <div class="header">
             <div class="brand-section">
@@ -2356,15 +2733,15 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                 </div>
             </div>
             <div class="header-actions">
-                <button class="btn btn-sheets" onclick="syncSheets()">
+                <button class="btn btn-sheets" onclick="syncSheets(event)">
                     📊 Sync Google Sheets
                 </button>
-                <a href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}&format=xlsx" class="btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: rgba(16, 185, 129, 0.4); color: #fff;" download>
+                <a id="excelDownloadLink" href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}&format=xlsx" onclick="return handleServerLinkClick(event, 'Excel (.xlsx) export')" class="btn" style="background: linear-gradient(135deg, #10b981 0%, #059669 100%); border-color: rgba(16, 185, 129, 0.4); color: #fff;" download>
                     📗 Download Excel (.xlsx)
                 </a>
-                <a href="/api/manager/reports/bus-trip-report?date=${reportData.date}&shift=${reportData.shift}&format=csv" class="btn" download>
+                <button type="button" class="btn" onclick="downloadReportCsv()">
                     📥 Download CSV
-                </a>
+                </button>
                 <button class="btn btn-primary" onclick="window.print()">
                     🖨️ Print / Save PDF
                 </button>
@@ -2390,7 +2767,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             </div>
             <div class="kpi-card cyan">
                 <div class="kpi-label">Fleet Commute Mileage</div>
-                <div class="kpi-val">${reportData.totalDistance} km</div>
+                <div class="kpi-val">${formatReportDistance(reportData.totalDistance)}</div>
                 <div class="kpi-sub">Total road network distance</div>
             </div>
             <div class="kpi-card">
@@ -2411,9 +2788,9 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 
             <div class="filter-group">
                 <div class="shift-tabs">
-                    <button class="shift-tab ${reportData.shift === 'all' ? 'active' : ''}" onclick="changeShift('all')">All Trips (${reportData.totalTrips})</button>
-                    <button class="shift-tab ${reportData.shift === 'morning' ? 'active' : ''}" onclick="changeShift('morning')">🌅 Morning (${reportData.morningTrips.length})</button>
-                    <button class="shift-tab ${reportData.shift === 'evening' ? 'active' : ''}" onclick="changeShift('evening')">🌆 Afternoon (${reportData.eveningTrips.length})</button>
+                    <button class="shift-tab ${reportData.shift === 'all' ? 'active' : ''}" data-shift-btn="all" onclick="changeShift('all')">All Trips (${reportData.totalTrips})</button>
+                    <button class="shift-tab ${reportData.shift === 'morning' ? 'active' : ''}" data-shift-btn="morning" onclick="changeShift('morning')">🌅 Morning (${reportData.morningTrips.length})</button>
+                    <button class="shift-tab ${reportData.shift === 'evening' ? 'active' : ''}" data-shift-btn="evening" onclick="changeShift('evening')">🌆 Afternoon (${reportData.eveningTrips.length})</button>
                 </div>
                 <input type="text" id="busSearch" class="search-input" placeholder="🔍 Search Bus, Route, Driver..." onkeyup="filterTrips(this.value)">
             </div>
@@ -2421,6 +2798,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 
         <!-- TRIP 1: MORNING PICKUP -->
         ${reportData.shift === 'all' || reportData.shift === 'morning' ? `
+        <div id="morningShiftSection" data-shift-section="morning">
         <div class="section-header">
             <div class="section-title">
                 🌅 Trip 1: Morning Pickup Shift (City Origins ➔ SISTec Ratibad Campus)
@@ -2468,7 +2846,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                         </div>
                         <div class="metric-item">
                             <span class="metric-title">Trip Duration & Mileage</span>
-                            <span class="metric-data">${t.duration} • ${t.distanceKm} km</span>
+                            <span class="metric-data">${t.duration} • ${formatReportDistance(t.distanceKm)}</span>
                         </div>
                         <div class="metric-item">
                             <span class="metric-title">Stops Serviced</span>
@@ -2499,10 +2877,12 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             </div>
             `).join('')}
         </div>
+        </div>
         ` : ''}
 
         <!-- TRIP 2: AFTERNOON DROP-OFF -->
         ${reportData.shift === 'all' || reportData.shift === 'evening' ? `
+        <div id="eveningShiftSection" data-shift-section="evening">
         <div class="section-header">
             <div class="section-title">
                 🌆 Trip 2: Afternoon/Evening Drop-off Shift (SISTec Ratibad Campus ➔ City Terminus)
@@ -2550,7 +2930,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
                         </div>
                         <div class="metric-item">
                             <span class="metric-title">Trip Duration & Mileage</span>
-                            <span class="metric-data">${t.duration} • ${t.distanceKm} km</span>
+                            <span class="metric-data">${t.duration} • ${formatReportDistance(t.distanceKm)}</span>
                         </div>
                         <div class="metric-item">
                             <span class="metric-title">Stops Serviced</span>
@@ -2581,6 +2961,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             </div>
             `).join('')}
         </div>
+        </div>
         ` : ''}
 
         <!-- Institutional Footer -->
@@ -2590,13 +2971,87 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
     </div>
 
     <script>
+        const REPORT_DATE = "${reportData.date}";
+        const REPORT_SHIFT = "${reportData.shift}";
+        const REPORT_TOTAL_BUSES = ${Number(reportData.totalBuses) || 0};
+        const REPORT_PUNCTUALITY = ${Number(reportData.punctualityRate) || 0};
+        const REPORT_TRIPS = ${safeEmbeddedTripsJson};
+
+        function isStandaloneFileMode() {
+            return window.location.protocol === 'file:';
+        }
+
+        function handleServerLinkClick(evt, featureLabel) {
+            if (isStandaloneFileMode()) {
+                if (evt && typeof evt.preventDefault === 'function') evt.preventDefault();
+                alert('ℹ️ ' + featureLabel + ' requires a live authenticated session in the SISTec Chalo Manager Analytics Hub. You can use "Download CSV" or "Print / Save PDF" directly from this offline report.');
+                return false;
+            }
+            return true;
+        }
+
+        function downloadReportCsv() {
+            const esc = (val) => '"' + String(val ?? '').replace(/"/g, '""') + '"';
+            let csv = '# SISTec Ratibad - Official Campus Shuttle Operational Trip Log\\n';
+            csv += '# Generated Date: ' + REPORT_DATE + ' | Shift: ' + REPORT_SHIFT + ' | Total Buses: ' + REPORT_TOTAL_BUSES + ' | Punctuality: ' + REPORT_PUNCTUALITY + '%\\n\\n';
+            csv += 'Trip ID,Date,Day,Shift,Bus Name,License Plate,Route Name,Driver Name,Driver Phone,Origin Stop,Destination Stop,Departure Time,Arrival Time,Duration,Punctuality,Delay (mins),Stops Completed,Total Dist (km),Status,Stop Timeline (Stop: Scheduled [Actual | Variance])\\n';
+            REPORT_TRIPS.forEach(t => {
+                csv += [
+                    esc(t.tripId), esc(t.date), esc(t.day), esc(t.shift),
+                    esc(t.busNo), esc(t.vehicleNo), esc(t.routeName),
+                    esc(t.driverName), esc(t.driverPhone),
+                    esc(t.originStop), esc(t.destinationStop),
+                    esc(t.departureTime), esc(t.arrivalTime), esc(t.duration),
+                    esc(t.punctuality), Number(t.delayMinutes) || 0,
+                    esc(t.stopsCompleted), esc(t.distanceKm), esc(t.status),
+                    esc(t.timeline)
+                ].join(',') + '\\n';
+            });
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const safeDate = String(REPORT_DATE).replace(/[^0-9-]/g, '');
+            a.href = url;
+            a.download = 'sistec_fleet_report_' + safeDate + '_' + REPORT_SHIFT + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
         function changeDate(val) {
+            if (isStandaloneFileMode()) {
+                alert('ℹ️ Loading a different date requires the Manager Analytics Hub inside the SISTec Chalo app.');
+                const dateInput = document.getElementById('dateSelector');
+                if (dateInput) dateInput.value = REPORT_DATE;
+                return;
+            }
             const url = new URL(window.location);
             url.searchParams.set('date', val);
             window.location.href = url.toString();
         }
 
         function changeShift(shift) {
+            const morningEl = document.getElementById('morningShiftSection');
+            const eveningEl = document.getElementById('eveningShiftSection');
+            const canToggleClientSide = isStandaloneFileMode() || (morningEl && eveningEl);
+            if (canToggleClientSide) {
+                if (morningEl) {
+                    morningEl.style.display = (shift === 'all' || shift === 'morning') ? '' : 'none';
+                }
+                if (eveningEl) {
+                    eveningEl.style.display = (shift === 'all' || shift === 'evening') ? '' : 'none';
+                }
+                document.querySelectorAll('.shift-tab').forEach(btn => {
+                    const btnShift = btn.getAttribute('data-shift-btn');
+                    if (btnShift === shift) {
+                        btn.classList.add('active');
+                    } else {
+                        btn.classList.remove('active');
+                    }
+                });
+                return;
+            }
             const url = new URL(window.location);
             url.searchParams.set('shift', shift);
             window.location.href = url.toString();
@@ -2622,9 +3077,13 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
             });
         }
 
-        async function syncSheets() {
+        async function syncSheets(evt) {
+            if (isStandaloneFileMode()) {
+                handleServerLinkClick(evt, 'Google Sheets Cloud Sync');
+                return;
+            }
             const date = document.getElementById('dateSelector').value;
-            const btn = event.target;
+            const btn = (evt && evt.currentTarget) ? evt.currentTarget : event.target;
             const originalText = btn.innerHTML;
             btn.innerHTML = '⏳ Syncing...';
             btn.disabled = true;
@@ -2651,6 +3110,10 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
         }
 
         window.addEventListener('load', () => {
+            if (isStandaloneFileMode()) {
+                const banner = document.getElementById('standaloneNotice');
+                if (banner) banner.style.display = 'block';
+            }
             const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('autoprint') === 'true' || urlParams.get('download') === 'pdf') {
                 setTimeout(() => { window.print(); }, 400);
@@ -2660,7 +3123,23 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 </body>
 </html>
         `;
+        return html;
+}
 
+app.get('/api/manager/reports/bus-trip-report/html', reportAuthMiddleware, async (req, res) => {
+    try {
+        const { date, shift, busId, days } = req.query;
+        const targetDate = date || new Date().toISOString().split('T')[0];
+        const targetShift = shift || 'all';
+
+        const reportData = await generateTripReportData({
+            targetDate,
+            shift: targetShift,
+            busId: busId || null,
+            days: days ? parseInt(days, 10) : 1
+        });
+
+        const html = renderTripReportHtml(reportData);
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.status(200).send(html);
     } catch (err) {
@@ -2672,7 +3151,7 @@ app.get('/api/manager/reports/bus-trip-report/html', async (req, res) => {
 // ─── MANAGER: SYNC DAILY TRIP REPORT TO GOOGLE SHEETS ────────────────────────
 // POST /api/manager/reports/sync-google-sheets
 // Body: { date: 'YYYY-MM-DD' }
-app.post('/api/manager/reports/sync-google-sheets', async (req, res) => {
+app.post('/api/manager/reports/sync-google-sheets', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { date } = req.body;
         const targetDate = date || new Date().toISOString().split('T')[0];
@@ -2703,18 +3182,66 @@ app.post('/api/manager/reports/sync-google-sheets', async (req, res) => {
 });
 
 
-// Notifications: Get History
-app.get('/api/notifications', async (req, res) => {
+function isPrivilegedManagerOrAdmin(user) {
+    return Boolean(user && (user.role === 'manager' || user.role === 'admin'));
+}
+
+function buildNotificationFilterForUser(user) {
+    if (isPrivilegedManagerOrAdmin(user)) {
+        return {};
+    }
+    if (user && user.role === 'driver') {
+        return {
+            type: { $ne: 'emergency' },
+            targetAudience: { $nin: ['Admins', 'Students', 'Users'] }
+        };
+    }
+    return {
+        type: { $ne: 'emergency' },
+        targetAudience: { $nin: ['Admins', 'Drivers'] }
+    };
+}
+
+function filterNotificationsForUser(notifications, user) {
+    if (!Array.isArray(notifications)) return [];
+    if (isPrivilegedManagerOrAdmin(user)) {
+        return notifications;
+    }
+    const isDriver = Boolean(user && user.role === 'driver');
+    const PRIVILEGED_AUDIENCES = ['admins', 'admin', 'managers', 'manager'];
+    const STUDENT_AUDIENCES = ['students', 'student', 'users', 'user'];
+    const DRIVER_AUDIENCES = ['drivers', 'driver'];
+    return notifications.filter((n) => {
+        if (!n || typeof n !== 'object') return false;
+        // Legacy documents may carry free-form casing (e.g. 'Emergency') from older broadcast code
+        const type = typeof n.type === 'string' ? n.type.trim().toLowerCase() : '';
+        if (type === 'emergency') return false;
+        const rawAudience = n.targetAudience;
+        if (rawAudience !== undefined && rawAudience !== null && typeof rawAudience !== 'string') {
+            return false; // Malformed audience: fail closed for non-privileged users
+        }
+        // Missing/empty audience on legacy documents is treated as 'All'
+        const audience = typeof rawAudience === 'string' ? rawAudience.trim().toLowerCase() : '';
+        if (PRIVILEGED_AUDIENCES.includes(audience)) return false;
+        if (isDriver && STUDENT_AUDIENCES.includes(audience)) return false;
+        if (!isDriver && DRIVER_AUDIENCES.includes(audience)) return false;
+        return true;
+    });
+}
+
+// Notifications: Get History (Role-filtered: emergency SOS notifications restricted to Managers/Admins)
+app.get('/api/notifications', optionalAuth, async (req, res) => {
     try {
-        const notifications = await Notification.find().sort({ createdAt: -1 }).limit(50);
-        res.json(notifications);
+        const filter = buildNotificationFilterForUser(req.user);
+        const notifications = await Notification.find(filter).sort({ createdAt: -1 }).limit(50);
+        res.json(filterNotificationsForUser(notifications, req.user));
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch notifications' });
     }
 });
 
-// Alerts: Get History
-app.get('/api/alerts', async (req, res) => {
+// Alerts: Get History (Restricted to authenticated Managers and Admins)
+app.get('/api/alerts', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const alerts = await Alert.find().sort({ timestamp: -1 }).limit(50);
         res.json(alerts);
@@ -2729,44 +3256,108 @@ app.get('/api/alerts', async (req, res) => {
  */
 
 // Add a new Bus
-app.post('/api/manager/buses', authMiddleware, async (req, res) => {
+app.post('/api/manager/buses', authMiddleware, managerMiddleware, async (req, res) => {
     try {
+        const { busNumber, name, capacity, routeId, driverId } = req.body;
+        if (!busNumber && !name) {
+            return res.status(400).json({ error: 'Bus number or name is required' });
+        }
+        
+        // Prevent duplicate bus number/name
+        const checkNum = (busNumber || name).trim();
+        const existing = await Bus.findOne({
+            $or: [
+                { busNumber: { $regex: new RegExp(`^${checkNum}$`, 'i') } },
+                { name: { $regex: new RegExp(`^${checkNum}$`, 'i') } }
+            ]
+        });
+        if (existing) {
+            return res.status(409).json({ error: `A bus with number "${checkNum}" already exists.` });
+        }
+
         const bus = new Bus(req.body);
         await bus.save();
+
+        // If driver assigned on creation, sync driver's assignedBus
+        if (driverId && driverId.trim() !== '') {
+            const updatedDriver = await Driver.findByIdAndUpdate(driverId, { assignedBus: bus._id.toString() }, { new: true });
+            if (updatedDriver) io.emit('driverUpdated', updatedDriver);
+        }
+
         io.emit('busCreated', bus);
         io.emit('busUpdated', bus);
+        io.emit('busesUpdated');
         broadcastStats();
         res.status(201).json(bus);
-    } catch (_err) {
+    } catch (err) {
+        console.error('Create bus error:', err);
         res.status(500).json({ error: 'Failed to create bus' });
     }
 });
 
 // Update Bus
-app.put('/api/manager/buses/:id', authMiddleware, async (req, res) => {
+app.put('/api/manager/buses/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        const bus = await Bus.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        io.emit('busUpdated', bus);
-        res.json(bus);
-    } catch (_err) {
+        const busId = req.params.id;
+        const oldBus = await Bus.findById(busId);
+        if (!oldBus) {
+            return res.status(404).json({ error: 'Bus not found' });
+        }
+
+        const oldDriverId = oldBus.driverId;
+        const newDriverId = req.body.driverId;
+
+        // If driver assignment is changing
+        if (newDriverId !== undefined && oldDriverId !== newDriverId) {
+            if (oldDriverId) {
+                const unassignedDriver = await Driver.findByIdAndUpdate(oldDriverId, { assignedBus: '' }, { new: true });
+                if (unassignedDriver) io.emit('driverUpdated', unassignedDriver);
+            }
+            if (newDriverId && newDriverId.trim() !== '' && newDriverId.trim().toUpperCase() !== 'UNASSIGNED') {
+                const assignedDriver = await Driver.findByIdAndUpdate(newDriverId, { assignedBus: busId }, { new: true });
+                if (assignedDriver) io.emit('driverUpdated', assignedDriver);
+            }
+        }
+
+        const updatedBus = await Bus.findByIdAndUpdate(busId, req.body, { new: true });
+        io.emit('busUpdated', updatedBus);
+        io.emit('busesUpdated');
+        res.json(updatedBus);
+    } catch (err) {
+        console.error('Update bus error:', err);
         res.status(500).json({ error: 'Failed to update bus' });
     }
 });
 
 // Delete Bus
-app.delete('/api/manager/buses/:id', authMiddleware, async (req, res) => {
+app.delete('/api/manager/buses/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        await Bus.findByIdAndDelete(req.params.id);
-        io.emit('busDeleted', { id: req.params.id });
+        const busId = req.params.id;
+        const bus = await Bus.findById(busId);
+        if (!bus) {
+            return res.status(404).json({ error: 'Bus not found' });
+        }
+
+        // If driver was assigned to this bus, clear driver's assignedBus
+        if (bus.driverId) {
+            const updatedDriver = await Driver.findByIdAndUpdate(bus.driverId, { assignedBus: '' }, { new: true });
+            if (updatedDriver) io.emit('driverUpdated', updatedDriver);
+        }
+        await Driver.updateMany({ assignedBus: busId }, { assignedBus: '' });
+
+        await Bus.findByIdAndDelete(busId);
+        io.emit('busDeleted', { id: busId });
+        io.emit('busesUpdated');
         broadcastStats();
         res.json({ message: 'Bus deleted successfully' });
-    } catch (_err) {
+    } catch (err) {
+        console.error('Delete bus error:', err);
         res.status(500).json({ error: 'Failed to delete bus' });
     }
 });
 
 // Add a new Route with Automatic Geocoding
-app.post('/api/manager/routes', authMiddleware, async (req, res) => {
+app.post('/api/manager/routes', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { geocodeStopName } = require('./geocode_stops');
         const { getRoadPolylineForStops } = require('./road_routing_service');
@@ -2818,19 +3409,42 @@ app.post('/api/manager/routes', authMiddleware, async (req, res) => {
 });
 
 // Delete Route
-app.delete('/api/manager/routes/:id', authMiddleware, async (req, res) => {
+app.delete('/api/manager/routes/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        await Route.findByIdAndDelete(req.params.id);
+        const routeId = req.params.id;
+        const route = await Route.findById(routeId);
+        if (!route) {
+            return res.status(404).json({ error: 'Route not found' });
+        }
+
+        // Dissociate routeId from any buses assigned to this route
+        const affectedBuses = await Bus.find({ routeId });
+        if (affectedBuses.length > 0) {
+            await Bus.updateMany({ routeId }, { $set: { routeId: null, routeName: '' } });
+            for (const b of affectedBuses) {
+                b.routeId = null;
+                b.routeName = '';
+                io.emit('busUpdated', b);
+            }
+            io.emit('busesUpdated');
+        }
+
+        // Dissociate routeId from any users and registration submissions assigned to this route
+        await User.updateMany({ routeId }, { $set: { routeId: null, stopName: '', stopId: null } });
+        await Student.updateMany({ routeId }, { $set: { routeId: null, stopName: '', stopId: null } });
+
+        await Route.findByIdAndDelete(routeId);
         invalidateRoutesCache();
-        io.emit('routeDeleted', { id: req.params.id });
+        io.emit('routeDeleted', { id: routeId });
         broadcastStats();
         res.json({ message: 'Route deleted successfully' });
-    } catch (_err) {
+    } catch (err) {
+        console.error('Delete route error:', err);
         res.status(500).json({ error: 'Failed to delete route' });
     }
 });
 
-app.get('/api/manager/users', authMiddleware, async (req, res) => {
+app.get('/api/manager/users', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const users = await User.find().select('-password').lean();
         
@@ -2893,9 +3507,34 @@ app.get('/api/manager/users', authMiddleware, async (req, res) => {
 
 
 // Manager: Update User Status/Route
-app.put('/api/manager/users/:id', authMiddleware, async (req, res) => {
+app.put('/api/manager/users/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        const updatedUser = await User.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const userId = req.params.id;
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // If routeId is provided, validate route exists
+        if (req.body.routeId && req.body.routeId.trim() !== '') {
+            const route = await Route.findById(req.body.routeId);
+            if (!route) {
+                return res.status(400).json({ error: 'Selected route does not exist' });
+            }
+
+            // If pickupPoint is provided, validate it belongs to this route
+            const pickup = req.body.pickupPoint || req.body.stopName;
+            if (pickup && pickup.trim() !== '') {
+                const stopMatch = route.stops?.some(s => 
+                    s.name && s.name.toLowerCase().trim() === pickup.toLowerCase().trim()
+                );
+                if (!stopMatch && route.stops && route.stops.length > 0) {
+                    return res.status(400).json({ error: `Pickup stop "${pickup}" does not exist on route "${route.name}"` });
+                }
+            }
+        }
+
+        const updatedUser = await User.findByIdAndUpdate(userId, req.body, { new: true }).select('-password');
         
         // Sync updated details to the registration submission if one exists
         const updateFields = {};
@@ -2911,11 +3550,12 @@ app.put('/api/manager/users/:id', authMiddleware, async (req, res) => {
 
         if (Object.keys(updateFields).length > 0) {
             await RegistrationSubmission.findOneAndUpdate(
-                { createdUserId: req.params.id },
+                { createdUserId: userId },
                 { $set: updateFields }
             );
         }
 
+        io.emit('userUpdated', updatedUser);
         res.json(updatedUser);
     } catch (err) {
         console.error('Update user error:', err);
@@ -2924,7 +3564,7 @@ app.put('/api/manager/users/:id', authMiddleware, async (req, res) => {
 });
 
 // Manager: Delete User Account
-app.delete('/api/manager/users/:id', authMiddleware, async (req, res) => {
+app.delete('/api/manager/users/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -2942,6 +3582,7 @@ app.delete('/api/manager/users/:id', authMiddleware, async (req, res) => {
         );
         
         await User.findByIdAndDelete(req.params.id);
+        io.emit('userDeleted', { id: req.params.id });
         broadcastStats();
         res.json({ success: true, message: 'User deleted successfully' });
     } catch (err) {
@@ -3070,9 +3711,9 @@ app.put('/api/users/change-password', authMiddleware, async (req, res) => {
 });
 
 // Manager: Get Drivers
-app.get('/api/manager/drivers', authMiddleware, async (req, res) => {
+app.get('/api/manager/drivers', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        const drivers = await Driver.find();
+        const drivers = await Driver.find().select('-password');
         console.log(`📦 Sending ${drivers.length} drivers to Manager`);
         res.json(drivers);
     } catch (err) {
@@ -3082,9 +3723,21 @@ app.get('/api/manager/drivers', authMiddleware, async (req, res) => {
 });
 
 // Driver: Get Assigned Bus
-app.get('/api/drivers/my-bus', authMiddleware, async (req, res) => {
+app.get('/api/drivers/my-bus', authMiddleware, driverMiddleware, async (req, res) => {
     try {
-        const bus = await Bus.findOne({ driverId: req.user.id });
+        let bus = await Bus.findOne({ driverId: req.user.id });
+        if (!bus) {
+            const driver = await Driver.findById(req.user.id).select('assignedBus username');
+            if (driver && driver.assignedBus) {
+                bus = await Bus.findById(driver.assignedBus);
+            }
+            if (!bus && driver && driver.username) {
+                const unameDigits = driver.username.replace(/[^0-9]/g, '');
+                if (unameDigits) {
+                    bus = await Bus.findOne({ busNumber: { $regex: new RegExp(unameDigits, 'i') } });
+                }
+            }
+        }
         if (!bus) return res.status(404).json({ error: 'No bus assigned to this driver' });
         res.json(bus);
     } catch (_) {
@@ -3092,8 +3745,9 @@ app.get('/api/drivers/my-bus', authMiddleware, async (req, res) => {
     }
 });
 
+
 // Manager: Update Driver
-app.put('/api/manager/drivers/:id', async (req, res) => {
+app.put('/api/manager/drivers/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const driverId = req.params.id;
         const { assignedBus, ...otherData } = req.body;
@@ -3118,22 +3772,31 @@ app.put('/api/manager/drivers/:id', async (req, res) => {
         if (assignedBus !== undefined && oldBusId !== newBusId) {
             // 1. If old bus existed, clear its driverId
             if (oldBusId) {
-                await Bus.findByIdAndUpdate(oldBusId, { driverId: "" });
+                const oldBus = await Bus.findByIdAndUpdate(oldBusId, { driverId: "" }, { new: true });
+                if (oldBus) io.emit('busUpdated', oldBus);
             }
             
             // 2. If new bus is assigned
             if (newBusId && newBusId.trim() !== "" && newBusId.trim().toUpperCase() !== "UNASSIGNED") {
                 // Clear any other driver that was assigned to this new bus
+                const displacedDrivers = await Driver.find({ _id: { $ne: driverId }, assignedBus: newBusId });
                 await Driver.updateMany(
                     { _id: { $ne: driverId }, assignedBus: newBusId },
                     { assignedBus: "" }
                 );
+                for (const d of displacedDrivers) {
+                    d.assignedBus = "";
+                    io.emit('driverUpdated', d);
+                }
                 
                 // Set the new bus's driverId to this driver
-                await Bus.findByIdAndUpdate(newBusId, { driverId: driverId });
+                const newBus = await Bus.findByIdAndUpdate(newBusId, { driverId: driverId }, { new: true });
+                if (newBus) io.emit('busUpdated', newBus);
             }
         }
         
+        io.emit('driverUpdated', updatedDriver);
+        io.emit('busesUpdated');
         res.json(updatedDriver);
     } catch (err) {
         console.error('❌ Error updating driver:', err);
@@ -3142,7 +3805,7 @@ app.put('/api/manager/drivers/:id', async (req, res) => {
 });
 
 // Manager: Add New Driver
-app.post('/api/manager/drivers', authMiddleware, async (req, res) => {
+app.post('/api/manager/drivers', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { username, password, name, contactNumber, licenseNumber, emergencyContact, address, notes } = req.body;
         if (!username || !password || !name) {
@@ -3177,7 +3840,7 @@ app.post('/api/manager/drivers', authMiddleware, async (req, res) => {
 });
 
 // Manager: Upload Document to Driver Profile
-app.post('/api/manager/drivers/:id/documents', authMiddleware, async (req, res) => {
+app.post('/api/manager/drivers/:id/documents', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const { name, url, fileType } = req.body;
@@ -3208,7 +3871,7 @@ app.post('/api/manager/drivers/:id/documents', authMiddleware, async (req, res) 
 });
 
 // Manager: Delete Document from Driver Profile
-app.delete('/api/manager/drivers/:id/documents/:docId', authMiddleware, async (req, res) => {
+app.delete('/api/manager/drivers/:id/documents/:docId', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { id, docId } = req.params;
         const driver = await Driver.findById(id);
@@ -3227,7 +3890,7 @@ app.delete('/api/manager/drivers/:id/documents/:docId', authMiddleware, async (r
 });
 
 // Manager: Delete Driver
-app.delete('/api/manager/drivers/:id', authMiddleware, async (req, res) => {
+app.delete('/api/manager/drivers/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { id } = req.params;
         const driver = await Driver.findById(id);
@@ -3236,10 +3899,15 @@ app.delete('/api/manager/drivers/:id', authMiddleware, async (req, res) => {
         }
 
         if (driver.assignedBus) {
-            await Bus.findByIdAndUpdate(driver.assignedBus, { driverId: '' });
+            const unassignedBus = await Bus.findByIdAndUpdate(driver.assignedBus, { driverId: '' }, { new: true });
+            if (unassignedBus) {
+                io.emit('busUpdated', unassignedBus);
+            }
         }
 
         await Driver.findByIdAndDelete(id);
+        io.emit('driverDeleted', { id });
+        io.emit('busesUpdated');
         res.json({ message: 'Driver deleted successfully' });
     } catch (err) {
         console.error('❌ Error deleting driver:', err);
@@ -3249,7 +3917,7 @@ app.delete('/api/manager/drivers/:id', authMiddleware, async (req, res) => {
 
 // ─── MANAGER: EDIT ROUTE (name, color, stops) ────────────────────────────────
 // Body: { name, color, stops: [{ name, lat, lng }] }
-app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
+app.put('/api/manager/routes/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { name, color, stops } = req.body;
         const { geocodeStopName } = require('./geocode_stops');
@@ -3319,7 +3987,7 @@ app.put('/api/manager/routes/:id', authMiddleware, async (req, res) => {
 // ─── MANAGER: UPDATE BUS NUMBER / BASIC FIELDS / QUICK ROUTE REASSIGN ────────
 // PATCH /api/manager/buses/:id
 // Body: { busNumber, occupancy, routeId, routeName, routeColor, name, shift }
-app.patch('/api/manager/buses/:id', authMiddleware, async (req, res) => {
+app.patch('/api/manager/buses/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const allowed = {};
         if (req.body.busNumber)  allowed.busNumber  = req.body.busNumber.trim();
@@ -3346,7 +4014,7 @@ app.patch('/api/manager/buses/:id', authMiddleware, async (req, res) => {
 // ─── MANAGER: INSTANT / EMERGENCY BUS-TO-ROUTE REASSIGNMENT ─────────────────
 // POST /api/manager/buses/quick-assign
 // Body: { busNumber, busId, routeId, routeName, routeColor, notifyUsers, reason }
-app.post('/api/manager/buses/quick-assign', authMiddleware, async (req, res) => {
+app.post('/api/manager/buses/quick-assign', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { busNumber, busId, routeId, routeName, routeColor, notifyUsers, reason } = req.body;
         if (!routeId && !routeName) {
@@ -3460,7 +4128,7 @@ app.post('/api/manager/buses/quick-assign', authMiddleware, async (req, res) => 
 
 // POST /api/manager/buses/restore-defaults
 // Resets all buses back to default institutional standby status (In Depot)
-app.post('/api/manager/buses/restore-defaults', authMiddleware, async (req, res) => {
+app.post('/api/manager/buses/restore-defaults', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const buses = await Bus.find({});
         for (const b of buses) {
@@ -3487,10 +4155,10 @@ app.post('/api/manager/buses/restore-defaults', authMiddleware, async (req, res)
     }
 });
 
-// ─── MANAGER: IN-APP PER-BUS DAILY REPORT (JSON) ─────────────────────────────
+// ─── MANAGER: IN-APP PER-BUS DAILY REPORT (JSON - REAL LOG DRIVEN) ─────────────
 // GET /api/manager/reports/bus/:busId/summary
-// Returns detailed daily operational records for college management.
-app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, res) => {
+// Returns genuine daily operational records from recorded LiveTripLog documents.
+app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const bus = await Bus.findById(req.params.busId);
         if (!bus) return res.status(404).json({ error: 'Bus not found' });
@@ -3508,136 +4176,99 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
             if (driver) driverName = driver.name || driver.username;
         }
 
-        // ── Seed: fixed daily departure time per bus (7:00–7:45 AM based on busNumber) ──
-        const busNumSeed = parseInt((bus.busNumber || '01').replace(/\D/g,'').slice(-2)) || 1;
-        const baseDepartureHour   = 7;
-        const baseDepartureMinute = (busNumSeed * 3) % 45; // spreads buses 0–44 mins past 7
+        // Fetch up to 60 recent LiveTripLog records for this bus
+        const tripLogs = await LiveTripLog.find({
+            $or: [{ busId: bus._id.toString() }, { busNumber: bus.busNumber }]
+        }).sort({ startTime: -1 }).limit(60).lean();
 
-        // ── Build 30-day log (weekdays only) ──
+        // Group by operational date
+        const dateMap = {};
+        tripLogs.forEach(tl => {
+            const d = tl.date;
+            if (!dateMap[d]) {
+                dateMap[d] = { pickup: null, dropoff: null };
+            }
+            if (tl.tripType === 'dropoff') {
+                if (!dateMap[d].dropoff) dateMap[d].dropoff = tl;
+            } else {
+                if (!dateMap[d].pickup) dateMap[d].pickup = tl;
+            }
+        });
+
+        const sortedDates = Object.keys(dateMap).sort().reverse().slice(0, 30);
         const dailyRecords = [];
-        for (let i = 0; i < 30; i++) {
-            const tripDate = new Date();
-            tripDate.setDate(tripDate.getDate() - i);
-            const dayOfWeek = tripDate.getDay();
-            if (dayOfWeek === 0 || dayOfWeek === 6) continue; // skip Sat/Sun
+        let onTimeCount = 0;
 
-            // Deterministic variance per day (avoid pure random so report is stable on reload)
-            const dayIndex  = tripDate.getDate() + tripDate.getMonth() * 31;
-            const jitter    = (dayIndex * 7 + busNumSeed * 3) % 10; // 0-9 mins jitter
+        sortedDates.forEach(dateStr => {
+            const entry = dateMap[dateStr];
+            const pTrip = entry.pickup;
+            const dTrip = entry.dropoff;
 
-            // ── TRIP 1: PICKUP (MORNING: 07:00 - 08:00 AM) ──
-            const departH = baseDepartureHour;
-            const departM = baseDepartureMinute + jitter;
-            const departureTimePickup = `${String(departH).padStart(2,'0')}:${String(departM).padStart(2,'0')} AM`;
-            const baseDuration = 40 + Math.min(stopNames.length * 2, 30);
-            const durationPickup = baseDuration + ((dayIndex * 3) % 15);
-            const isDelayedPickup = durationPickup > baseDuration + 8;
-            const arrivalMinsPickup = departH * 60 + departM + durationPickup;
-            const arrHPickup = Math.floor(arrivalMinsPickup / 60) % 24;
-            const arrMPickup = arrivalMinsPickup % 60;
-            const arrivalTimePickup = `${String(arrHPickup).padStart(2,'0')}:${String(arrMPickup).padStart(2,'0')} AM`;
+            const tDate = new Date(dateStr);
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const dayName = isNaN(tDate.getDay()) ? 'Mon' : dayNames[tDate.getDay()];
 
-            const stopTimelinePickup = stopNames.map((sName, idx) => {
-                const stopMins = departH * 60 + departM + Math.round((durationPickup / (stopNames.length || 1)) * idx);
-                const sH = Math.floor(stopMins / 60) % 24;
-                const sM = stopMins % 60;
+            const formatTrip = (tl, type, label, orig, dest) => {
+                if (!tl) {
+                    return {
+                        type,
+                        label,
+                        originStop: orig,
+                        destinationStop: dest,
+                        departureTime: 'Unavailable',
+                        arrivalTime: 'Unavailable',
+                        tripDurationMins: null,
+                        status: 'Not Operated',
+                        stopTimeline: []
+                    };
+                }
+                const depTime = tl.startTime ? new Date(tl.startTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : 'Unavailable';
+                const arrTime = tl.endTime ? new Date(tl.endTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }) : (tl.status === 'Active' ? 'In-Transit' : 'Unavailable');
+                const dur = tl.durationMinutes != null ? tl.durationMinutes : (tl.endTime && tl.startTime ? Math.max(1, Math.round((new Date(tl.endTime) - new Date(tl.startTime)) / 60000)) : null);
+                
                 return {
-                    stopNumber: idx + 1,
-                    stopName: sName,
-                    time: `${String(sH).padStart(2,'0')}:${String(sM).padStart(2,'0')} AM`,
-                    isOrigin: idx === 0,
-                    isCampus: idx === stopNames.length - 1,
+                    type,
+                    label,
+                    originStop: orig,
+                    destinationStop: dest,
+                    departureTime: depTime,
+                    arrivalTime: arrTime,
+                    tripDurationMins: dur,
+                    distanceKm: tl.distanceKm || 0,
+                    distanceSource: tl.distanceSource || 'Unavailable',
+                    status: tl.status === 'Completed' ? 'On-time' : tl.status,
+                    stopTimeline: (tl.reachedStops || []).map((rs, idx) => ({
+                        stopNumber: idx + 1,
+                        stopName: rs.stopName,
+                        time: new Date(rs.reachedTime).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true }),
+                        isOrigin: idx === 0,
+                        isCampus: idx === (tl.reachedStops.length - 1)
+                    }))
                 };
-            });
+            };
 
-            // ── TRIP 2: DROP-OFF (EVENING: 04:30 - 05:30 PM) ──
-            const departHEvening = 16; // 4 PM
-            const departMEvening = 30 + (jitter % 15);
-            const departureTimeDropoff = `${String(departHEvening - 12).padStart(2,'0')}:${String(departMEvening).padStart(2,'0')} PM`;
-            const durationDropoff = baseDuration + ((dayIndex * 5) % 12);
-            const isDelayedDropoff = durationDropoff > baseDuration + 8;
-            const arrivalMinsDropoff = departHEvening * 60 + departMEvening + durationDropoff;
-            const arrHDropoff = Math.floor(arrivalMinsDropoff / 60) % 24;
-            const arrMDropoff = arrivalMinsDropoff % 60;
-            const arrHDropoffDisplay = arrHDropoff > 12 ? arrHDropoff - 12 : arrHDropoff;
-            const arrivalTimeDropoff = `${String(arrHDropoffDisplay).padStart(2,'0')}:${String(arrMDropoff).padStart(2,'0')} PM`;
+            const pickupFormatted = formatTrip(pTrip, 'pickup', 'Trip 1: Morning Pickup (City ➔ College)', firstStop, lastStop);
+            const dropoffFormatted = formatTrip(dTrip, 'dropoff', 'Trip 2: Evening Drop-off (College ➔ City)', lastStop, firstStop);
 
-            // Reverse stop list for drop-off timeline (Campus -> City)
-            const reversedStops = [...stopNames].reverse();
-            const stopTimelineDropoff = reversedStops.map((sName, idx) => {
-                const stopMins = departHEvening * 60 + departMEvening + Math.round((durationDropoff / (reversedStops.length || 1)) * idx);
-                const sH = Math.floor(stopMins / 60) % 24;
-                const sM = stopMins % 60;
-                const displayH = sH > 12 ? sH - 12 : sH;
-                return {
-                    stopNumber: idx + 1,
-                    stopName: sName,
-                    time: `${String(displayH).padStart(2,'0')}:${String(sM).padStart(2,'0')} PM`,
-                    isCampus: idx === 0,
-                    isOrigin: idx === reversedStops.length - 1,
-                };
-            });
+            const isOperating = (pTrip && pTrip.status === 'Completed') || (dTrip && dTrip.status === 'Completed');
+            if (isOperating) onTimeCount++;
 
-            const avgSpeed = parseFloat((28 + (dayIndex % 10)).toFixed(1));
-            const studentCountPickup = 30 + ((dayIndex * 3 + busNumSeed) % 25);
-            const studentCountDropoff = 28 + ((dayIndex * 4 + busNumSeed) % 25);
-
-            const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
             dailyRecords.push({
-                date: tripDate.toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' }),
-                dayName: dayNames[dayOfWeek],
+                date: isNaN(tDate.getTime()) ? dateStr : tDate.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+                dayName,
                 busNumber: bus.busNumber || 'N/A',
                 driverName,
                 routeName: bus.routeName,
-                // Pickup Trip
-                pickupTrip: {
-                    type: 'pickup',
-                    label: 'Trip 1: Morning Pickup (City ➔ College)',
-                    originStop: firstStop,
-                    destinationStop: lastStop,
-                    departureTime: departureTimePickup,
-                    arrivalTime: arrivalTimePickup,
-                    tripDurationMins: durationPickup,
-                    studentCount: studentCountPickup,
-                    avgSpeedKmh: avgSpeed,
-                    status: isDelayedPickup ? 'Delayed' : 'On-time',
-                    stopTimeline: stopTimelinePickup
-                },
-                // Drop-off Trip
-                dropoffTrip: {
-                    type: 'dropoff',
-                    label: 'Trip 2: Evening Drop-off (College ➔ City)',
-                    originStop: lastStop,
-                    destinationStop: firstStop,
-                    departureTime: departureTimeDropoff,
-                    arrivalTime: arrivalTimeDropoff,
-                    tripDurationMins: durationDropoff,
-                    studentCount: studentCountDropoff,
-                    avgSpeedKmh: avgSpeed,
-                    status: isDelayedDropoff ? 'Delayed' : 'On-time',
-                    stopTimeline: stopTimelineDropoff
-                },
-                // Legacy flat properties for backward compatibility
-                departureTime: departureTimePickup,
-                arrivalTime: arrivalTimePickup,
-                tripDurationMins: durationPickup,
+                pickupTrip: pickupFormatted,
+                dropoffTrip: dropoffFormatted,
+                departureTime: pickupFormatted.departureTime,
+                arrivalTime: pickupFormatted.arrivalTime,
+                tripDurationMins: pickupFormatted.tripDurationMins,
                 totalStops: stopNames.length,
-                studentCount: studentCountPickup + studentCountDropoff,
-                avgSpeedKmh: avgSpeed,
-                status: (isDelayedPickup || isDelayedDropoff) ? 'Delayed' : 'On-time',
-                stopTimeline: stopTimelinePickup,
+                status: isOperating ? 'On-time' : 'Incomplete',
+                stopTimeline: pickupFormatted.stopTimeline
             });
-        }
-
-        // ── Summary KPIs ──
-        const onTimeCount  = dailyRecords.filter(r => r.status === 'On-time').length;
-        const totalStudents = dailyRecords.reduce((s, r) => s + r.studentCount, 0);
-        const avgSpeedAll  = dailyRecords.length
-            ? parseFloat((dailyRecords.reduce((s, r) => s + r.avgSpeedKmh, 0) / dailyRecords.length).toFixed(1))
-            : 0;
-        const avgStudents  = dailyRecords.length
-            ? Math.round(totalStudents / dailyRecords.length)
-            : 0;
+        });
 
         res.json({
             bus: {
@@ -3659,17 +4290,299 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, async (req, r
             summary: {
                 totalOperatingDays: dailyRecords.length,
                 onTimeDays:         onTimeCount,
-                delayedDays:        dailyRecords.length - onTimeCount,
+                delayedDays:        Math.max(0, dailyRecords.length - onTimeCount),
                 onTimePercent:      dailyRecords.length ? Math.round((onTimeCount / dailyRecords.length) * 100) : 0,
-                avgSpeedKmh:        avgSpeedAll,
-                totalStudentsServed: totalStudents,
-                avgStudentsPerDay:  avgStudents,
+                avgSpeedKmh:        0,
+                totalStudentsServed: 0,
+                avgStudentsPerDay:  0,
             },
-            dailyRecords, // Full 30-day log
+            dailyRecords
         });
     } catch (err) {
         console.error('Report summary error:', err);
-        res.status(500).json({ error: 'Failed to generate report summary' });
+        res.status(500).json({ error: 'Failed to generate report summary: ' + err.message });
+    }
+});
+
+// ─── MANAGER: TRIP RECORDS & HISTORY (Paginated, Filtered, Sorted) ────────────
+// GET /api/manager/trips?page=1&limit=20&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&busId=<id>&status=all|Active|Completed|Cancelled|Failed&tripType=all|pickup|dropoff&sortBy=-startTime
+app.get('/api/manager/trips', authMiddleware, managerMiddleware, async (req, res) => {
+    try {
+        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+        const skip = (page - 1) * limit;
+
+        const filter = {};
+
+        // Date range filtering
+        const { startDate, endDate, date, busId, status, tripType, sortBy } = req.query;
+        if (date) {
+            filter.date = date;
+        } else if (startDate || endDate) {
+            filter.date = {};
+            if (startDate) filter.date.$gte = startDate;
+            if (endDate) filter.date.$lte = endDate;
+        }
+
+        // Bus filter
+        if (busId && busId !== 'all') {
+            filter.$or = [{ busId }, { busNumber: busId }];
+        }
+
+        // Status filter
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+
+        // Trip type filter
+        if (tripType && tripType !== 'all') {
+            filter.tripType = tripType;
+        }
+
+        // Sorting
+        let sortObj = { startTime: -1 };
+        if (sortBy) {
+            if (sortBy === 'startTime' || sortBy === 'date') sortObj = { startTime: 1 };
+            else if (sortBy === '-startTime' || sortBy === '-date') sortObj = { startTime: -1 };
+            else if (sortBy === 'durationMinutes') sortObj = { durationMinutes: 1 };
+            else if (sortBy === '-durationMinutes') sortObj = { durationMinutes: -1 };
+        }
+
+        const [trips, totalCount, statusCounts] = await Promise.all([
+            LiveTripLog.find(filter).sort(sortObj).skip(skip).limit(limit).lean(),
+            LiveTripLog.countDocuments(filter),
+            LiveTripLog.aggregate([
+                { $match: filter },
+                { $group: { _id: '$status', count: { $sum: 1 } } }
+            ])
+        ]);
+
+        const countsMap = { Active: 0, Completed: 0, Cancelled: 0, Failed: 0 };
+        statusCounts.forEach(sc => {
+            if (sc._id && countsMap[sc._id] !== undefined) {
+                countsMap[sc._id] = sc.count;
+            }
+        });
+
+        // Compute summary metrics across matching completed trips
+        const completedTripsAgg = await LiveTripLog.aggregate([
+            { $match: { ...filter, status: 'Completed' } },
+            { 
+                $group: { 
+                    _id: null, 
+                    avgDuration: { $avg: '$durationMinutes' },
+                    totalDistance: { $sum: '$distanceKm' }
+                } 
+            }
+        ]);
+
+        const avgDuration = completedTripsAgg.length && completedTripsAgg[0].avgDuration != null
+            ? Math.round(completedTripsAgg[0].avgDuration)
+            : 0;
+        const totalDistance = completedTripsAgg.length && completedTripsAgg[0].totalDistance != null
+            ? parseFloat(completedTripsAgg[0].totalDistance.toFixed(1))
+            : 0;
+
+        const totalPages = Math.ceil(totalCount / limit) || 1;
+
+        res.json({
+            success: true,
+            pagination: {
+                page,
+                limit,
+                totalPages,
+                totalCount,
+                hasMore: page < totalPages
+            },
+            summary: {
+                totalTrips: totalCount,
+                completedTrips: countsMap.Completed,
+                cancelledTrips: countsMap.Cancelled,
+                activeTrips: countsMap.Active,
+                failedTrips: countsMap.Failed,
+                averageDurationMinutes: avgDuration,
+                totalDistanceKm: totalDistance
+            },
+            trips: trips.map(t => ({
+                id: t._id,
+                _id: t._id,
+                busId: t.busId,
+                busNumber: t.busNumber,
+                busName: t.busName,
+                driverId: t.driverId,
+                driverName: t.driverName,
+                driverPhone: t.driverPhone,
+                routeId: t.routeId,
+                routeName: t.routeName,
+                date: t.date,
+                startTime: t.startTime,
+                endTime: t.endTime,
+                durationMinutes: t.durationMinutes,
+                distanceKm: t.distanceKm,
+                distanceSource: t.distanceSource,
+                tripType: t.tripType,
+                status: t.status,
+                cancellationReason: t.cancellationReason,
+                reachedStopsCount: t.reachedStops ? t.reachedStops.length : 0
+            }))
+        });
+    } catch (err) {
+        console.error('Manager trips history error:', err);
+        res.status(500).json({ error: 'Failed to fetch trip history: ' + err.message });
+    }
+});
+
+// ─── MANAGER: EXPORT FILTERED TRIP RECORDS (CSV) ─────────────────────────────
+// GET /api/manager/trips/export/csv?startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&busId=<id>&status=all|Active|Completed|Cancelled|Failed
+app.get('/api/manager/trips/export/csv', authMiddleware, managerMiddleware, async (req, res) => {
+    try {
+        const filter = {};
+        const { startDate, endDate, date, busId, status, tripType } = req.query;
+        if (date) {
+            filter.date = date;
+        } else if (startDate || endDate) {
+            filter.date = {};
+            if (startDate) filter.date.$gte = startDate;
+            if (endDate) filter.date.$lte = endDate;
+        }
+        if (busId && busId !== 'all') {
+            filter.$or = [{ busId }, { busNumber: busId }];
+        }
+        if (status && status !== 'all') {
+            filter.status = status;
+        }
+        if (tripType && tripType !== 'all') {
+            filter.tripType = tripType;
+        }
+
+        const trips = await LiveTripLog.find(filter).sort({ startTime: -1 }).limit(5000).lean();
+
+        let csv = '# SISTec Ratibad - Official Shuttle Trip History Export\n';
+        csv += `# Total Records: ${trips.length} | Exported At: ${new Date().toISOString()}\n\n`;
+        csv += 'Trip ID,Date,Shift Type,Bus Number,Bus Name,Route Name,Driver Name,Driver Phone,Start Time,End Time,Duration (mins),Distance (km),Distance Source,Status,Stops Reached,Cancellation Reason\n';
+
+        trips.forEach(t => {
+            const tripId = t._id ? t._id.toString() : '';
+            const dateStr = t.date || '';
+            const shiftType = t.tripType || 'pickup';
+            const busNumber = (t.busNumber || 'N/A').replace(/"/g, '""');
+            const busName = (t.busName || 'N/A').replace(/"/g, '""');
+            const routeName = (t.routeName || 'Unassigned').replace(/"/g, '""');
+            const driverName = (t.driverName || 'Unassigned').replace(/"/g, '""');
+            const driverPhone = (t.driverPhone || 'N/A').replace(/"/g, '""');
+            const startTimeStr = t.startTime ? new Date(t.startTime).toISOString() : 'Unavailable';
+            const endTimeStr = t.endTime ? new Date(t.endTime).toISOString() : (t.status === 'Active' ? 'In-Progress' : 'Unavailable');
+            const duration = t.durationMinutes != null ? t.durationMinutes : 'Unavailable';
+            const distance = (typeof t.distanceKm === 'number' && t.distanceKm > 0) ? t.distanceKm.toFixed(1) : 'Unavailable';
+            const distanceSource = t.distanceSource || 'Unavailable';
+            const status = t.status || 'Active';
+            const stopsReached = t.reachedStops ? t.reachedStops.length : 0;
+            const reason = (t.cancellationReason || '').replace(/"/g, '""');
+
+            csv += `"${tripId}","${dateStr}","${shiftType}","${busNumber}","${busName}","${routeName}","${driverName}","${driverPhone}","${startTimeStr}","${endTimeStr}",${duration},"${distance}","${distanceSource}","${status}",${stopsReached},"${reason}"\n`;
+        });
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', 'attachment; filename="sistec_trip_history.csv"');
+        res.status(200).send(csv);
+    } catch (err) {
+        console.error('Trip CSV Export Error:', err);
+        res.status(500).json({ error: 'Failed to export trip history CSV: ' + err.message });
+    }
+});
+
+// ─── MANAGER: SINGLE TRIP RECORD DETAIL & STOP TIMELINE ───────────────────────
+// GET /api/manager/trips/:id
+app.get('/api/manager/trips/:id', authMiddleware, managerMiddleware, async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!id || id.length < 10) {
+            return res.status(400).json({ error: 'Invalid trip ID format' });
+        }
+
+        const trip = await LiveTripLog.findById(id).lean();
+        if (!trip) {
+            return res.status(404).json({ error: 'Trip record not found' });
+        }
+
+        // Fetch Route if routeId is available for route coordinates / stops comparison
+        let routeCoordinates = [];
+        let scheduledStops = [];
+        if (trip.routeId) {
+            const routeDoc = await Route.findById(trip.routeId).lean();
+            if (routeDoc) {
+                routeCoordinates = routeDoc.coordinates || [];
+                scheduledStops = routeDoc.stops || [];
+            }
+        }
+
+        // Stop events and deviations from schedule
+        const stopEvents = (trip.reachedStops || []).map((rs, idx) => {
+            let scheduledTime = null;
+            let deviationMinutes = null;
+            let status = 'Recorded';
+
+            const matchingScheduled = scheduledStops.find(s => 
+                s.name && rs.stopName && s.name.toLowerCase().trim() === rs.stopName.toLowerCase().trim()
+            );
+
+            if (matchingScheduled && matchingScheduled.time) {
+                scheduledTime = matchingScheduled.time;
+                const schedMatch = scheduledTime.match(/(\d{1,2}):(\d{2})\s*(AM|PM)?/i);
+                if (schedMatch && rs.reachedTime) {
+                    let sh = parseInt(schedMatch[1], 10);
+                    const sm = parseInt(schedMatch[2], 10);
+                    const ampm = (schedMatch[3] || 'AM').toUpperCase();
+                    if (ampm === 'PM' && sh < 12) sh += 12;
+                    if (ampm === 'AM' && sh === 12) sh = 0;
+                    const schedMins = sh * 60 + sm;
+
+                    const rDate = new Date(rs.reachedTime);
+                    const actMins = rDate.getHours() * 60 + rDate.getMinutes();
+                    deviationMinutes = actMins - schedMins;
+                    status = deviationMinutes > 5 ? 'Delayed' : (deviationMinutes < -5 ? 'Early' : 'On-Time');
+                }
+            }
+
+            return {
+                stopNumber: idx + 1,
+                stopName: rs.stopName,
+                reachedTime: rs.reachedTime,
+                scheduledTime: scheduledTime || 'Unavailable',
+                deviationMinutes: deviationMinutes != null ? deviationMinutes : 'Unavailable',
+                status
+            };
+        });
+
+        res.json({
+            success: true,
+            trip: {
+                id: trip._id,
+                _id: trip._id,
+                busId: trip.busId,
+                busNumber: trip.busNumber,
+                busName: trip.busName,
+                driverId: trip.driverId,
+                driverName: trip.driverName,
+                driverPhone: trip.driverPhone,
+                routeId: trip.routeId,
+                routeName: trip.routeName,
+                date: trip.date,
+                startTime: trip.startTime,
+                endTime: trip.endTime,
+                durationMinutes: trip.durationMinutes,
+                distanceKm: trip.distanceKm,
+                distanceSource: trip.distanceSource,
+                tripType: trip.tripType,
+                status: trip.status,
+                cancellationReason: trip.cancellationReason,
+                reachedStops: stopEvents,
+                routeCoordinates: routeCoordinates.length > 0 ? routeCoordinates : null
+            }
+        });
+    } catch (err) {
+        console.error('Manager trip detail error:', err);
+        res.status(500).json({ error: 'Failed to fetch trip detail: ' + err.message });
     }
 });
 
@@ -3680,38 +4593,670 @@ const userGeofenceState = {}; // { userId: { stopName: lastNotifiedTimestamp } }
 const GEOFENCE_RADIUS_KM = 1.0; // 1.0 km as per request
 const COOLDOWN_MS = 30 * 60 * 1000; // 30 minutes
 
+// In-memory debounce map for SOS emergency alerts (Anti-spam cooldown: 15s)
+const sosCooldownMap = new Map(); // key: userId / socket.id -> { timestamp, alertId, alertPayload }
+const SOS_COOLDOWN_MS = 15000;
+
+// ─── Socket.io JWT Authentication Middleware ─────────────────────────────────
+io.use(async (socket, next) => {
+    if (isShuttingDown) {
+        return next(new Error('SERVER_SHUTTING_DOWN'));
+    }
+    const rawToken = socket.handshake.auth?.token 
+        || socket.handshake.headers?.authorization
+        || socket.handshake.query?.token;
+
+    if (!rawToken) {
+        // Unauthenticated client (guest explorer or student before login).
+        // Permitted to connect for read-only tracking and emergency SOS, but cannot execute driver actions.
+        socket.user = null;
+        return next();
+    }
+
+    try {
+        const tokenString = rawToken.startsWith('Bearer ') ? rawToken.slice(7) : rawToken;
+        const decoded = jwt.verify(tokenString, getJwtSecret());
+
+        if (decoded.scope === 'password_change') {
+            return next(new Error('Authentication error: Restricted password-change token'));
+        }
+
+        const account = await getAccountByIdAndRole(decoded.user?.id, decoded.user?.role);
+        if (!account) {
+            return next(new Error('Authentication error: Account no longer exists'));
+        }
+
+        if (account.status && account.status === 'Suspended') {
+            return next(new Error('Authentication error: Account suspended'));
+        }
+
+        const tokenVersion = decoded.user?.tokenVersion;
+        const currentVersion = account.tokenVersion || 0;
+        if (tokenVersion === undefined || tokenVersion !== currentVersion) {
+            return next(new Error('Authentication error: Session expired. Please log in again.'));
+        }
+
+        socket.user = {
+            id: (account._id ? account._id.toString() : account.id),
+            role: decoded.user?.role,
+            username: account.username || account.enrollmentNumber || decoded.user?.username || '',
+            name: account.name || decoded.user?.name || '',
+            tokenVersion: currentVersion,
+            status: account.status || 'Active'
+        };
+
+        return next();
+    } catch (_err) {
+        return next(new Error('Authentication error: Token is not valid or expired'));
+    }
+});
+
 /**
  * Initializes Socket.io connection listeners.
  * Handles continuous location updates from buses and broadcasts them.
  */
+function emitSensitiveSosAlert(ioInstance, alertPayload) {
+    if (!ioInstance || typeof ioInstance.to !== 'function') return;
+    const managersRoom = ioInstance.to('managers');
+    if (managersRoom && typeof managersRoom.emit === 'function') {
+        managersRoom.emit('sosAlert', alertPayload);
+        managersRoom.emit('sosAlertManager', alertPayload);
+    }
+}
+
+function emitEmergencySosNotification(ioInstance, notifPayload) {
+    if (!ioInstance || typeof ioInstance.to !== 'function') return;
+    const managersRoom = ioInstance.to('managers');
+    if (managersRoom && typeof managersRoom.emit === 'function') {
+        managersRoom.emit('notification', notifPayload);
+        managersRoom.emit('notificationManager', notifPayload);
+    }
+}
+
+function parseSosCoordinates(data) {
+    const parseCoord = (val) => {
+        if (typeof val === 'number') {
+            return Number.isFinite(val) ? val : null;
+        }
+        if (typeof val === 'string') {
+            const trimmed = val.trim();
+            if (!trimmed) return null;
+            const num = Number(trimmed);
+            return Number.isFinite(num) ? num : null;
+        }
+        return null;
+    };
+
+    const rawLat = data && typeof data === 'object' ? parseCoord(data.latitude) : null;
+    const rawLng = data && typeof data === 'object' ? parseCoord(data.longitude) : null;
+
+    const explicitUnavailable = Boolean(
+        data && typeof data === 'object' && data.locationAvailable === false
+    );
+
+    const hasValidCoords = !explicitUnavailable &&
+        rawLat !== null &&
+        rawLng !== null &&
+        rawLat >= -90 && rawLat <= 90 &&
+        rawLng >= -180 && rawLng <= 180 &&
+        !(rawLat === 0 && rawLng === 0);
+
+    return {
+        latitude: hasValidCoords ? rawLat : null,
+        longitude: hasValidCoords ? rawLng : null,
+        locationAvailable: hasValidCoords
+    };
+}
+
+// 60s stale threshold = 5x the 12s stationary driver heartbeat interval (12x the 5s moving timer)
+const DRIVER_STALE_THRESHOLD_MS = 60 * 1000;
+
+function normalizeTripType(rawTripType) {
+    const cleaned = String(rawTripType || '').trim().toLowerCase();
+    return (cleaned === 'dropoff' || cleaned === 'evening') ? 'dropoff' : 'pickup';
+}
+
+function normalizeDistanceKm(rawDistanceKm) {
+    if (rawDistanceKm === null || rawDistanceKm === undefined || rawDistanceKm === '') return null;
+    const parsed = typeof rawDistanceKm === 'number' ? rawDistanceKm : Number(rawDistanceKm);
+    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1000) return null;
+    return Number(parsed.toFixed(2));
+}
+
+function resolveBusTelemetryStatus(currentBusStatus, incomingStatus, explicitStatusOverride = false) {
+    const current = String(currentBusStatus || '').trim();
+    const incoming = String(incomingStatus || '').trim();
+    if (
+        current.toLowerCase() === 'delayed' &&
+        !explicitStatusOverride &&
+        incoming.toLowerCase() !== 'delayed'
+    ) {
+        return 'Delayed';
+    }
+    if (incoming && incoming.toLowerCase() !== 'offline') {
+        return incoming;
+    }
+    return current.toLowerCase() === 'delayed' ? 'Delayed' : 'On-time';
+}
+
+async function verifyDriverBusAuthorization({ socketUser, bus, busId, DriverModel }) {
+    if (!socketUser || !socketUser.role) {
+        return { authorized: false, reason: 'unauthenticated' };
+    }
+    if (socketUser.role === 'manager' || socketUser.role === 'admin') {
+        return { authorized: true, driverDoc: null };
+    }
+    if (socketUser.role !== 'driver') {
+        return { authorized: false, reason: 'unauthorized_role' };
+    }
+    const driver = await DriverModel.findById(socketUser.id).select('status assignedBus username name phone contactNumber');
+    if (!driver || driver.status === 'Suspended') {
+        return { authorized: false, reason: 'driver_unavailable_or_suspended' };
+    }
+    const targetBusId = (bus && bus._id ? bus._id : busId || '').toString();
+    const driverUsername = (driver.username || socketUser.username || '');
+    const driverDigits = driverUsername.replace(/[^0-9]/g, '');
+    const busDigits = ((bus && bus.busNumber) || '').replace(/[^0-9]/g, '');
+    const isUsernameMatch = Boolean(driverDigits && busDigits && driverDigits === busDigits);
+    const isAssigned = Boolean(
+        (driver.assignedBus && driver.assignedBus.toString() === targetBusId) ||
+        (bus && bus.driverId && bus.driverId.toString() === String(socketUser.id)) ||
+        isUsernameMatch
+    );
+    if (!isAssigned) {
+        return { authorized: false, reason: 'driver_not_assigned_to_bus' };
+    }
+    return { authorized: true, driverDoc: driver };
+}
+
+const DELAY_MESSAGE_MAX_LENGTH = 500;
+const DELAY_MINUTES_MAX = 240;
+const OBJECT_ID_PATTERN = /^[a-fA-F0-9]{24}$/;
+
+/**
+ * Authorizes a delay-notification broadcast before anything is persisted or emitted.
+ * - Only driver, manager, or admin roles may broadcast.
+ * - routeId (and optional busId) must be well-formed and must exist.
+ * - Drivers must be explicitly assigned to the bus (assignedBus or bus.driverId; the
+ *   username-digit heuristic is NOT accepted here) and the bus must serve routeId.
+ * - Managers/admins may target any existing route; a supplied busId must serve that route.
+ * - routeName is always taken from the database, never from the client.
+ */
+async function authorizeDelayNotification({ user, body, RouteModel, BusModel, DriverModel }) {
+    const deny = (status, error) => ({ authorized: false, status, error });
+
+    if (!user || !['driver', 'manager', 'admin'].includes(user.role)) {
+        return deny(403, 'Forbidden: Driver, Manager, or Admin role required to broadcast delay alerts');
+    }
+
+    const src = (body && typeof body === 'object') ? body : {};
+    const routeId = typeof src.routeId === 'string' ? src.routeId.trim() : '';
+    const requestedBusId = typeof src.busId === 'string' ? src.busId.trim() : '';
+    const message = typeof src.message === 'string' ? src.message.trim() : '';
+
+    if (!routeId || !message) return deny(400, 'routeId and message required');
+    if (!OBJECT_ID_PATTERN.test(routeId)) return deny(400, 'Invalid routeId');
+    if (requestedBusId && !OBJECT_ID_PATTERN.test(requestedBusId)) return deny(400, 'Invalid busId');
+    if (message.length > DELAY_MESSAGE_MAX_LENGTH) {
+        return deny(400, `Delay message must be ${DELAY_MESSAGE_MAX_LENGTH} characters or fewer`);
+    }
+
+    const route = await RouteModel.findById(routeId);
+    if (!route) return deny(404, 'Route not found');
+
+    let bus = null;
+    if (user.role === 'driver') {
+        let effectiveBusId = requestedBusId;
+        if (!effectiveBusId) {
+            const driverDoc = await DriverModel.findById(user.id).select('status assignedBus username name');
+            if (!driverDoc || driverDoc.status === 'Suspended') {
+                return deny(403, 'Forbidden: Driver account is unavailable or suspended');
+            }
+            effectiveBusId = driverDoc.assignedBus ? String(driverDoc.assignedBus).trim() : '';
+        }
+        if (!effectiveBusId || !OBJECT_ID_PATTERN.test(effectiveBusId)) {
+            return deny(403, 'Forbidden: Driver is not assigned to a bus');
+        }
+
+        bus = await BusModel.findById(effectiveBusId);
+        // Uniform 403 avoids revealing whether an unauthorized bus ID exists
+        if (!bus) return deny(403, 'Forbidden: Driver is not authorized for this bus');
+
+        const authz = await verifyDriverBusAuthorization({
+            socketUser: user,
+            bus,
+            busId: effectiveBusId,
+            DriverModel
+        });
+        if (!authz.authorized) return deny(403, 'Forbidden: Driver is not authorized for this bus');
+
+        const busIdStr = bus._id ? bus._id.toString() : effectiveBusId;
+        const explicitlyAssigned = Boolean(
+            (authz.driverDoc && authz.driverDoc.assignedBus && authz.driverDoc.assignedBus.toString() === busIdStr) ||
+            (bus.driverId && bus.driverId.toString() === String(user.id))
+        );
+        if (!explicitlyAssigned) return deny(403, 'Forbidden: Driver is not authorized for this bus');
+
+        if (String(bus.routeId || '').trim() !== routeId) {
+            return deny(403, 'Forbidden: Driver bus is not assigned to the specified route');
+        }
+    } else if (requestedBusId) {
+        bus = await BusModel.findById(requestedBusId);
+        if (!bus) return deny(404, 'Bus not found');
+        if (String(bus.routeId || '').trim() !== routeId) {
+            return deny(400, 'Bus is not assigned to the specified route');
+        }
+    }
+
+    const rawMinutes = Number(src.delayMinutes);
+    const delayMinutes = Number.isFinite(rawMinutes)
+        ? Math.min(DELAY_MINUTES_MAX, Math.max(0, Math.round(rawMinutes)))
+        : 0;
+
+    return {
+        authorized: true,
+        routeId,
+        routeName: (route.name && String(route.name).trim()) || routeId,
+        busId: bus && bus._id ? bus._id.toString() : null,
+        busNumber: bus && bus.busNumber ? String(bus.busNumber) : null,
+        message,
+        delayMinutes
+    };
+}
+
+function buildBusApproachingStopPayload({ bus, stopName, distanceKm, minutes }) {
+    const rawId = bus && (bus._id || bus.id || bus.busId);
+    const busId = rawId ? rawId.toString() : '';
+    const busNumber = (bus && bus.busNumber && String(bus.busNumber).trim().length > 0)
+        ? String(bus.busNumber).trim()
+        : 'Shuttle';
+    const routeId = (bus && bus.routeId) ? bus.routeId.toString() : '';
+    const routeName = (bus && bus.routeName && String(bus.routeName).trim().length > 0)
+        ? String(bus.routeName).trim()
+        : 'SISTec Route';
+    const resolvedStopName = String(stopName || 'Bus Stop').trim() || 'Bus Stop';
+    const numericDist = (typeof distanceKm === 'number' && Number.isFinite(distanceKm) && distanceKm >= 0)
+        ? Number(distanceKm.toFixed(2))
+        : 0;
+    const resolvedMinutes = (typeof minutes === 'number' && Number.isFinite(minutes))
+        ? Math.max(0, Math.round(minutes))
+        : 1;
+    const message = `Bus ${busNumber} (${routeName}) is approaching ${resolvedStopName} (${numericDist.toFixed(1)} km away, ~${resolvedMinutes} min).`;
+
+    return {
+        busId,
+        busNumber,
+        routeId,
+        routeName,
+        stopName: resolvedStopName,
+        distanceKm: numericDist,
+        etaMinutes: resolvedMinutes,
+        minutes: resolvedMinutes,
+        message
+    };
+}
+
+async function startOrResumeTripLog({
+    LiveTripLogModel,
+    bus,
+    todayStr,
+    tripType,
+    distanceKm,
+    verifiedDriverId,
+    resolveSnapshots
+}) {
+    const normalizedType = normalizeTripType(tripType);
+    const validDistanceKm = normalizeDistanceKm(distanceKm);
+    const busIdStr = bus._id.toString();
+
+    const existingActiveTrip = await LiveTripLogModel.findOne({
+        busId: busIdStr,
+        date: todayStr,
+        tripType: normalizedType,
+        status: 'Active'
+    });
+
+    if (existingActiveTrip) {
+        if (
+            verifiedDriverId &&
+            existingActiveTrip.driverId &&
+            existingActiveTrip.driverId.toString() !== String(verifiedDriverId)
+        ) {
+            return { tripLog: null, isResumed: false, conflict: 'driver_mismatch' };
+        }
+        return { tripLog: existingActiveTrip, isResumed: true, conflict: null };
+    }
+
+    const snapshots = typeof resolveSnapshots === 'function' ? await resolveSnapshots() : {};
+    const hasPositiveDistance = validDistanceKm !== null && validDistanceKm > 0;
+    const tripLog = await LiveTripLogModel.create({
+        busId: busIdStr,
+        busNumber: bus.busNumber || 'N/A',
+        busName: bus.name || `Bus ${bus.busNumber || ''}`,
+        driverId: snapshots.driverId || verifiedDriverId || null,
+        driverName: snapshots.driverName || 'Unassigned',
+        driverPhone: snapshots.driverPhone || 'N/A',
+        routeId: snapshots.routeId || null,
+        routeName: snapshots.routeName || (bus.routeName || 'Unassigned'),
+        date: todayStr,
+        startTime: new Date(),
+        tripType: normalizedType,
+        status: 'Active',
+        distanceKm: hasPositiveDistance ? validDistanceKm : 0,
+        distanceSource: hasPositiveDistance ? 'GPS' : 'Unavailable'
+    });
+
+    return { tripLog, isResumed: false, conflict: null };
+}
+
+async function syncActiveTripLogForTelemetry({
+    LiveTripLogModel,
+    bus,
+    todayStr,
+    tripType,
+    distanceKm,
+    reachedStops,
+    verifiedDriverId,
+    resolveSnapshots
+}) {
+    const normalizedType = normalizeTripType(tripType);
+    const validDistanceKm = normalizeDistanceKm(distanceKm);
+    const busIdStr = bus._id.toString();
+
+    let tripLog = await LiveTripLogModel.findOne({
+        busId: busIdStr,
+        date: todayStr,
+        tripType: normalizedType,
+        status: 'Active'
+    });
+
+    if (!tripLog) {
+        const snapshots = typeof resolveSnapshots === 'function' ? await resolveSnapshots() : {};
+        const hasPositiveDistance = validDistanceKm !== null && validDistanceKm > 0;
+        tripLog = await LiveTripLogModel.create({
+            busId: busIdStr,
+            busNumber: bus.busNumber || 'N/A',
+            busName: bus.name || bus.busNumber,
+            driverId: snapshots.driverId || verifiedDriverId || null,
+            driverName: snapshots.driverName || 'Unassigned',
+            driverPhone: snapshots.driverPhone || 'N/A',
+            routeId: snapshots.routeId || null,
+            routeName: snapshots.routeName || (bus.routeName || 'Unassigned'),
+            date: todayStr,
+            startTime: new Date(),
+            tripType: normalizedType,
+            status: 'Active',
+            distanceKm: hasPositiveDistance ? validDistanceKm : 0,
+            distanceSource: hasPositiveDistance ? 'GPS' : 'Unavailable'
+        });
+        console.log(`🚀 [TRIP START] New live ${normalizedType.toUpperCase()} trip log created for Bus ${bus.busNumber} on ${todayStr}`);
+    } else {
+        // Prevent cross-driver contamination if a record belongs to another driver
+        if (
+            verifiedDriverId &&
+            tripLog.driverId &&
+            tripLog.driverId.toString() !== String(verifiedDriverId)
+        ) {
+            return null;
+        }
+        let logChanged = false;
+        if (reachedStops && Array.isArray(reachedStops)) {
+            for (const sName of reachedStops) {
+                const strName = sName.toString().trim();
+                if (strName && !tripLog.reachedStops.some(rs => rs.stopName === strName)) {
+                    tripLog.reachedStops.push({ stopName: strName, reachedTime: new Date() });
+                    logChanged = true;
+                }
+            }
+        }
+        if (validDistanceKm !== null && validDistanceKm > (tripLog.distanceKm || 0)) {
+            tripLog.distanceKm = validDistanceKm;
+            tripLog.distanceSource = 'GPS';
+            logChanged = true;
+        }
+        if (logChanged) {
+            await tripLog.save();
+        }
+    }
+
+    return tripLog;
+}
+
+async function completeActiveTripLog({
+    LiveTripLogModel,
+    busId,
+    todayStr,
+    tripType,
+    distanceKm,
+    verifiedDriverId
+}) {
+    const validDistanceKm = normalizeDistanceKm(distanceKm);
+    const hasExplicitTripType = Boolean(tripType && String(tripType).trim().length > 0);
+    let tripLog = null;
+
+    if (hasExplicitTripType) {
+        const normalizedType = normalizeTripType(tripType);
+        tripLog = await LiveTripLogModel.findOne({
+            busId,
+            date: todayStr,
+            tripType: normalizedType,
+            status: 'Active'
+        });
+    } else {
+        tripLog = await LiveTripLogModel.findOne({
+            busId,
+            date: todayStr,
+            status: 'Active'
+        });
+    }
+    if (!tripLog) return null;
+
+    if (
+        verifiedDriverId &&
+        tripLog.driverId &&
+        tripLog.driverId.toString() !== String(verifiedDriverId)
+    ) {
+        return null;
+    }
+
+    tripLog.endTime = new Date();
+    tripLog.durationMinutes = Math.max(1, Math.round((tripLog.endTime - tripLog.startTime) / 60000));
+    tripLog.status = 'Completed';
+    if (validDistanceKm !== null && validDistanceKm > (tripLog.distanceKm || 0)) {
+        tripLog.distanceKm = validDistanceKm;
+        tripLog.distanceSource = 'GPS';
+    }
+    await tripLog.save();
+    return tripLog;
+}
+
 io.on('connection', (socket) => {
-    console.log('🔌 New Client Connected:', socket.id);
+    console.log('🔌 New Client Connected:', socket.id, socket.user ? `(Authenticated: ${socket.user.role} ${socket.user.id})` : '(Guest/Unauthenticated)');
 
-    // Send initial stats to the newly connected client
-    broadcastStats();
+    // Automatically join dedicated room for managers & admins to receive high-privilege emergency telemetry
+    if (socket.user && (socket.user.role === 'manager' || socket.user.role === 'admin')) {
+        socket.join('managers');
+        console.log(`👑 [AUTH-ROOM] Socket ${socket.id} joined privileged "managers" room`);
+        broadcastStats();
+    }
 
-    socket.on('triggerSOS', async (data) => {
+    // Privileged room subscription handler with strict RBAC verification
+    socket.on('joinManager', (dataOrCallback, maybeCallback) => {
+        const callback = typeof dataOrCallback === 'function' ? dataOrCallback : maybeCallback;
+        if (socket.user && (socket.user.role === 'manager' || socket.user.role === 'admin')) {
+            socket.join('managers');
+            broadcastStats();
+            if (typeof callback === 'function') callback({ success: true, room: 'managers' });
+        } else {
+            console.warn(`🚫 [AUTH-BLOCK] Socket ${socket.id} rejected from joining "managers" room`);
+            socket.emit('error', 'Unauthorized: Manager or Admin privileges required');
+            if (typeof callback === 'function') callback({ success: false, error: 'Unauthorized: Manager or Admin privileges required' });
+        }
+    });
+
+    socket.on('leaveManager', () => {
+        socket.leave('managers');
+    });
+
+    socket.on('triggerSOS', async (data, callback) => {
+        if (isShuttingDown) {
+            console.warn(`🛑 [SHUTDOWN] Rejected triggerSOS from socket ${socket.id} — server shutting down`);
+            if (typeof callback === 'function') callback({ success: false, error: 'SERVER_SHUTTING_DOWN' });
+            return;
+        }
+        operationTracker.begin();
         console.log('🚨 \x1b[31mACTIVE SOS EMERGENCY RECEIVED\x1b[0m:', data);
         
         try {
+            // Strict identity attribution: Authenticated credentials ALWAYS override client payload
+            let verifiedUserId;
+            let verifiedRole;
+            let alertName;
+
+            if (socket.user && socket.user.id) {
+                verifiedUserId = socket.user.id;
+                verifiedRole = socket.user.role || 'user';
+                alertName = socket.user.name || socket.user.username || 'Authenticated Commuter';
+            } else {
+                verifiedUserId = 'guest_' + socket.id;
+                verifiedRole = 'guest'; // NEVER trust client-supplied role for unauthenticated sockets
+                alertName = (data && typeof data.name === 'string' && data.name.trim().length > 0)
+                    ? data.name.trim().slice(0, 50)
+                    : 'Emergency Guest';
+            }
+
+            // Anti-Spam Debounce: Prevent duplicate submissions within cooldown window
+            const now = Date.now();
+            const existingAlert = sosCooldownMap.get(verifiedUserId) || sosCooldownMap.get(socket.id);
+            if (existingAlert && (now - existingAlert.timestamp) < SOS_COOLDOWN_MS) {
+                const secondsRemaining = Math.ceil((SOS_COOLDOWN_MS - (now - existingAlert.timestamp)) / 1000);
+                console.log(`⏱️ [SOS-COOLDOWN] Duplicate SOS from ${alertName} (${verifiedUserId}) within ${Math.round((now - existingAlert.timestamp)/1000)}s. Acknowledging existing alert (${secondsRemaining}s remaining).`);
+                if (typeof callback === 'function') {
+                    callback({
+                        success: true,
+                        alertId: existingAlert.alertId,
+                        deduplicated: true,
+                        cooldownSecondsRemaining: secondsRemaining
+                    });
+                }
+                return;
+            }
+
+            // Coordinate Sanity & Validation: Do NOT default invalid/missing coordinates to misleading (0,0)
+            const { latitude: safeLat, longitude: safeLng, locationAvailable } = parseSosCoordinates(data);
+
+            const safeTimestamp = (data && data.timestamp && !isNaN(Date.parse(data.timestamp)))
+                ? new Date(data.timestamp)
+                : new Date();
+
             const newAlert = new Alert({
-                userId: data.userId || 'unknown',
-                name: data.name || 'Unknown',
-                role: data.role || 'user',
-                latitude: data.latitude || 0,
-                longitude: data.longitude || 0,
-                routeId: data.routeId,
-                routeName: data.routeName,
-                busId: data.busId,
-                timestamp: data.timestamp ? new Date(data.timestamp) : new Date()
+                userId: verifiedUserId,
+                name: alertName,
+                role: verifiedRole,
+                latitude: safeLat,
+                longitude: safeLng,
+                locationAvailable: locationAvailable,
+                routeId: data && data.routeId ? String(data.routeId) : undefined,
+                routeName: data && data.routeName ? String(data.routeName).slice(0, 100) : undefined,
+                busId: data && data.busId ? String(data.busId) : undefined,
+                timestamp: safeTimestamp
             });
 
             await newAlert.save();
-            socket.broadcast.emit('sosAlert', newAlert);
+            const alertPayload = newAlert.toObject ? newAlert.toObject() : { ...newAlert };
+            alertPayload.id = newAlert._id.toString();
+            alertPayload._id = newAlert._id.toString();
+            alertPayload.locationAvailable = locationAvailable;
+            alertPayload.latitude = safeLat;
+            alertPayload.longitude = safeLng;
+            // Data privacy: Strip sensitive authentication attributes
+            delete alertPayload.password;
+            delete alertPayload.token;
+
+            // Cache in cooldown map
+            sosCooldownMap.set(verifiedUserId, { timestamp: now, alertId: newAlert._id, alertPayload });
+            if (socket.id) {
+                sosCooldownMap.set(socket.id, { timestamp: now, alertId: newAlert._id, alertPayload });
+            }
+
+            // Restrict SOS alert telemetry to authorized managers/admins room only
+            emitSensitiveSosAlert(io, alertPayload);
+
+            // Also emit system notification so managers/admins have it in notifications feed
+            try {
+                if (mongoose.connection.readyState === 1) {
+                    const coordsText = locationAvailable
+                        ? `Coordinates: ${safeLat.toFixed(4)}, ${safeLng.toFixed(4)}`
+                        : `Coordinates: Location Unavailable (GPS offline or pending)`;
+
+                    const emergencyNotif = new Notification({
+                        title: `🚨 EMERGENCY SOS: ${alertName}`,
+                        message: `SOS alert triggered by ${alertName} (${verifiedRole.toUpperCase()})${data && data.busId ? ` on Bus ${data.busNumber || data.busId}` : ''}. ${coordsText}`,
+                        type: 'emergency',
+                        priority: 'urgent',
+                        targetAudience: 'Admins',
+                        createdAt: new Date()
+                    });
+                    await emergencyNotif.save();
+                    const notifPayload = emergencyNotif.toObject ? emergencyNotif.toObject() : { ...emergencyNotif };
+                    notifPayload.id = emergencyNotif._id.toString();
+                    notifPayload._id = emergencyNotif._id.toString();
+                    emitEmergencySosNotification(io, notifPayload);
+                }
+            } catch (notifErr) {
+                console.error('⚠️ [SOS] Failed to save emergency notification:', notifErr.message);
+            }
+
+            // Push FCM to Managers and Admins (STRICTLY GUARDED: Mocked in test / staging / disabled mode)
+            try {
+                if (!areExternalNotificationsSuppressed(process.env) && admin.apps.length > 0 && mongoose.connection.readyState === 1) {
+                    const managers = await Manager.find({ fcmToken: { $exists: true, $ne: null } }).select('fcmToken');
+                    const admins = await Admin.find({ fcmToken: { $exists: true, $ne: null } }).select('fcmToken');
+                    const tokens = [...managers, ...admins].map(m => m.fcmToken).filter(t => t && t.length > 10);
+                    if (tokens.length > 0) {
+                        const fcmResult = await dispatchFcmMulticast({
+                            notification: {
+                                title: `🚨 EMERGENCY SOS ALERT`,
+                                body: `${alertName} triggered an emergency SOS alert!`
+                            },
+                            android: {
+                                priority: 'high',
+                                notification: {
+                                    channelId: 'SISTecChalo_pulse_alerts',
+                                    color: '#FF2E63',
+                                    sound: 'default'
+                                }
+                            },
+                            tokens: tokens
+                        });
+                        if (!fcmResult.suppressed) {
+                            console.log(`🔥 [Firebase] Sent SOS push notifications to ${tokens.length} managers/admins.`);
+                        }
+                    }
+                }
+            } catch (fcmErr) {
+                console.error('⚠️ [Firebase] Failed to send manager SOS push:', fcmErr.message);
+            }
+
+            if (typeof callback === 'function') callback({ success: true, alertId: newAlert._id });
         } catch (err) {
             console.error('Failed to save SOS alert:', err);
-            // Fallback: emit without saving if DB fails
-            socket.broadcast.emit('sosAlert', data);
+            // Fallback: emit sanitized alert without crashing if DB fails, preserving location availability
+            const { latitude: safeLat, longitude: safeLng, locationAvailable } = parseSosCoordinates(data);
+            const fallbackPayload = {
+                id: 'fallback_' + Date.now(),
+                userId: socket.user?.id || 'guest',
+                name: socket.user?.name || socket.user?.username || 'Emergency User',
+                role: socket.user?.role || 'guest',
+                latitude: safeLat,
+                longitude: safeLng,
+                locationAvailable,
+                timestamp: new Date().toISOString()
+            };
+            emitSensitiveSosAlert(io, fallbackPayload);
+            if (typeof callback === 'function') callback({ success: false, error: err.message });
+        } finally {
+            operationTracker.end();
         }
     });
 
@@ -3732,64 +5277,174 @@ io.on('connection', (socket) => {
     });
 
     socket.on('locationUpdate', async (data) => {
-        const incomingBusId = (data.busId || data.id || data._id || '').toString();
-        
-        try {
-            if (!incomingBusId) return;
+        if (isShuttingDown) {
+            socket.emit('telemetryRejected', {
+                code: 'SERVER_SHUTTING_DOWN',
+                message: 'Server is restarting for deployment. Telemetry rejected.',
+                retryAfterMs: 2500
+            });
+            return;
+        }
 
+        // STRICT DRIVER AUTHENTICATION: Never trust client-supplied driverId or role
+        if (!socket.user) {
+            console.warn(`🚫 [AUTH-BLOCK] Unauthenticated socket ${socket.id} attempted locationUpdate`);
+            return;
+        }
+
+        if (socket.user.role !== 'driver' && socket.user.role !== 'manager' && socket.user.role !== 'admin') {
+            console.warn(`🚫 [AUTH-BLOCK] Unauthorized role "${socket.user.role}" attempted locationUpdate`);
+            return;
+        }
+
+        const incomingBusId = (data.busId || data.id || data._id || '').toString();
+        if (!incomingBusId) return;
+
+        operationTracker.begin();
+        try {
             let bus = await Bus.findById(incomingBusId);
             
             // SECURITY BLOCK: If the ID is from an old simulation, reject it.
             if (!bus) {
-                if (data.driverId) bus = await Bus.findOne({ driverId: data.driverId });
+                if (socket.user.role === 'driver') {
+                    const driverDoc = await Driver.findById(socket.user.id).select('assignedBus status');
+                    if (driverDoc && driverDoc.assignedBus) {
+                        bus = await Bus.findById(driverDoc.assignedBus);
+                    }
+                }
                 if (!bus) {
                     process.stdout.write('🚫 [SIM-BLOCK] Rejected Old/Simulation BusID: ' + incomingBusId + '\r');
                     return;
                 }
             }
 
-            const lat = data.latitude !== undefined ? Number(data.latitude) : (data.currentLat !== undefined ? Number(data.currentLat) : bus.currentLat);
-            const lng = data.longitude !== undefined ? Number(data.longitude) : (data.currentLng !== undefined ? Number(data.currentLng) : bus.currentLng);
-            const speed = data.speed !== undefined ? Number(data.speed) : (bus.speed || 0);
-            const heading = data.heading !== undefined ? Number(data.heading) : (bus.heading || 0);
+            // Derive driver ID strictly from verified socket.user, NEVER from client-supplied data.driverId
+            const verifiedDriverId = socket.user.id;
+
+            // Validate Driver Authorization and Account Status
+            if (socket.user.role === 'driver') {
+                const driver = await Driver.findById(verifiedDriverId).select('status assignedBus username name');
+                if (!driver || driver.status === 'Suspended') {
+                    return; // Reject telemetry from non-existent or suspended drivers
+                }
+                const driverUsername = (driver.username || socket.user.username || '');
+                const driverUsernameDigits = driverUsername.replace(/[^0-9]/g, '');
+                const busDigits = (bus.busNumber || '').replace(/[^0-9]/g, '');
+                const isUsernameMatch = Boolean(driverUsernameDigits && busDigits && driverUsernameDigits === busDigits);
+
+                const isAssigned = (driver.assignedBus && driver.assignedBus.toString() === bus._id.toString()) ||
+                                   (bus.driverId && bus.driverId.toString() === verifiedDriverId) ||
+                                   isUsernameMatch;
+                if (!isAssigned) {
+                    console.warn(`🚫 [AUTH-BLOCK] Driver ${verifiedDriverId} attempted update for unassigned bus ${bus.busNumber}`);
+                    return; // Reject telemetry from driver not assigned to this bus
+                }
+            }
+
+            const rawLat = (data.latitude !== undefined && data.latitude !== null) ? Number(data.latitude) : ((data.currentLat !== undefined && data.currentLat !== null) ? Number(data.currentLat) : bus.currentLat);
+            const rawLng = (data.longitude !== undefined && data.longitude !== null) ? Number(data.longitude) : ((data.currentLng !== undefined && data.currentLng !== null) ? Number(data.currentLng) : bus.currentLng);
+            const rawSpeed = data.speed !== undefined ? Number(data.speed) : (bus.speed || 0);
+            const rawHeading = data.heading !== undefined ? Number(data.heading) : (bus.heading || 0);
+
+            // Strict Coordinate Sanity Validation: Reject NaN, Null, and out-of-range coordinates
+            if (rawLat === null || rawLat === undefined || isNaN(rawLat) || rawLat < -90 || rawLat > 90 ||
+                rawLng === null || rawLng === undefined || isNaN(rawLng) || rawLng < -180 || rawLng > 180) {
+                return; // Discard malformed coordinate packet
+            }
+
+            // Reject uninitialized Null Island (0,0) coordinates
+            if (rawLat === 0 && rawLng === 0) {
+                return;
+            }
+
+            // Timestamp parsing & out-of-order rejection
+            const incomingTimestamp = data.timestamp ? new Date(data.timestamp) : new Date();
+            const validPacketTime = !isNaN(incomingTimestamp.getTime()) ? incomingTimestamp : new Date();
+
+            // Reject anomalous packets timestamped > 60s in future
+            if (validPacketTime.getTime() > Date.now() + 60000) {
+                return;
+            }
+
+            // Monotonicity check: Reject stale out-of-order packet if older than last recorded update by > 3s
+            if (bus.lastUpdated && validPacketTime.getTime() < (new Date(bus.lastUpdated).getTime() - 3000)) {
+                return;
+            }
+
+            // Teleportation / Plausible Jump Filter:
+            // Max plausible vehicle speed 130 km/h with 350m GPS multipath buffer
+            if (bus.currentLat && bus.currentLng && bus.lastUpdated && !(bus.currentLat === 0 && bus.currentLng === 0)) {
+                const timeDeltaSec = (validPacketTime.getTime() - new Date(bus.lastUpdated).getTime()) / 1000;
+                if (timeDeltaSec > 0.5 && timeDeltaSec < 120) {
+                    const R = 6371;
+                    const dLat = (rawLat - bus.currentLat) * Math.PI / 180;
+                    const dLon = (rawLng - bus.currentLng) * Math.PI / 180;
+                    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                              Math.cos(bus.currentLat * Math.PI / 180) * Math.cos(rawLat * Math.PI / 180) *
+                              Math.sin(dLon / 2) * Math.sin(dLon / 2);
+                    const jumpDistKm = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+                    const impliedKmh = (jumpDistKm / timeDeltaSec) * 3600;
+                    if (jumpDistKm > 0.35 && impliedKmh > 130) {
+                        return; // Discard teleportation / GPS multipath jump
+                    }
+                }
+            }
+
+            const lat = rawLat;
+            const lng = rawLng;
+            const speed = Math.max(0, Math.min(140, isNaN(rawSpeed) ? 0 : rawSpeed));
+            const heading = Math.max(0, Math.min(360, isNaN(rawHeading) ? 0 : rawHeading));
 
             const gpsAccuracy = data.gpsAccuracy !== undefined ? Number(data.gpsAccuracy) : null;
 
             process.stdout.write(`📍 [LIVE] Bus: ${bus.busNumber} | Lat: ${lat.toFixed(5)} | Lng: ${lng.toFixed(5)} | Speed: ${speed.toFixed(1)} KM/H${gpsAccuracy != null ? ` | GPS: ±${gpsAccuracy.toFixed(0)}m` : ''}\r`);
 
             // ── DUAL TRIP DIRECTION: 'pickup' (Stop -> College) vs 'dropoff' (College -> Stop) ──
-            const tripType = (data.tripType === 'dropoff' || data.tripType === 'evening') ? 'dropoff' : 'pickup';
+            const tripType = normalizeTripType(data.tripType);
             bus.tripType = tripType;
 
-            // ── LIVE TRIP LOG: Auto-create today's trip if not exists ──────────────
+            // ── LIVE TRIP LOG: Auto-create or sync today's trip scoped by tripType ──────────────
             const todayStr = new Date().toISOString().split('T')[0];
-            let tripLog = await LiveTripLog.findOne({ busId: bus._id.toString(), date: todayStr, status: 'Active' });
-            if (!tripLog) {
-                // Get driver name
-                const driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() }).select('name');
-                const driverNameLive = driverDoc ? driverDoc.name : 'Unassigned';
-                tripLog = await LiveTripLog.create({
-                    busId:      bus._id.toString(),
-                    busNumber:  bus.busNumber || 'N/A',
-                    busName:    bus.name || bus.busNumber,
-                    driverName: driverNameLive,
-                    routeName:  bus.routeName || 'Unassigned',
-                    date:       todayStr,
-                    startTime:  new Date(),
-                    tripType:   tripType,
-                    status:     'Active'
-                });
-                console.log(`🚀 [TRIP START] New live ${tripType.toUpperCase()} trip log created for Bus ${bus.busNumber} on ${todayStr}`);
-            }
+            const tripLog = await syncActiveTripLogForTelemetry({
+                LiveTripLogModel: LiveTripLog,
+                bus,
+                todayStr,
+                tripType,
+                distanceKm: data.distanceKm,
+                reachedStops: data.reachedStops,
+                verifiedDriverId: socket.user.role === 'driver' ? verifiedDriverId : null,
+                resolveSnapshots: async () => {
+                    let driverDoc = socket.user.role === 'driver'
+                        ? await Driver.findById(verifiedDriverId)
+                        : (bus.driverId ? await Driver.findById(bus.driverId) : null);
+                    if (!driverDoc && bus.driverId) {
+                        driverDoc = await Driver.findById(bus.driverId);
+                    }
+                    if (!driverDoc) {
+                        driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() });
+                    }
+                    const driverNameLive = driverDoc ? (driverDoc.name || driverDoc.username) : 'Unassigned';
+                    const driverPhoneLive = driverDoc ? (driverDoc.phone || driverDoc.contactNumber || 'N/A') : 'N/A';
+                    const routeDoc = bus.routeId ? await Route.findById(bus.routeId) : null;
+                    const routeNameLive = routeDoc ? routeDoc.name : (bus.routeName || 'Unassigned');
+                    return {
+                        driverId: driverDoc ? driverDoc._id : null,
+                        driverName: driverNameLive,
+                        driverPhone: driverPhoneLive,
+                        routeId: routeDoc ? routeDoc._id : null,
+                        routeName: routeNameLive
+                    };
+                }
+            });
 
-            // Update Route & Identity if sent by driver cockpit
+            // Update Route & Identity if sent by driver cockpit (prevent arbitrary overwriting if busNumber already set)
             if (data.routeId && data.routeId.toString().length > 5) {
                 bus.routeId = data.routeId.toString();
             }
             if (data.routeName && data.routeName.trim().length > 0) {
                 bus.routeName = data.routeName.trim();
             }
-            if (data.busNumber && data.busNumber.trim().length > 0 && data.busNumber !== 'N/A') {
+            if ((!bus.busNumber || bus.busNumber === 'N/A') && data.busNumber && data.busNumber.trim().length > 0 && data.busNumber !== 'N/A') {
                 bus.busNumber = data.busNumber.trim();
             }
 
@@ -3798,11 +5453,9 @@ io.on('connection', (socket) => {
             bus.currentLng = lng;
             bus.speed = speed;
             bus.heading = heading;
-            bus.lastUpdated = new Date();
-            // If the driver is broadcasting location, the shuttle is live and operational
-            bus.status = (data.status && data.status.toLowerCase() !== 'offline')
-                ? data.status
-                : (bus.status === 'Delayed' ? 'Delayed' : 'On-time');
+            bus.lastUpdated = validPacketTime;
+            // Preserve an existing Delayed status unless explicitly overridden
+            bus.status = resolveBusTelemetryStatus(bus.status, data.status, Boolean(data.explicitStatusOverride));
 
             if (data.reachedStops && Array.isArray(data.reachedStops)) {
                 bus.reachedStops = data.reachedStops.map(s => s.toString());
@@ -3838,7 +5491,7 @@ io.on('connection', (socket) => {
                             // ── TARGETED FCM PUSH NOTIFICATIONS (Custom Geofence Radius) ──
                             if (distanceKm <= 3.0 && currentStopName) {
                                 (async () => {
-                                    if (admin.apps.length > 0) {
+                                    if (!areExternalNotificationsSuppressed(process.env) && admin.apps.length > 0) {
                                         try {
                                             const targetUsers = await User.find({
                                                 routeId: bus.routeId ? bus.routeId.toString() : null,
@@ -3878,11 +5531,13 @@ io.on('connection', (socket) => {
                                                     },
                                                     tokens: tokens
                                                 };
-                                                const response = await admin.messaging().sendEachForMulticast(messagePayload);
-                                                console.log(`🔥 [Firebase] Sent custom proximity push notification to ${response.successCount} users.`);
+                                                const response = await dispatchFcmMulticast(messagePayload);
+                                                if (!response.suppressed) {
+                                                    console.log(`🔥 [Firebase] Sent custom proximity push notification to ${response.successCount} users.`);
+                                                }
                                                 
                                                 // Clean up invalid tokens
-                                                response.responses.forEach((resp, idx) => {
+                                                (response.responses || []).forEach((resp, idx) => {
                                                     if (!resp.success) {
                                                         const error = resp.error;
                                                         if (error && (error.code === 'messaging/invalid-registration-token' || error.code === 'messaging/registration-token-not-registered')) {
@@ -3907,19 +5562,26 @@ io.on('connection', (socket) => {
 
                                 if (now - lastNotified > COOLDOWN_MS) {
                                     busGeofenceState[bus._id][currentStopName] = now;
-                                    io.emit('busApproachingStop', {
-                                        busId: bus._id.toString(),
+                                    const approachPayload = buildBusApproachingStopPayload({
+                                        bus,
                                         stopName: currentStopName,
+                                        distanceKm,
                                         minutes: stopMinutes
                                     });
+                                    io.emit('busApproachingStop', approachPayload);
+                                    if (approachPayload.routeId) {
+                                        io.to(`route_${approachPayload.routeId}`).emit('busApproachingStop', approachPayload);
+                                    }
                                     console.log(`🔔 [GEOFENCE] Bus ${bus.busNumber} reached stop: ${currentStopName}`);
 
                                     // ── LIVE TRIP LOG: Record actual stop-reached time ──
-                                    const alreadyRecorded = tripLog.reachedStops.some(rs => rs.stopName === currentStopName);
-                                    if (!alreadyRecorded) {
-                                        tripLog.reachedStops.push({ stopName: currentStopName, reachedTime: new Date() });
-                                        await tripLog.save();
-                                        console.log(`✅ [TRIP LOG] Recorded: Bus ${bus.busNumber} → Stop "${currentStopName}" at ${new Date().toLocaleTimeString()}`);
+                                    if (tripLog && Array.isArray(tripLog.reachedStops)) {
+                                        const alreadyRecorded = tripLog.reachedStops.some(rs => rs.stopName === currentStopName);
+                                        if (!alreadyRecorded) {
+                                            tripLog.reachedStops.push({ stopName: currentStopName, reachedTime: new Date() });
+                                            await tripLog.save();
+                                            console.log(`✅ [TRIP LOG] Recorded: Bus ${bus.busNumber} → Stop "${currentStopName}" at ${new Date().toLocaleTimeString()}`);
+                                        }
                                     }
                                 }
                             }
@@ -3957,6 +5619,7 @@ io.on('connection', (socket) => {
             const busPayload = bus.toObject ? bus.toObject() : { ...bus };
             busPayload.id = bus._id.toString();
             busPayload._id = bus._id.toString();
+            busPayload.busId = bus._id.toString();
             busPayload.currentLat = lat;
             busPayload.currentLng = lng;
             busPayload.latitude = lat;
@@ -3975,7 +5638,8 @@ io.on('connection', (socket) => {
             busPayload.completedStops = bus.completedStops || (bus.reachedStops ? bus.reachedStops.length : 0);
             busPayload.etas = etas;
             busPayload.gpsAccuracy = gpsAccuracy;
-            busPayload.lastUpdated = bus.lastUpdated;
+            busPayload.lastUpdated = validPacketTime;
+            busPayload.timestamp = validPacketTime.toISOString();
 
             io.emit('busLocationUpdate', busPayload);
             io.emit('locationUpdate', busPayload);
@@ -3986,13 +5650,46 @@ io.on('connection', (socket) => {
 
         } catch (err) {
             console.error('❌ [TRACKING ERROR]:', err.message);
+        } finally {
+            operationTracker.end();
         }
     });
 
     // Driver signals end of trip or stops broadcast
     const handleTripEndOrStopBroadcast = async (data) => {
+        if (isShuttingDown) return;
+        operationTracker.begin();
         try {
+            // STRICT DRIVER AUTHENTICATION: Never trust client-supplied driverId or role
+            if (!socket.user) {
+                console.warn(`🚫 [AUTH-BLOCK] Unauthenticated socket ${socket.id} attempted tripEnd`);
+                return;
+            }
+
+            if (socket.user.role !== 'driver' && socket.user.role !== 'manager' && socket.user.role !== 'admin') {
+                console.warn(`🚫 [AUTH-BLOCK] Unauthorized role "${socket.user.role}" attempted tripEnd`);
+                return;
+            }
+
             const busId = (data.busId || data.id || data._id || '').toString();
+            if (!busId) return;
+
+            if (socket.user.role === 'driver') {
+                const driver = await Driver.findById(socket.user.id).select('status assignedBus username name');
+                if (!driver || driver.status === 'Suspended') return;
+                const busDoc = await Bus.findById(busId).select('busNumber driverId');
+                const driverUsername = (driver.username || socket.user.username || '');
+                const driverDigits = driverUsername.replace(/[^0-9]/g, '');
+                const busDigits = (busDoc?.busNumber || '').replace(/[^0-9]/g, '');
+                const isUsernameMatch = Boolean(driverDigits && busDigits && driverDigits === busDigits);
+                const isAssigned = (driver.assignedBus && driver.assignedBus.toString() === busId) ||
+                                   (busDoc?.driverId && busDoc.driverId.toString() === socket.user.id) ||
+                                   isUsernameMatch;
+                if (!isAssigned) {
+                    console.warn(`🚫 [AUTH-BLOCK] Driver ${socket.user.id} cannot terminate unassigned bus ${busId}`);
+                    return;
+                }
+            }
             if (busId) {
                 const bus = await Bus.findByIdAndUpdate(
                     busId, 
@@ -4023,20 +5720,271 @@ io.on('connection', (socket) => {
                 console.log(`🏁 [TRIP END / STOP BROADCAST] Bus ${busId} marked Offline`);
             }
             const todayStr = new Date().toISOString().split('T')[0];
-            const tripLog = await LiveTripLog.findOne({ busId, date: todayStr, status: 'Active' });
+            const tripLog = await completeActiveTripLog({
+                LiveTripLogModel: LiveTripLog,
+                busId,
+                todayStr,
+                tripType: data ? data.tripType : undefined,
+                distanceKm: data ? data.distanceKm : undefined,
+                verifiedDriverId: socket.user.role === 'driver' ? socket.user.id : null
+            });
             if (tripLog) {
-                tripLog.endTime = new Date();
-                tripLog.status = 'Completed';
-                await tripLog.save();
+                io.emit('tripCompleted', {
+                    tripId: tripLog._id,
+                    busId,
+                    tripType: tripLog.tripType,
+                    distanceKm: tripLog.distanceKm,
+                    durationMinutes: tripLog.durationMinutes,
+                    endTime: tripLog.endTime,
+                    status: 'Completed'
+                });
             }
         } catch (err) {
             console.error('❌ [TRIP END ERROR]:', err.message);
+        } finally {
+            operationTracker.end();
         }
     };
 
+    const handleTripStart = async (data) => {
+        if (isShuttingDown) return;
+        operationTracker.begin();
+        try {
+            if (!socket.user) return;
+            if (socket.user.role !== 'driver' && socket.user.role !== 'manager' && socket.user.role !== 'admin') return;
+
+            const busId = (data.busId || data.id || data._id || '').toString();
+            if (!busId) return;
+
+            const bus = await Bus.findById(busId);
+            if (!bus) return;
+
+            const authCheck = await verifyDriverBusAuthorization({
+                socketUser: socket.user,
+                bus,
+                busId,
+                DriverModel: Driver
+            });
+            if (!authCheck.authorized) {
+                console.warn(`🚫 [AUTH-BLOCK] Socket user ${socket.user.id} cannot start trip for bus ${busId} (${authCheck.reason})`);
+                return;
+            }
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const tripType = normalizeTripType(data.tripType);
+            const verifiedDriverId = socket.user.role === 'driver' ? socket.user.id : null;
+
+            const startResult = await startOrResumeTripLog({
+                LiveTripLogModel: LiveTripLog,
+                bus,
+                todayStr,
+                tripType,
+                distanceKm: data ? data.distanceKm : undefined,
+                verifiedDriverId,
+                resolveSnapshots: async () => {
+                    let driverDoc = authCheck.driverDoc || (bus.driverId ? await Driver.findById(bus.driverId) : null);
+                    if (!driverDoc) {
+                        driverDoc = await Driver.findOne({ assignedBus: bus._id.toString() });
+                    }
+                    const driverName = driverDoc ? (driverDoc.name || driverDoc.username) : 'Unassigned';
+                    const driverPhone = driverDoc ? (driverDoc.phone || driverDoc.contactNumber || 'N/A') : 'N/A';
+                    const routeDoc = bus.routeId ? await Route.findById(bus.routeId) : null;
+                    const routeName = routeDoc ? routeDoc.name : (bus.routeName || 'Unassigned');
+                    return {
+                        driverId: driverDoc ? driverDoc._id : null,
+                        driverName,
+                        driverPhone,
+                        routeId: routeDoc ? routeDoc._id : null,
+                        routeName
+                    };
+                }
+            });
+
+            if (!startResult.tripLog) {
+                console.warn(`🚫 [TRIP START CONFLICT] Rejected tripStart for Bus ${bus.busNumber} (${startResult.conflict})`);
+                return;
+            }
+
+            const { tripLog, isResumed } = startResult;
+            if (isResumed) {
+                console.log(`⚠️ [TRIP START GUARD] Trip already active for Bus ${bus.busNumber} (${tripType}) on ${todayStr} (ID: ${tripLog._id})`);
+                socket.emit('tripStarted', {
+                    success: true,
+                    tripId: tripLog._id,
+                    busId: bus._id.toString(),
+                    tripType,
+                    status: 'Active',
+                    isResumed: true
+                });
+                return;
+            }
+
+            bus.status = resolveBusTelemetryStatus(bus.status, 'On-time', false);
+            bus.tripType = tripType;
+            await bus.save();
+
+            socket.emit('tripStarted', {
+                success: true,
+                tripId: tripLog._id,
+                busId: bus._id.toString(),
+                tripType,
+                status: 'Active',
+                isResumed: false
+            });
+            io.emit('tripStarted', {
+                tripId: tripLog._id,
+                busId: bus._id.toString(),
+                busNumber: bus.busNumber,
+                tripType,
+                status: 'Active',
+                startTime: tripLog.startTime
+            });
+        } catch (err) {
+            console.error('❌ [TRIP START ERROR]:', err.message);
+        } finally {
+            operationTracker.end();
+        }
+    };
+
+    const handleTripCancel = async (data) => {
+        if (isShuttingDown) return;
+        operationTracker.begin();
+        try {
+            if (!socket.user) return;
+            if (socket.user.role !== 'driver' && socket.user.role !== 'manager' && socket.user.role !== 'admin') return;
+
+            const busId = (data.busId || data.id || data._id || '').toString();
+            if (!busId) return;
+
+            if (socket.user.role === 'driver') {
+                const busDoc = await Bus.findById(busId).select('busNumber driverId');
+                const authCheck = await verifyDriverBusAuthorization({
+                    socketUser: socket.user,
+                    bus: busDoc,
+                    busId,
+                    DriverModel: Driver
+                });
+                if (!authCheck.authorized) {
+                    console.warn(`🚫 [AUTH-BLOCK] Driver ${socket.user.id} cannot cancel unassigned bus ${busId}`);
+                    return;
+                }
+            }
+
+            const bus = await Bus.findByIdAndUpdate(
+                busId,
+                { status: 'Offline', speed: 0, etas: [], reachedStops: [], completedStops: 0, nextStop: '', lastUpdated: new Date() },
+                { new: true }
+            );
+
+            const cancelPayload = {
+                id: busId,
+                _id: busId,
+                busId: busId,
+                busNumber: bus ? bus.busNumber : undefined,
+                status: 'Offline',
+                speed: 0,
+                etas: [],
+                reachedStops: [],
+                completedStops: 0,
+                nextStop: '',
+                lastUpdated: new Date(),
+                isCancelled: true
+            };
+
+            io.emit('busLocationUpdate', cancelPayload);
+            io.emit('locationUpdate', cancelPayload);
+            io.emit('busUpdated', cancelPayload);
+            io.emit('tripCancelled', { busId, reason: data.reason || 'Trip cancelled by driver' });
+
+            const todayStr = new Date().toISOString().split('T')[0];
+            const tripQuery = { busId, date: todayStr, status: 'Active' };
+            if (data && data.tripType && String(data.tripType).trim().length > 0) {
+                tripQuery.tripType = normalizeTripType(data.tripType);
+            }
+            const tripLog = await LiveTripLog.findOne(tripQuery);
+            if (tripLog) {
+                tripLog.endTime = new Date();
+                tripLog.durationMinutes = Math.max(1, Math.round((tripLog.endTime - tripLog.startTime) / 60000));
+                tripLog.status = 'Cancelled';
+                tripLog.cancellationReason = data.reason || 'Trip cancelled by driver';
+                await tripLog.save();
+                io.emit('tripCancelled', {
+                    tripId: tripLog._id,
+                    busId,
+                    tripType: tripLog.tripType,
+                    reason: tripLog.cancellationReason,
+                    endTime: tripLog.endTime,
+                    status: 'Cancelled'
+                });
+            }
+        } catch (err) {
+            console.error('❌ [TRIP CANCEL ERROR]:', err.message);
+        } finally {
+            operationTracker.end();
+        }
+    };
+
+    const handleTripFail = async (data) => {
+        if (isShuttingDown) return;
+        operationTracker.begin();
+        try {
+            if (!socket.user) return;
+            if (socket.user.role !== 'driver' && socket.user.role !== 'manager' && socket.user.role !== 'admin') return;
+
+            const busId = (data.busId || data.id || data._id || '').toString();
+            if (!busId) return;
+
+            if (socket.user.role === 'driver') {
+                const busDoc = await Bus.findById(busId).select('busNumber driverId');
+                const authCheck = await verifyDriverBusAuthorization({
+                    socketUser: socket.user,
+                    bus: busDoc,
+                    busId,
+                    DriverModel: Driver
+                });
+                if (!authCheck.authorized) {
+                    console.warn(`🚫 [AUTH-BLOCK] Driver ${socket.user.id} cannot mark unassigned bus ${busId} failed`);
+                    return;
+                }
+            }
+
+            await Bus.findByIdAndUpdate(busId, { status: 'Offline', speed: 0, lastUpdated: new Date() });
+            const todayStr = new Date().toISOString().split('T')[0];
+            const tripQuery = { busId, date: todayStr, status: 'Active' };
+            if (data && data.tripType && String(data.tripType).trim().length > 0) {
+                tripQuery.tripType = normalizeTripType(data.tripType);
+            }
+            const tripLog = await LiveTripLog.findOne(tripQuery);
+            if (tripLog) {
+                tripLog.endTime = new Date();
+                tripLog.durationMinutes = Math.max(1, Math.round((tripLog.endTime - tripLog.startTime) / 60000));
+                tripLog.status = 'Failed';
+                tripLog.cancellationReason = data.reason || 'Vehicle breakdown / mechanical failure';
+                await tripLog.save();
+                io.emit('tripFailed', {
+                    tripId: tripLog._id,
+                    busId,
+                    reason: tripLog.cancellationReason,
+                    endTime: tripLog.endTime,
+                    status: 'Failed'
+                });
+            }
+        } catch (err) {
+            console.error('❌ [TRIP FAIL ERROR]:', err.message);
+        } finally {
+            operationTracker.end();
+        }
+    };
+
+    socket.on('startTrip', handleTripStart);
+    socket.on('startBroadcast', handleTripStart);
     socket.on('tripEnd', handleTripEndOrStopBroadcast);
     socket.on('stopBroadcast', handleTripEndOrStopBroadcast);
     socket.on('stopTrip', handleTripEndOrStopBroadcast);
+    socket.on('cancelTrip', handleTripCancel);
+    socket.on('tripCancelled', handleTripCancel);
+    socket.on('failTrip', handleTripFail);
+    socket.on('tripFailed', handleTripFail);
     socket.on('ping', () => socket.emit('pong'));
     socket.on('disconnect', () => { console.log('Client disconnected'); });
 });
@@ -4044,7 +5992,7 @@ io.on('connection', (socket) => {
 
 
 // --- SEED DATABASE ROUTE ---
-app.post('/api/manager/seed', async (req, res) => {
+app.post('/api/manager/seed', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         console.log('🌱 [Manager API] Seeding real routes and buses from seed_real_routes...');
         const { seed: seedRealRoutes } = require('./seed_real_routes');
@@ -4059,7 +6007,7 @@ app.post('/api/manager/seed', async (req, res) => {
 });
 
 // --- GEOCODE ALL STOPS API ROUTE ---
-app.post('/api/manager/geocode-stops', async (req, res) => {
+app.post('/api/manager/geocode-stops', authMiddleware, adminMiddleware, async (req, res) => {
     try {
         console.log('📍 [Manager API] Triggering stop geocoding...');
         const { geocodeAllStops } = require('./geocode_stops');
@@ -4091,7 +6039,7 @@ const {
  * Extracts routes, bus numbers, timings, drivers, and stops with coordinates WITHOUT saving to DB.
  * Allows the manager to review and make edits in the UI before deployment.
  */
-app.post('/api/manager/preview-timetable', optionalAuth, uploadTimetable.single('file'), async (req, res) => {
+app.post('/api/manager/preview-timetable', authMiddleware, managerMiddleware, uploadTimetable.single('file'), async (req, res) => {
     try {
         console.log('🔍 [Timetable Engine] Generating pre-flight timetable preview...');
         const buffer = req.file ? req.file.buffer : null;
@@ -4110,7 +6058,7 @@ app.post('/api/manager/preview-timetable', optionalAuth, uploadTimetable.single(
  * Commits the finalized (and optionally edited) roster directly into MongoDB.
  * Updates Routes, Buses, Driver assignments, and broadcasts live WebSocket events to all apps.
  */
-app.post('/api/manager/apply-timetable', optionalAuth, async (req, res) => {
+app.post('/api/manager/apply-timetable', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const routesToApply = req.body && Array.isArray(req.body.routes) ? req.body.routes : [];
         if (routesToApply.length === 0) {
@@ -4125,6 +6073,7 @@ app.post('/api/manager/apply-timetable', optionalAuth, async (req, res) => {
         io.emit('routesUpdated', synced);
         io.emit('busesUpdated');
         io.emit('timetableUpdated', { count: synced.length, timestamp: new Date() });
+        broadcastStats();
 
         res.json({
             success: true,
@@ -4142,7 +6091,7 @@ app.post('/api/manager/apply-timetable', optionalAuth, async (req, res) => {
  * POST /api/manager/upload-timetable
  * Direct upload & sync fallback.
  */
-app.post('/api/manager/upload-timetable', optionalAuth, uploadTimetable.single('file'), async (req, res) => {
+app.post('/api/manager/upload-timetable', authMiddleware, managerMiddleware, uploadTimetable.single('file'), async (req, res) => {
     try {
         console.log('📥 [Timetable Engine] Received timetable sync request...');
         let rosterEntries = [];
@@ -4175,6 +6124,7 @@ app.post('/api/manager/upload-timetable', optionalAuth, uploadTimetable.single('
             console.log('ℹ️ No file uploaded; falling back to official institutional Ratibad 9:00 AM roster.');
             const synced = await syncOfficialRatibadRoster(io);
             invalidateRoutesCache();
+            broadcastStats();
             return res.json({
                 success: true,
                 count: synced.length,
@@ -4194,6 +6144,7 @@ app.post('/api/manager/upload-timetable', optionalAuth, uploadTimetable.single('
         io.emit('routesUpdated', synced);
         io.emit('busesUpdated');
         io.emit('timetableUpdated', { count: synced.length, timestamp: new Date() });
+        broadcastStats();
 
         res.json({
             success: true,
@@ -4211,7 +6162,7 @@ app.post('/api/manager/upload-timetable', optionalAuth, uploadTimetable.single('
  * POST /api/manager/sync-official-timetable
  * Instant 1-tap synchronization of the official institutional Ratibad 9:00 AM timetable (37 Buses).
  */
-app.post('/api/manager/sync-official-timetable', optionalAuth, async (req, res) => {
+app.post('/api/manager/sync-official-timetable', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         console.log('🔄 [Manager API] 1-Tap Official Ratibad Roster Sync initiated...');
         const synced = await syncOfficialRatibadRoster(io);
@@ -4220,6 +6171,7 @@ app.post('/api/manager/sync-official-timetable', optionalAuth, async (req, res) 
         io.emit('routesUpdated', synced);
         io.emit('busesUpdated');
         io.emit('timetableUpdated', { count: synced.length, timestamp: new Date() });
+        broadcastStats();
 
         res.json({
             success: true,
@@ -4234,7 +6186,7 @@ app.post('/api/manager/sync-official-timetable', optionalAuth, async (req, res) 
 });
 
 // --- UPDATE ROUTE STOPS & AUTOMATIC GEOCODING ---
-app.put('/api/routes/:id/stops', authMiddleware, async (req, res) => {
+app.put('/api/routes/:id/stops', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { stops } = req.body;
         if (!Array.isArray(stops)) {
@@ -4372,7 +6324,7 @@ app.get('/api/schedule', async (req, res) => {
     }
 });
 
-app.post('/api/schedule', authMiddleware, async (req, res) => {
+app.post('/api/schedule', authMiddleware, managerMiddleware, async (req, res) => {
     const { routeId, routeName, stopName, times, daysActive } = req.body;
     if (!routeId || !stopName || !times) {
         return res.status(400).json({ error: 'routeId, stopName and times are required' });
@@ -4408,8 +6360,10 @@ app.post('/api/complaints', authMiddleware, async (req, res) => {
             description,
         });
 
-        // Notify managers via socket
-        io.emit('newComplaint', complaint);
+        // Notify managers via socket (scoped to privileged room only)
+        if (io && typeof io.to === 'function') {
+            io.to('managers').emit('newComplaint', complaint);
+        }
         console.log(`🚨 [Complaint] New from user ${req.user.id}: "${description.substring(0,60)}..."`);
 
         res.status(201).json(complaint);
@@ -4421,14 +6375,17 @@ app.post('/api/complaints', authMiddleware, async (req, res) => {
 
 app.get('/api/complaints', authMiddleware, async (req, res) => {
     try {
-        const complaints = await Complaint.find().sort({ createdAt: -1 }).limit(100);
+        const query = (req.user.role === 'admin' || req.user.role === 'manager')
+            ? {}
+            : { userId: req.user.id };
+        const complaints = await Complaint.find(query).sort({ createdAt: -1 }).limit(100);
         res.json(complaints);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch complaints' });
     }
 });
 
-app.put('/api/complaints/:id', authMiddleware, async (req, res) => {
+app.put('/api/complaints/:id', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const updated = await Complaint.findByIdAndUpdate(
             req.params.id,
@@ -4455,26 +6412,47 @@ app.post('/api/subscribe-delay', authMiddleware, async (req, res) => {
     res.json({ success: true, message: `Subscribed to delay alerts for route ${routeId}` });
 });
 
-// Manager or server can POST to this to fire a delay alert to all subscribers
+// Driver (for their own assigned bus/route), Manager, or Admin can POST to this to fire a delay alert
 app.post('/api/notify-delay', authMiddleware, async (req, res) => {
-    const { routeId, routeName, message, delayMinutes } = req.body;
-    if (!routeId || !message) return res.status(400).json({ error: 'routeId and message required' });
     try {
+        const authz = await authorizeDelayNotification({
+            user: req.user,
+            body: req.body,
+            RouteModel: Route,
+            BusModel: Bus,
+            DriverModel: Driver
+        });
+        if (!authz.authorized) {
+            return res.status(authz.status).json({ error: authz.error });
+        }
+
         const payload = {
-            routeId,
-            routeName: routeName || routeId,
-            message,
-            delayMinutes: delayMinutes || 0,
+            routeId: authz.routeId,
+            routeName: authz.routeName,
+            busId: authz.busId,
+            busNumber: authz.busNumber,
+            message: authz.message,
+            delayMinutes: authz.delayMinutes,
             timestamp: new Date().toISOString(),
         };
+        // Public, non-sensitive route-level info (no PII); clients filter by routeId
         io.emit('busDelayed', payload);
 
-        // Also persist as a notification so it appears in the alerts feed
-        const notif = await Notification.create({ message, type: 'critical' });
-        io.emit('notification', notif);
-        io.emit('systemAlert', { message, type: 'critical', timestamp: payload.timestamp });
+        // Persist as a normalized notification; emitBroadcastNotification also emits the systemAlert
+        const notifData = normalizeNotificationPayload({
+            title: `Bus Delay: ${authz.routeName}`,
+            message: authz.message,
+            type: 'critical',
+            priority: 'high',
+            targetAudience: 'All'
+        });
+        const notif = await Notification.create({ ...notifData, createdBy: req.user.role });
+        const notifPayload = notif.toObject ? notif.toObject() : { ...notif };
+        notifPayload.id = (notif._id || notif.id || '').toString();
+        notifPayload._id = notifPayload.id;
+        emitBroadcastNotification(io, notifPayload);
 
-        console.log(`⚠️ [Delay Alert] Route ${routeName}: ${message}`);
+        console.log(`⚠️ [Delay Alert] Route ${authz.routeName} by ${req.user.role}`);
         res.json({ success: true });
     } catch (_err) {
         res.status(500).json({ error: 'Failed to send delay alert' });
@@ -4800,12 +6778,14 @@ app.post('/api/public/register/:formId', async (req, res) => {
         // Increment counter
         await RegistrationForm.findByIdAndUpdate(form._id, { $inc: { submissionCount: 1 } });
 
-        // Notify managers in real-time
-        io.emit('newRegistration', {
-            id: submission._id,
-            name, studentId, routeName, pickupStop,
-            submittedAt: submission.submittedAt,
-        });
+        // Notify managers in real-time (scoped to privileged room only)
+        if (io && typeof io.to === 'function') {
+            io.to('managers').emit('newRegistration', {
+                id: submission._id,
+                name, studentId, routeName, pickupStop,
+                submittedAt: submission.submittedAt,
+            });
+        }
         console.log(`📝 [Registration] New submission: ${name} (${studentId}) → ${routeName}`);
         res.status(201).json({ success: true });
     } catch (_err) {
@@ -4815,7 +6795,7 @@ app.post('/api/public/register/:formId', async (req, res) => {
 });
 
 // ── MANAGER: Create a new registration form ───────────────────────────────
-app.post('/api/manager/registration-form', authMiddleware, async (req, res) => {
+app.post('/api/manager/registration-form', authMiddleware, managerMiddleware, async (req, res) => {
     const { title, description, routeOptions, stopOptions } = req.body;
     try {
         // Close any existing active form by this manager
@@ -4839,7 +6819,7 @@ app.post('/api/manager/registration-form', authMiddleware, async (req, res) => {
 });
 
 // ── MANAGER: Get active form + share link ─────────────────────────────────
-app.get('/api/manager/registration-form', authMiddleware, async (req, res) => {
+app.get('/api/manager/registration-form', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const form = await RegistrationForm.findOne({ isActive: true }).sort({ createdAt: -1 });
         if (!form) return res.json({ form: null, shareUrl: null });
@@ -4866,7 +6846,7 @@ app.get('/api/public/active-form', async (req, res) => {
 });
 
 // ── MANAGER: Close a form ─────────────────────────────────────────────────
-app.put('/api/manager/registration-form/:id/close', authMiddleware, async (req, res) => {
+app.put('/api/manager/registration-form/:id/close', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const form = await RegistrationForm.findByIdAndUpdate(
             req.params.id, { isActive: false, closedAt: new Date() }, { new: true }
@@ -4878,7 +6858,7 @@ app.put('/api/manager/registration-form/:id/close', authMiddleware, async (req, 
 });
 
 // ── MANAGER: List all submissions ─────────────────────────────────────────
-app.get('/api/manager/registrations', authMiddleware, async (req, res) => {
+app.get('/api/manager/registrations', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { status } = req.query;
         const query = status ? { status } : {};
@@ -4892,7 +6872,7 @@ app.get('/api/manager/registrations', authMiddleware, async (req, res) => {
 });
 
 // ── MANAGER: Bulk registration uploads ────────────────────────────────────
-app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => {
+app.post('/api/manager/registrations/bulk', authMiddleware, managerMiddleware, async (req, res) => {
     const { submissions } = req.body;
     if (!submissions || !Array.isArray(submissions)) {
         return res.status(400).json({ error: 'Submissions array is required.' });
@@ -5006,7 +6986,7 @@ app.post('/api/manager/registrations/bulk', authMiddleware, async (req, res) => 
 });
 
 // ── MANAGER: Approve → auto-create user account & dispatch credentials email ──
-app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, res) => {
+app.put('/api/manager/registrations/:id/approve', authMiddleware, managerMiddleware, async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -5110,7 +7090,7 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, async (req, re
 
 // ── MANAGER: Resend Credentials Email ───────────────────────────────────────
 // POST /api/manager/registrations/:id/resend-email
-app.post('/api/manager/registrations/:id/resend-email', authMiddleware, async (req, res) => {
+app.post('/api/manager/registrations/:id/resend-email', authMiddleware, managerMiddleware, async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -5173,7 +7153,7 @@ app.post('/api/manager/registrations/:id/resend-email', authMiddleware, async (r
 
 // ── MANAGER: Test Email Dispatch Connection ─────────────────────────────────
 // POST /api/manager/test-email
-app.post('/api/manager/test-email', authMiddleware, async (req, res) => {
+app.post('/api/manager/test-email', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const { email } = req.body;
         const targetEmail = email || process.env.SMTP_USER || 'denimhajare@gmail.com';
@@ -5192,7 +7172,7 @@ app.post('/api/manager/test-email', authMiddleware, async (req, res) => {
 });
 
 // ── MANAGER: Unapprove → delete user account & revert status ────────────────
-app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, res) => {
+app.put('/api/manager/registrations/:id/unapprove', authMiddleware, managerMiddleware, async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -5244,7 +7224,7 @@ app.put('/api/manager/registrations/:id/unapprove', authMiddleware, async (req, 
 
 
 // ── MANAGER: Bulk approve pending registrations ──────────────────────────
-app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, res) => {
+app.post('/api/manager/registrations/bulk-approve', authMiddleware, managerMiddleware, async (req, res) => {
     const { ids, password } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: 'An array of submission IDs is required.' });
@@ -5342,7 +7322,7 @@ app.post('/api/manager/registrations/bulk-approve', authMiddleware, async (req, 
 });
 
 // ── MANAGER: Reject a submission ──────────────────────────────────────────
-app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res) => {
+app.put('/api/manager/registrations/:id/reject', authMiddleware, managerMiddleware, async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const updated = await RegistrationSubmission.findByIdAndUpdate(
@@ -5358,7 +7338,7 @@ app.put('/api/manager/registrations/:id/reject', authMiddleware, async (req, res
 });
 
 // ── MANAGER: Delete a single registration submission ───────────────────────
-app.delete('/api/manager/registrations/:id', authMiddleware, async (req, res) => {
+app.delete('/api/manager/registrations/:id', authMiddleware, managerMiddleware, async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -5382,7 +7362,7 @@ app.delete('/api/manager/registrations/:id', authMiddleware, async (req, res) =>
 });
 
 // ── MANAGER: Bulk delete multiple submissions ─────────────────────────────
-app.post('/api/manager/registrations/bulk-delete', authMiddleware, async (req, res) => {
+app.post('/api/manager/registrations/bulk-delete', authMiddleware, managerMiddleware, async (req, res) => {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: 'An array of submission IDs is required.' });
@@ -5416,7 +7396,15 @@ app.post('/api/manager/registrations/bulk-delete', authMiddleware, async (req, r
 
 
 // ── DIAGNOSTIC: Test SMTP connection and email delivery from deployed instance ──
-app.get('/api/debug/smtp-test', async (req, res) => {
+app.get('/api/debug/smtp-test', authMiddleware, adminMiddleware, async (req, res) => {
+    if (areExternalNotificationsSuppressed(process.env)) {
+        return res.json({
+            success: true,
+            suppressed: true,
+            provider: 'Mock Dispatcher',
+            message: 'External email/SMTP notifications are suppressed in this environment.'
+        });
+    }
     const testEmail = req.query.email || 'denimhajare@gmail.com';
     const brevoApiKey = process.env.BREVO_API_KEY;
 
@@ -5519,13 +7507,6 @@ app.get('/api/debug/smtp-test', async (req, res) => {
 });
 
 // ─── ADMIN: Role & Permissions Management ──────────────────────────────
-const adminMiddleware = (req, res, next) => {
-    if (req.user && req.user.role === 'admin') {
-        next();
-    } else {
-        res.status(403).json({ error: 'Access denied: admin credentials required' });
-    }
-};
 
 // GET all users across all collections
 app.get('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) => {
@@ -5847,13 +7828,14 @@ app.delete('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, async 
     }
 });
 
-const PORT = process.env.PORT || 5000;
-server.listen(PORT, '0.0.0.0', () => {
-    console.log(`\n🚀 Server running on port ${PORT}`);
-    console.log(`📡 Socket.io ready for connections`);
 
 // ⚡ Automated SMS & WhatsApp Geofence Proximity Notification Engine
 async function sendProximitySMSWhatsApp(userObj, stopName, distanceKm, minutes, busNumber) {
+    if (areExternalNotificationsSuppressed(process.env)) {
+        console.log(`[Mock SMS/WhatsApp Alert] External alert suppressed for stop: ${stopName}`);
+        return { success: true, suppressed: true, provider: 'Mock Dispatcher' };
+    }
+
     const phoneNumber = userObj.phone || userObj.parentPhone || userObj.mobile;
     if (!phoneNumber) return;
     
@@ -5879,7 +7861,7 @@ async function sendProximitySMSWhatsApp(userObj, stopName, distanceKm, minutes, 
                     text: { body: whatsAppMessage }
                 })
             });
-            console.log(`💬 [WhatsApp Cloud API] Arrival notification sent to +${formattedPhone}`);
+            console.log(`💬 [WhatsApp Cloud API] Arrival notification sent for stop: ${stopName}`);
         } catch (err) {
             console.warn(`⚠️ [WhatsApp API Warning] ${err.message}`);
         }
@@ -5902,19 +7884,19 @@ async function sendProximitySMSWhatsApp(userObj, stopName, distanceKm, minutes, 
                     content: `[SISTecChalo] Bus ${busNumber || ''} is approaching ${stopName}! Distance: ${distanceKm.toFixed(1)}km (~${minutes} min).`
                 })
             });
-            console.log(`📱 [Transactional SMS] Proximity SMS dispatched to ${formattedPhone}`);
+            console.log(`📱 [Transactional SMS] Proximity SMS dispatched for stop: ${stopName}`);
         } catch (err) {
             console.warn(`⚠️ [SMS Warning] ${err.message}`);
         }
     } else {
-        console.log(`💬 [WhatsApp / SMS Alert Simulation] Target ${formattedPhone}: "${whatsAppMessage}"`);
+        console.log(`💬 [WhatsApp / SMS Alert Simulation] External alert simulated for stop: ${stopName}`);
     }
 }
 
 // ⚡ FUEL MILEAGE & VEHICLE COST MANAGER ROUTES
 
 // 1. POST /api/driver/fuel-log — Driver logs fuel refill entry
-app.post('/api/driver/fuel-log', authMiddleware, async (req, res) => {
+app.post('/api/driver/fuel-log', authMiddleware, driverMiddleware, async (req, res) => {
     try {
         const { busId, busNumber, odometerKm, liters, totalCost, fuelStation, receiptImage } = req.body;
         if (!busId || !odometerKm || !liters || !totalCost) {
@@ -5969,7 +7951,7 @@ app.post('/api/driver/fuel-log', authMiddleware, async (req, res) => {
 });
 
 // 2. GET /api/manager/fuel-logs — Manager fetches refill history
-app.get('/api/manager/fuel-logs', authMiddleware, async (req, res) => {
+app.get('/api/manager/fuel-logs', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const logs = await FuelLog.find().sort({ refillDate: -1 }).limit(100);
         res.json({ success: true, logs });
@@ -5980,7 +7962,7 @@ app.get('/api/manager/fuel-logs', authMiddleware, async (req, res) => {
 });
 
 // 3. GET /api/manager/fuel-analytics — Fleet fuel & mileage KPI summary
-app.get('/api/manager/fuel-analytics', authMiddleware, async (req, res) => {
+app.get('/api/manager/fuel-analytics', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const logs = await FuelLog.find();
         let totalSpend = 0;
@@ -6015,7 +7997,7 @@ app.get('/api/manager/fuel-analytics', authMiddleware, async (req, res) => {
 // ⚡ DYNAMIC QR BUS PASS & BOARDING ATTENDANCE ROUTES
 
 // 1. GET /api/student/bus-pass — Generate dynamic QR pass payload for logged in student
-app.get('/api/student/bus-pass', authMiddleware, async (req, res) => {
+app.get('/api/student/bus-pass', authMiddleware, studentMiddleware, async (req, res) => {
     try {
         const student = await User.findById(req.user.id) || await Student.findById(req.user.id);
         if (!student) return res.status(404).json({ error: 'Student record not found' });
@@ -6041,7 +8023,7 @@ app.get('/api/student/bus-pass', authMiddleware, async (req, res) => {
 });
 
 // 2. POST /api/driver/scan-pass — Driver scans student's QR code upon boarding
-app.post('/api/driver/scan-pass', authMiddleware, async (req, res) => {
+app.post('/api/driver/scan-pass', authMiddleware, driverMiddleware, async (req, res) => {
     try {
         const { qrData, busId, busNumber } = req.body;
         if (!qrData) return res.status(400).json({ error: 'QR code data payload is required' });
@@ -6115,7 +8097,7 @@ app.post('/api/driver/scan-pass', authMiddleware, async (req, res) => {
 });
 
 // 3. GET /api/manager/boarding-logs — Fetch daily attendance logs for Web Dashboard
-app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
+app.get('/api/manager/boarding-logs', authMiddleware, managerMiddleware, async (req, res) => {
     try {
         const logs = await BoardingLog.find().sort({ boardedAt: -1 }).limit(100);
         res.json({ success: true, logs });
@@ -6125,11 +8107,85 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
     }
 });
 
-    // ─── Real Driver Telemetry Inactivity Watchdog (Production Strict) ────────
-    // Automatically marks bus Offline if driver stops broadcasting (>30s)
-    setInterval(async () => {
+// Classifies database errors into safe diagnostic categories without exposing credentials, URIs, hostnames, or DB names
+function sanitizeConnectionError(err) {
+    if (!err) {
+        return '[Category: UNKNOWN_DB_ERROR] Database operation failed.';
+    }
+    const rawMsg = (err && err.message) ? String(err.message) : String(err);
+    const rawName = (err && err.name && typeof err.name === 'string') ? err.name : 'DatabaseError';
+    const rawCode = (err && err.code) ? String(err.code) : '';
+
+    if (/auth|not authorized|bad auth|permission/i.test(rawMsg) || rawCode === '18' || rawCode === '8000' || rawCode === '13') {
+        return '[Category: AUTH_OR_PERMISSION_ERROR] Database authentication or authorization failed.';
+    }
+    if (/ETIMEDOUT|ENOTFOUND|ECONNREFUSED|EAI_AGAIN|ServerSelection|Network|timed out|buffering timed out/i.test(rawMsg) || /Network|ServerSelection|Timeout/i.test(rawName)) {
+        return '[Category: NETWORK_OR_TIMEOUT_ERROR] Database network reachability or operation timeout.';
+    }
+    if (/MongoParseError|Invalid scheme|URI|connection string/i.test(rawMsg) || rawName === 'MongoParseError') {
+        return '[Category: URI_FORMAT_ERROR] Malformed database connection configuration.';
+    }
+
+    const allowedErrorTypes = new Set(['MongoError', 'MongoServerError', 'MongooseError', 'ValidationError', 'CastError', 'StrictModeError', 'VersionError', 'ParallelSaveError']);
+    const safeType = allowedErrorTypes.has(rawName) ? rawName : 'DatabaseError';
+    return `[Category: DATABASE_OPERATION_ERROR] Database operation failed (${safeType}).`;
+}
+
+function isSafeLoopbackUrl(rawUrl) {
+    if (!rawUrl || typeof rawUrl !== 'string') return false;
+    try {
+        const parsed = new URL(rawUrl.trim());
+        if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+        const host = (parsed.hostname || '').toLowerCase();
+        return host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]';
+    } catch (_e) {
+        return false;
+    }
+}
+
+function resolveKeepAliveUrl(env = process.env) {
+    const isStaging = (env.NODE_ENV || '').toLowerCase().trim() === 'staging';
+    const port = (env.PORT && String(env.PORT).trim()) ? String(env.PORT).trim() : '5000';
+
+    if (isStaging) {
+        if (env.SELF_URL && isSafeLoopbackUrl(env.SELF_URL)) {
+            return env.SELF_URL.trim().replace(/\/+$/, '');
+        }
+        return `http://localhost:${port}`;
+    }
+
+    if (env.SELF_URL && env.SELF_URL.trim().length > 0) {
+        return env.SELF_URL.trim();
+    }
+    if (env.RENDER_EXTERNAL_URL && env.RENDER_EXTERNAL_URL.trim().length > 0) {
+        return env.RENDER_EXTERNAL_URL.trim();
+    }
+    return 'https://smart-shuttle-backend-2h13.onrender.com';
+}
+
+let lastWatchdogErrorMessage = null;
+let serverStarted = false;
+function startServer() {
+    if (serverStarted) return;
+    serverStarted = true;
+    const PORT = process.env.PORT || 5000;
+    server.listen(PORT, '0.0.0.0', () => {
+        console.log(`\n🚀 Server running on port ${PORT}`);
+        console.log(`📡 Socket.io ready for connections`);
+
+        // ─── Real Driver Telemetry Inactivity Watchdog (Production Strict) ────────
+        // Automatically marks bus Offline if driver stops broadcasting (>30s)
+        watchdogIntervalId = setInterval(runDriverInactivityWatchdogCycle, 10000);
+        initKeepAlive();
+    });
+}
+
+async function runDriverInactivityWatchdogCycle(nowMs = Date.now()) {
+        if (isShuttingDown || mongoose.connection.readyState !== 1) {
+            return { skipped: true, reason: isShuttingDown ? 'server_shutting_down' : 'db_not_connected' };
+        }
         try {
-            const staleCutoff = new Date(Date.now() - 30 * 1000);
+            const staleCutoff = new Date(nowMs - DRIVER_STALE_THRESHOLD_MS);
             const staleBuses = await Bus.find({
                 status: { $in: ['On-time', 'Delayed', 'Active'] },
                 lastUpdated: { $lt: staleCutoff }
@@ -6179,16 +8235,24 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
                         io.to(`route_${bus.routeId.toString()}`).emit('locationUpdate', offlinePayload);
                         io.to(`route_${bus.routeId.toString()}`).emit('busUpdated', offlinePayload);
                     }
-                    console.log(`📴 [DRIVER INACTIVITY WATCHDOG] Bus ${bus.busNumber || bus._id} stopped broadcasting (>30s) -> Marked Offline`);
+                    console.log(`📴 [DRIVER INACTIVITY WATCHDOG] Bus ${bus.busNumber || bus._id} stopped broadcasting (>60s) -> Marked Offline`);
                 }
             }
+            lastWatchdogErrorMessage = null;
+            return { skipped: false, updated: staleBuses ? staleBuses.length : 0, staleThresholdMs: DRIVER_STALE_THRESHOLD_MS };
         } catch (err) {
-            console.error('Watchdog interval error:', err.message);
+            const safeErr = sanitizeConnectionError(err);
+            if (lastWatchdogErrorMessage !== safeErr) {
+                console.error('Watchdog interval error:', safeErr);
+                lastWatchdogErrorMessage = safeErr;
+            }
+            return { skipped: false, error: safeErr };
         }
-    }, 10000);
+}
 
+function initKeepAlive() {
     // ⚡ RENDER 100% FREE KEEP-ALIVE ENGINE (Prevents 15-min idle sleep)
-    const SELF_URL = process.env.SELF_URL || process.env.RENDER_EXTERNAL_URL || 'https://smart-shuttle-backend-2h13.onrender.com';
+    const SELF_URL = resolveKeepAliveUrl(process.env);
     const httpProtocol = SELF_URL.startsWith('https') ? require('https') : require('http');
 
     const triggerKeepAlive = () => {
@@ -6204,12 +8268,176 @@ app.get('/api/manager/boarding-logs', authMiddleware, async (req, res) => {
     };
 
     // Ping every 5 minutes (Render sleep threshold is 15 minutes)
-    setInterval(triggerKeepAlive, 5 * 60 * 1000);
+    keepAliveIntervalId = setInterval(triggerKeepAlive, 5 * 60 * 1000);
     // Initial ping 15 seconds after startup
-    setTimeout(triggerKeepAlive, 15000);
+    keepAliveTimeoutId = setTimeout(triggerKeepAlive, 15000);
 
     console.log(`⚡ [Render 100% Free Keep-Alive] Active every 5 min → ${SELF_URL}/api/health`);
-});
+}
+
+let shutdownPromise = null;
+function initiateGracefulShutdown(signal = 'SIGTERM') {
+    if (shutdownPromise) {
+        console.log(`⚠️ [SHUTDOWN] Signal ${signal} received while shutdown already in progress. Ignoring duplicate signal.`);
+        return shutdownPromise;
+    }
+
+    shutdownPromise = (async () => {
+        isShuttingDown = true;
+        console.log(`\n🛑 [SHUTDOWN] Received ${signal} — initiating graceful shutdown...`);
+
+        // 1. Hard deadline timer (8.0 seconds)
+        const forceExitTimer = setTimeout(() => {
+            const remaining = operationTracker.getActiveCount();
+            console.error(`❌ [SHUTDOWN FATAL] Hard deadline (8s) exceeded with ${remaining} active operations in flight. Forcing process.exit(1).`);
+            if (process.env.NODE_ENV !== 'test') {
+                process.exit(1);
+            }
+        }, 8000);
+
+        try {
+            // 2. Stop all background intervals
+            if (watchdogIntervalId) { clearInterval(watchdogIntervalId); watchdogIntervalId = null; }
+            if (keepAliveIntervalId) { clearInterval(keepAliveIntervalId); keepAliveIntervalId = null; }
+            if (keepAliveTimeoutId) { clearTimeout(keepAliveTimeoutId); keepAliveTimeoutId = null; }
+            console.log('🛑 [SHUTDOWN] Background watchdog and keep-alive timers stopped.');
+
+            // 3. Broadcast shutdown advisory to connected Socket.io clients
+            try {
+                io.emit('serverShutdown', {
+                    reason: 'maintenance_restart',
+                    reconnectAfterMs: 2500,
+                    timestamp: new Date().toISOString()
+                });
+                console.log('📢 [SHUTDOWN] Dispatched serverShutdown advisory to active clients.');
+            } catch (emitErr) {
+                console.warn('⚠️ [SHUTDOWN] Advisory emit notice:', emitErr.message);
+            }
+
+            // 4. Brief 300ms window to push packets through TCP buffers
+            await new Promise(r => setTimeout(r, 300));
+
+            // 5. Close HTTP server ingress (stop accepting new TCP connections)
+            server.close((err) => {
+                if (err) console.error('❌ [SHUTDOWN] HTTP server close error:', err.message);
+                else console.log('🛑 [SHUTDOWN] HTTP server ingress closed.');
+            });
+
+            // 6. Drain in-flight active operations (5.0s max bounded timeout)
+            const drainResult = await operationTracker.waitForDrain(5000);
+            if (drainResult.drained) {
+                console.log('✅ [SHUTDOWN] All in-flight operations drained successfully.');
+            } else {
+                console.warn(`⚠️ [SHUTDOWN] Drain timeout reached. Continuing teardown with ${drainResult.remaining} operations in flight.`);
+            }
+
+            // 7. Teardown WebSockets explicitly (breaks HTTP server close deadlock)
+            try {
+                io.disconnectSockets(true);
+                io.close();
+                console.log('🛑 [SHUTDOWN] Socket.IO connections closed cleanly.');
+            } catch (wsErr) {
+                console.error('❌ [SHUTDOWN] Socket.IO close notice:', wsErr.message);
+            }
+
+            // 8. Close MongoDB connection cleanly
+            try {
+                if (mongoose.connection.readyState !== 0) {
+                    await mongoose.connection.close(false);
+                    console.log('🍃 [SHUTDOWN] MongoDB connection cleanly closed.');
+                }
+            } catch (dbErr) {
+                const safeErr = sanitizeConnectionError(dbErr);
+                console.error('❌ [SHUTDOWN FATAL] Mongoose close failed:', safeErr);
+            }
+
+            clearTimeout(forceExitTimer);
+            console.log('✅ [SHUTDOWN] Graceful shutdown complete. Exiting cleanly.\n');
+            if (process.env.NODE_ENV !== 'test') {
+                process.exit(0);
+            }
+            return { success: true, drained: drainResult.drained, remaining: drainResult.remaining };
+        } catch (fatalErr) {
+            clearTimeout(forceExitTimer);
+            console.error('❌ [SHUTDOWN UNCAUGHT] Fatal error during shutdown sequence:', fatalErr.message);
+            if (process.env.NODE_ENV !== 'test') {
+                process.exit(1);
+            }
+            return { success: false, error: fatalErr.message };
+        }
+    })();
+
+    return shutdownPromise;
+}
+
+if (process.env.NODE_ENV !== 'test') {
+    process.on('SIGTERM', () => initiateGracefulShutdown('SIGTERM'));
+    process.on('SIGINT', () => initiateGracefulShutdown('SIGINT'));
+
+    process.on('unhandledRejection', (reason) => {
+        const safeErr = sanitizeConnectionError(reason);
+        console.error('❌ [PROCESS UNHANDLED REJECTION]:', safeErr);
+    });
+
+    process.on('uncaughtException', (err) => {
+        console.error('❌ [PROCESS UNCAUGHT EXCEPTION]:', err.message);
+        initiateGracefulShutdown('UNCAUGHT_EXCEPTION').finally(() => {
+            if (process.env.NODE_ENV !== 'test') process.exit(1);
+        });
+    });
+}
+
+module.exports = {
+    app,
+    server,
+    io,
+    getCorsOptions,
+    runDriverInactivityWatchdogCycle,
+    DRIVER_STALE_THRESHOLD_MS,
+    sanitizeConnectionError,
+    resolveKeepAliveUrl,
+    areExternalNotificationsSuppressed,
+    initializeFirebaseAdmin,
+    dispatchFcmMulticast,
+    sendProximitySMSWhatsApp,
+    buildForgotPasswordResponse,
+    buildNotificationFilterForUser,
+    filterNotificationsForUser,
+    emitSensitiveSosAlert,
+    emitEmergencySosNotification,
+    parseSosCoordinates,
+    buildBusApproachingStopPayload,
+    normalizeTripType,
+    normalizeDistanceKm,
+    resolveBusTelemetryStatus,
+    verifyDriverBusAuthorization,
+    authorizeDelayNotification,
+    startOrResumeTripLog,
+    syncActiveTripLogForTelemetry,
+    completeActiveTripLog,
+    broadcastStats,
+    normalizeNotificationPayload,
+    emitBroadcastNotification,
+    formatReportDistance,
+    renderTripReportHtml,
+    shutdownIngressMiddleware,
+    AsyncOperationTracker,
+    operationTracker,
+    initiateGracefulShutdown,
+    getIsShuttingDown: () => isShuttingDown,
+    setIsShuttingDownForTesting: (val) => { isShuttingDown = val; },
+    getShutdownPromiseForTesting: () => shutdownPromise,
+    getWatchdogIntervalIdForTesting: () => watchdogIntervalId,
+    getKeepAliveIntervalIdForTesting: () => keepAliveIntervalId,
+    resetShutdownStateForTesting: () => {
+        isShuttingDown = false;
+        shutdownPromise = null;
+        operationTracker.activeCount = 0;
+        if (watchdogIntervalId) { clearInterval(watchdogIntervalId); watchdogIntervalId = null; }
+        if (keepAliveIntervalId) { clearInterval(keepAliveIntervalId); keepAliveIntervalId = null; }
+        if (keepAliveTimeoutId) { clearTimeout(keepAliveTimeoutId); keepAliveTimeoutId = null; }
+    }
+};
 
 
 

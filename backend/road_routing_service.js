@@ -51,6 +51,7 @@ function decodePolyline(encoded) {
  * Query Next-Gen Google Routes API (directions/v2:computeRoutes)
  */
 async function queryGoogleRoutes(stops) {
+    if (process.env.DISABLE_GOOGLE_ROUTING === 'true') return null;
     const key = process.env.GOOGLE_MAPS_API_KEY;
     if (!key || key.startsWith('YOUR_') || key.trim() === '') return null;
     if (stops.length < 2) return null;
@@ -144,6 +145,7 @@ async function queryGoogleRoutes(stops) {
  * Snap an array of GPS coordinates to Google Roads geometry via Roads API
  */
 async function snapPointsToGoogleRoads(points) {
+    if (process.env.DISABLE_GOOGLE_ROUTING === 'true') return points;
     const key = process.env.GOOGLE_MAPS_API_KEY;
     if (!key || key.startsWith('YOUR_') || key.trim() === '' || !points || points.length === 0) {
         return points;
@@ -562,20 +564,7 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
             }
         }
 
-        // If all stops appear behind (e.g. bus is at end of route), keep the last stop
-        if (upcomingETAs.length === 0 && orderedStops.length > 0) {
-            const lastStop = orderedStops[orderedStops.length - 1];
-            upcomingETAs.push({
-                name: lastStop.name,
-                stopName: lastStop.name,
-                minutes: 1,
-                distanceKm: '0.1',
-                lat: lastStop.lat,
-                lng: lastStop.lng
-            });
-            nextStopName = lastStop.name;
-        }
-
+        // When all upcoming stops have been reached, route is complete; do not invent fake ETAs
         return {
             etas: upcomingETAs,
             nextStopName: nextStopName || (upcomingETAs[0] ? upcomingETAs[0].stopName : ''),
@@ -597,8 +586,7 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
         if (isStopPassed(stop.name)) continue;
 
         const dM = haversineDistMeters(prevLat, prevLng, stop.lat, stop.lng);
-        // Avoid unrealistic leaps if stop has far-away coordinates (> 6km inside city)
-        const effectiveDistM = dM > 7000 ? 900 : dM;
+        const effectiveDistM = dM;
         const roadDistKm = (effectiveDistM * 1.5) / 1000.0; // 1.5× for Indian road curvature
         const legMins = Math.max(1, Math.round((roadDistKm / speedKmh) * 60));
         cumulativeMins += legMins;
@@ -626,6 +614,7 @@ function computeRouteProgressAndETAs(busLat, busLng, currentSpeed = 28, stops = 
 module.exports = {
     getRoadPolylineForStops,
     snapPointsToGoogleRoads,
+    queryGoogleRoutes,
     decodePolyline,
     haversineDistMeters,
     findNearestCoordIndex,

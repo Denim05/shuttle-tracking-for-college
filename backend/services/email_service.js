@@ -173,6 +173,11 @@ function buildCredentialsEmailHtml({ name, username, password, role = 'student' 
  * Strictly verifies real delivery to the recipient's live inbox.
  */
 async function sendCredentialsEmail(email, name, username, password, role = 'student', extraInfo = {}) {
+    const nodeEnv = (process.env.NODE_ENV || '').toLowerCase().trim();
+    if (nodeEnv === 'test' || nodeEnv === 'staging' || String(process.env.DISABLE_EXTERNAL_NOTIFICATIONS || '').toLowerCase().trim() === 'true' || String(process.env.MOCK_NOTIFICATIONS || '').toLowerCase().trim() === 'true') {
+        return { success: true, provider: 'Mock Dispatcher', messageId: 'mock_test_message_id_001' };
+    }
+
     if (!email || !email.includes('@')) {
         console.warn(`⚠️ [Email Service] Skipping email dispatch — invalid email: "${email}" for ${name} (${username})`);
         return { success: false, error: 'Invalid recipient email address' };
@@ -183,7 +188,7 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
     const deliveryErrors = [];
 
     // ── 1. Brevo HTTP API (Primary: Zero Google Profile Pic & Clean Header) ─
-    const brevoApiKey = process.env.BREVO_API_KEY || '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';
+    const brevoApiKey = process.env.BREVO_API_KEY;
     if (brevoApiKey) {
         try {
             console.log(`✉️ [Brevo API] Attempting clean email dispatch to ${email}...`);
@@ -253,9 +258,9 @@ async function sendCredentialsEmail(email, name, username, password, role = 'stu
     }
 
     // ── 3. Nodemailer SMTP (Fallback #2) ────────────────────────────────────
-    const user = (process.env.SMTP_USER && process.env.SMTP_USER.trim().length > 0) ? process.env.SMTP_USER.trim() : 'denimhajare@gmail.com';
-    const rawPass = (process.env.SMTP_PASS && process.env.SMTP_PASS.trim().length > 0) ? process.env.SMTP_PASS.trim() : 'ydxpebcwzefkalmy';
-    const cleanPass = rawPass.replace(/\s+/g, '');
+    const user = (process.env.SMTP_USER && process.env.SMTP_USER.trim().length > 0) ? process.env.SMTP_USER.trim() : null;
+    const rawPass = (process.env.SMTP_PASS && process.env.SMTP_PASS.trim().length > 0) ? process.env.SMTP_PASS.trim() : null;
+    const cleanPass = rawPass ? rawPass.replace(/\s+/g, '') : null;
 
     if (user && cleanPass) {
         try {
@@ -424,6 +429,11 @@ function buildPasswordResetEmailHtml({ name, username, temporaryPassword, role =
  * Sends Password Reset Email with Temporary Password
  */
 async function sendPasswordResetEmail(email, name, username, temporaryPassword, role = 'user') {
+    const nodeEnv = (process.env.NODE_ENV || '').toLowerCase().trim();
+    if (nodeEnv === 'test' || nodeEnv === 'staging' || String(process.env.DISABLE_EXTERNAL_NOTIFICATIONS || '').toLowerCase().trim() === 'true' || String(process.env.MOCK_NOTIFICATIONS || '').toLowerCase().trim() === 'true') {
+        return { success: true, provider: 'Mock Dispatcher', messageId: 'mock_test_message_id_pwd_001' };
+    }
+
     if (!email || !email.includes('@')) {
         return { success: false, error: 'Invalid recipient email address' };
     }
@@ -433,7 +443,7 @@ async function sendPasswordResetEmail(email, name, username, temporaryPassword, 
     const deliveryErrors = [];
 
     // 1. Try Brevo
-    const brevoApiKey = process.env.BREVO_API_KEY || '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';
+    const brevoApiKey = process.env.BREVO_API_KEY;
     if (brevoApiKey) {
         try {
             const response = await fetch('https://api.brevo.com/v3/smtp/email', {
@@ -466,9 +476,9 @@ async function sendPasswordResetEmail(email, name, username, temporaryPassword, 
     }
 
     // 2. Try SMTP
-    const user = (process.env.SMTP_USER && process.env.SMTP_USER.trim().length > 0) ? process.env.SMTP_USER.trim() : 'denimhajare@gmail.com';
-    const rawPass = (process.env.SMTP_PASS && process.env.SMTP_PASS.trim().length > 0) ? process.env.SMTP_PASS.trim() : 'ydxpebcwzefkalmy';
-    const cleanPass = rawPass.replace(/\s+/g, '');
+    const user = (process.env.SMTP_USER && process.env.SMTP_USER.trim().length > 0) ? process.env.SMTP_USER.trim() : null;
+    const rawPass = (process.env.SMTP_PASS && process.env.SMTP_PASS.trim().length > 0) ? process.env.SMTP_PASS.trim() : null;
+    const cleanPass = rawPass ? rawPass.replace(/\s+/g, '') : null;
 
     if (user && cleanPass) {
         try {
