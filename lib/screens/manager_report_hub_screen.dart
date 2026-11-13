@@ -1,6 +1,4 @@
 import 'dart:convert';
-import 'dart:io' show Platform;
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -14,7 +12,14 @@ import '../theme/app_theme.dart';
 
 class ManagerReportHubScreen extends StatefulWidget {
   final String? initialBusId;
-  const ManagerReportHubScreen({super.key, this.initialBusId});
+  final DateTime? initialDate;
+  final String? initialShift;
+  const ManagerReportHubScreen({
+    super.key,
+    this.initialBusId,
+    this.initialDate,
+    this.initialShift,
+  });
 
   @override
   State<ManagerReportHubScreen> createState() => _ManagerReportHubScreenState();
@@ -53,6 +58,11 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
   @override
   void initState() {
     super.initState();
+    _selectedDate = widget.initialDate ?? DateTime.now();
+    final shift = widget.initialShift;
+    if (shift == 'morning' || shift == 'evening' || shift == 'all') {
+      _selectedShift = shift!;
+    }
     _tabController = TabController(length: 3, vsync: this);
     _loadAllReportData();
   }
@@ -88,52 +98,74 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
       final busParam = widget.initialBusId != null ? '&busId=${widget.initialBusId}' : '';
       final pathWithQuery = 'manager/reports/bus-trip-report?date=$_formattedDateStr&shift=$_selectedShift&format=json$busParam';
 
-      // 1. Candidate URLs for maximum resilience
-      final candidateUrls = <String>[];
-      candidateUrls.add('${AppConstants.apiUrl}/$pathWithQuery');
-      if (!kIsWeb && Platform.isAndroid) {
-        candidateUrls.add('http://10.0.2.2:5000/api/$pathWithQuery');
-      }
-      candidateUrls.add('http://127.0.0.1:5000/api/$pathWithQuery');
-      candidateUrls.add('https://smart-shuttle-backend-2h13.onrender.com/api/$pathWithQuery');
-
       Map<String, dynamic>? reportJson;
 
-      for (final url in candidateUrls) {
-        try {
-          final uri = Uri.parse(url);
-          final res = await http.get(
-            uri,
-            headers: {'Accept': 'application/json, text/csv, */*'},
-          ).timeout(const Duration(seconds: 8));
-
-          if (res.statusCode == 200 && res.body.isNotEmpty) {
-            final trimmed = res.body.trim();
-            if (trimmed.startsWith('{')) {
-              final decoded = jsonDecode(trimmed);
-              if (decoded is Map<String, dynamic>) {
-                reportJson = decoded;
-                break;
-              }
-            } else if (trimmed.startsWith('"') || trimmed.startsWith('#') || trimmed.contains('Trip ID')) {
-              // Gracefully parse CSV formatted payload into structured report model
-              reportJson = _parseCsvToReportData(trimmed);
-              break;
-            }
-          }
-        } catch (e) {
-          debugPrint('Notice: Candidate report URL skipped ($url): $e');
+      // 1. Primary: Query using authenticated ApiService directly
+      try {
+        final dynamic apiRes = await _api.get(pathWithQuery);
+        if (apiRes is Map<String, dynamic>) {
+          reportJson = apiRes;
         }
+      } on ApiException catch (e) {
+        if (e.isUnauthorized) {
+          if (!mounted) return;
+          setState(() {
+            _errorMessage = 'Session expired or unauthenticated. Please re-login as Manager.';
+            _isLoading = false;
+          });
+          return;
+        } else if (e.isForbidden) {
+          if (!mounted) return;
+          setState(() {
+            _errorMessage = 'Access denied. Manager privileges are required to view executive reports.';
+            _isLoading = false;
+          });
+          return;
+        }
+        debugPrint('Notice: Primary ApiService report query failed: $e. Attempting authenticated candidate URLs...');
+      } catch (e) {
+        debugPrint('Notice: Primary ApiService report query failed: $e. Attempting authenticated candidate URLs...');
       }
 
-      // If candidates failed, try default ApiService as final chance
+      // 2. Candidate fallbacks for network resilience if primary fails
       if (reportJson == null) {
-        try {
-          final dynamic apiRes = await _api.get(pathWithQuery);
-          if (apiRes is Map<String, dynamic>) {
-            reportJson = apiRes;
+        final token = await ApiService.getToken();
+        final authHeaders = <String, String>{
+          'Accept': 'application/json, text/csv, */*',
+          if (token != null && token.isNotEmpty) 'Authorization': 'Bearer $token',
+        };
+
+        final candidateUrls = ReportDownloadService().buildApiPathCandidateUrls(
+          pathWithQuery: pathWithQuery,
+          configuredApiUrl: AppConstants.apiUrl,
+        );
+
+        for (final url in candidateUrls) {
+          try {
+            final uri = Uri.parse(url);
+            final res = await http.get(
+              uri,
+              headers: authHeaders,
+            ).timeout(const Duration(seconds: 4));
+
+            if (res.statusCode == 200 && res.body.isNotEmpty) {
+              final trimmed = res.body.trim();
+              if (trimmed.startsWith('{')) {
+                final decoded = jsonDecode(trimmed);
+                if (decoded is Map<String, dynamic>) {
+                  reportJson = decoded;
+                  break;
+                }
+              } else if (trimmed.startsWith('"') || trimmed.startsWith('#') || trimmed.contains('Trip ID')) {
+                // Gracefully parse CSV formatted payload into structured report model
+                reportJson = _parseCsvToReportData(trimmed);
+                break;
+              }
+            }
+          } catch (e) {
+            debugPrint('Notice: Candidate report URL skipped ($url): $e');
           }
-        } catch (_) {}
+        }
       }
 
       // 2. Fetch complementary telemetry
@@ -171,8 +203,10 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
   }
 
   Map<String, dynamic> _parseCsvToReportData(String csv) {
-    final lines = csv.split('\n');
+    final cleanCsv = csv.replaceFirst('\uFEFF', '');
+    final lines = cleanCsv.split('\n');
     final trips = <Map<String, dynamic>>[];
+    bool isOrganized11Col = false;
 
     for (final line in lines) {
       final trimmed = line.trim();
@@ -190,52 +224,91 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
         cols.add(clean);
       }
 
-      if (cols.isEmpty || cols[0].contains('Trip ID')) continue;
+      if (cols.isEmpty) continue;
+      if (cols[0] == 'Date' && cols.length >= 10 && cols.contains('Data Source')) {
+        isOrganized11Col = true;
+        continue;
+      }
+      if (cols[0].contains('Trip ID')) continue;
 
-      trips.add({
-        'tripId': cols.isNotEmpty ? cols[0] : 'TRIP',
-        'date': cols.length > 1 ? cols[1] : _formattedDateStr,
-        'day': cols.length > 2 ? cols[2] : 'Day',
-        'shift': cols.length > 3 ? cols[3] : '🌅 Morning Pickup',
-        'busNo': cols.length > 4 ? cols[4] : 'Bus',
-        'vehicleNo': cols.length > 5 ? cols[5] : 'Vehicle',
-        'routeName': cols.length > 6 ? cols[6] : 'Official Route',
-        'driverName': cols.length > 7 ? cols[7] : 'Assigned Driver',
-        'driverPhone': cols.length > 8 ? cols[8] : 'N/A',
-        'originStop': cols.length > 9 ? cols[9] : 'Ratibad Campus',
-        'destinationStop': cols.length > 10 ? cols[10] : 'Campus',
-        'departureTime': cols.length > 11 ? cols[11] : '07:00 AM',
-        'arrivalTime': cols.length > 12 ? cols[12] : '08:30 AM',
-        'duration': cols.length > 13 ? cols[13] : '1h 30m',
-        'punctuality': cols.length > 14 ? cols[14] : '✅ On-Time (Official Schedule)',
-        'delayMinutes': cols.length > 15 ? (int.tryParse(cols[15]) ?? 0) : 0,
-        'stopsCompleted': cols.length > 16 ? cols[16] : '10/10',
-        'distanceKm': cols.length > 17 ? cols[17] : '35.0',
-        'status': cols.length > 18 ? cols[18] : 'Scheduled (Official)',
-        'stops': [],
-      });
+      if (isOrganized11Col || cols.length <= 12) {
+        final startStr = cols.length > 6 ? cols[6] : 'N/A';
+        final isEvening = startStr.toUpperCase().contains('PM') ||
+            (cols.length > 3 && cols[3].toLowerCase().contains('campus ->'));
+        trips.add({
+          'tripId': 'TRIP-${isEvening ? 'PM' : 'AM'}-${cols.length > 1 ? cols[1].replaceAll(' ', '') : 'BUS'}-${cols.isNotEmpty ? cols[0] : _formattedDateStr}',
+          'date': cols.isNotEmpty ? cols[0] : _formattedDateStr,
+          'day': '',
+          'shift': isEvening ? '🌆 Evening Drop-off' : '🌅 Morning Pickup',
+          'shiftType': isEvening ? 'dropoff' : 'pickup',
+          'busNo': cols.length > 1 ? cols[1] : 'Bus',
+          'vehicleNo': cols.length > 2 ? cols[2] : 'Vehicle',
+          'routeName': cols.length > 3 ? cols[3] : 'Official Route',
+          'driverName': cols.length > 4 ? cols[4] : 'Assigned Driver',
+          'driverPhone': 'N/A',
+          'dataSource': cols.length > 5 ? cols[5] : 'SCHEDULED / ESTIMATED',
+          'originStop': 'Origin',
+          'destinationStop': 'Destination',
+          'departureTime': startStr,
+          'arrivalTime': cols.length > 7 ? cols[7] : 'N/A',
+          'duration': 'N/A',
+          'punctuality': cols.length > 5 && cols[5] == 'LIVE GPS' ? '🟢 On-Time' : 'Scheduled Timetable',
+          'delayMinutes': 0,
+          'stopsCompleted': cols.length > 9 ? cols[9] : '0/0',
+          'distanceKm': 'N/A',
+          'status': cols.length > 8 ? cols[8] : 'Scheduled',
+          'stops': [],
+        });
+      } else {
+        final shiftStr = cols.length > 3 ? cols[3] : '🌅 Morning Pickup';
+        final isEvening = shiftStr.toLowerCase().contains('evening') || shiftStr.toLowerCase().contains('drop');
+        trips.add({
+          'tripId': cols.isNotEmpty ? cols[0] : 'TRIP',
+          'date': cols.length > 1 ? cols[1] : _formattedDateStr,
+          'day': cols.length > 2 ? cols[2] : 'Day',
+          'shift': shiftStr,
+          'shiftType': isEvening ? 'dropoff' : 'pickup',
+          'busNo': cols.length > 4 ? cols[4] : 'Bus',
+          'vehicleNo': cols.length > 5 ? cols[5] : 'Vehicle',
+          'routeName': cols.length > 6 ? cols[6] : 'Official Route',
+          'driverName': cols.length > 7 ? cols[7] : 'Assigned Driver',
+          'driverPhone': cols.length > 8 ? cols[8] : 'N/A',
+          'originStop': cols.length > 9 ? cols[9] : 'Origin',
+          'destinationStop': cols.length > 10 ? cols[10] : 'Destination',
+          'departureTime': cols.length > 11 ? cols[11] : 'N/A',
+          'arrivalTime': cols.length > 12 ? cols[12] : 'N/A',
+          'duration': cols.length > 13 ? cols[13] : 'N/A',
+          'punctuality': cols.length > 14 ? cols[14] : 'N/A',
+          'delayMinutes': cols.length > 15 ? (int.tryParse(cols[15]) ?? 0) : 0,
+          'stopsCompleted': cols.length > 16 ? cols[16] : '0/0',
+          'distanceKm': cols.length > 17 ? cols[17] : 'N/A',
+          'status': cols.length > 18 ? cols[18] : 'Scheduled',
+          'stops': [],
+        });
+      }
     }
 
     final morningTrips = trips.where((t) => t['shift'].toString().contains('Morning')).toList();
     final eveningTrips = trips.where((t) => t['shift'].toString().contains('Evening')).toList();
     final totalBuses = trips.map((t) => t['busNo']).toSet().length;
     final onTimeCount = trips.where((t) => t['punctuality'].toString().contains('On-Time')).length;
-    final punctualityRate = trips.isEmpty ? '98.5' : ((onTimeCount / trips.length) * 100).toStringAsFixed(1);
+    final punctualityRate = trips.isEmpty ? '0.0' : ((onTimeCount / trips.length) * 100).toStringAsFixed(1);
 
     double totalDist = 0;
     for (final t in trips) {
-      totalDist += double.tryParse(t['distanceKm'].toString()) ?? 0;
+      final cleanDist = t['distanceKm'].toString().replaceAll(RegExp(r'[^0-9.]'), '');
+      totalDist += double.tryParse(cleanDist) ?? 0;
     }
 
     return {
       'success': true,
       'date': _formattedDateStr,
       'shift': _selectedShift,
-      'totalBuses': totalBuses > 0 ? totalBuses : 27,
+      'totalBuses': totalBuses,
       'totalTrips': trips.length,
       'punctualityRate': punctualityRate,
       'totalDistance': totalDist.toStringAsFixed(1),
-      'totalStopsServiced': trips.length * 8,
+      'totalStopsServiced': 0,
       'morningCount': morningTrips.length,
       'eveningCount': eveningTrips.length,
       'morningTrips': morningTrips,
@@ -583,47 +656,52 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Row 1: Date Picker & Shift Switcher
-          Row(
-            children: [
-              // Date Chip
-              InkWell(
-                onTap: _pickDate,
-                borderRadius: BorderRadius.circular(12),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.calendar_month_rounded, color: Color(0xFF818CF8), size: 16),
-                      const SizedBox(width: 8),
-                      Text(
-                        _formattedDisplayDate,
-                        style: GoogleFonts.plusJakartaSans(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
+          // Row 1: Date Picker & Shift Switcher (Responsively Scrollable for Narrow Displays)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            physics: const BouncingScrollPhysics(),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Date Chip
+                InkWell(
+                  onTap: _pickDate,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.calendar_month_rounded, color: Color(0xFF818CF8), size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          _formattedDisplayDate,
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(Icons.arrow_drop_down_rounded, color: Colors.white54, size: 18),
-                    ],
+                        const SizedBox(width: 4),
+                        const Icon(Icons.arrow_drop_down_rounded, color: Colors.white54, size: 18),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-              const Spacer(),
-              // Shift Filter Badges
-              _buildShiftPill('All', 'all'),
-              const SizedBox(width: 6),
-              _buildShiftPill('🌅 AM', 'morning'),
-              const SizedBox(width: 6),
-              _buildShiftPill('🌆 PM', 'evening'),
-            ],
+                const SizedBox(width: 10),
+                // Shift Filter Badges
+                _buildShiftPill('All', 'all'),
+                const SizedBox(width: 6),
+                _buildShiftPill('🌅 AM', 'morning'),
+                const SizedBox(width: 6),
+                _buildShiftPill('🌆 PM', 'evening'),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           // Row 2: Search Input
@@ -780,10 +858,17 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
   }
 
   Widget _buildKpiMetricsStrip() {
-    final punctuality = _reportData?['punctualityRate']?.toString() ?? '100.0';
-    final totalTrips = _reportData?['totalTrips']?.toString() ?? '54';
-    final onTimeTrips = _reportData?['onTimeTrips']?.toString() ?? '52';
-    final totalDistance = _reportData?['totalDistance']?.toString() ?? '1420';
+    final fleet = _reportData?['fleetAnalytics'] as Map<String, dynamic>?;
+    final punctualityVal = _reportData?['punctualityRate'] ?? fleet?['onTimeTripPercent'];
+    final totalTripsVal = _reportData?['totalTrips'] ?? fleet?['totalTrips'];
+    final onTimeTripsVal = _reportData?['onTimeTrips'];
+    final totalDistanceVal = _reportData?['totalDistance'] ?? fleet?['totalDistanceKm'];
+
+    final punctualityText = punctualityVal != null ? '$punctualityVal%' : '--';
+    final onTimeText = (onTimeTripsVal != null && totalTripsVal != null)
+        ? '$onTimeTripsVal / $totalTripsVal'
+        : (totalTripsVal != null ? '$totalTripsVal trips' : '--');
+    final distanceText = totalDistanceVal != null ? '$totalDistanceVal km' : '--';
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -818,11 +903,11 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
           const SizedBox(height: 14),
           Row(
             children: [
-              _buildKpiItem('Punctuality', '$punctuality%', const Color(0xFF10B981)),
+              _buildKpiItem('Punctuality', punctualityText, const Color(0xFF10B981)),
               _buildDivider(),
-              _buildKpiItem('On-Time', '$onTimeTrips / $totalTrips', const Color(0xFF38BDF8)),
+              _buildKpiItem('On-Time', onTimeText, const Color(0xFF38BDF8)),
               _buildDivider(),
-              _buildKpiItem('Total Dist', '$totalDistance km', const Color(0xFFF59E0B)),
+              _buildKpiItem('Total Dist', distanceText, const Color(0xFFF59E0B)),
             ],
           ),
         ],
@@ -897,74 +982,86 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header Row: Bus Name, Shift, Delay Badge
+              // Header Row: Bus Name, Shift, Delay Badge (Responsive Wrap for Narrow Screens)
               Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isMorning
-                          ? const Color(0xFF4F46E5).withValues(alpha: 0.2)
-                          : const Color(0xFFF59E0B).withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isMorning
-                            ? const Color(0xFF4F46E5).withValues(alpha: 0.4)
-                            : const Color(0xFFF59E0B).withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Text(
-                      isMorning ? '🌅 Morning' : '🌆 Evening',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: isMorning ? const Color(0xFF818CF8) : const Color(0xFFFBBF24),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    trip['busNo'] ?? 'Bus',
-                    style: GoogleFonts.plusJakartaSans(
-                      color: Colors.white,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      trip['vehicleNo'] ?? '',
-                      style: GoogleFonts.plusJakartaSans(color: Colors.white54, fontSize: 10, fontWeight: FontWeight.bold),
-                    ),
-                  ),
-                  const Spacer(),
-                  // Punctuality Badge
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: isOnTime
-                          ? const Color(0xFF10B981).withValues(alpha: 0.15)
-                          : const Color(0xFFEF4444).withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isOnTime
-                            ? const Color(0xFF10B981).withValues(alpha: 0.4)
-                            : const Color(0xFFEF4444).withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Text(
-                      isOnTime ? 'On Time' : '+$delayMins min late',
-                      style: GoogleFonts.plusJakartaSans(
-                        color: isOnTime ? const Color(0xFF10B981) : const Color(0xFFEF4444),
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                      ),
+                  Expanded(
+                    child: Wrap(
+                      spacing: 8,
+                      runSpacing: 6,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isMorning
+                                ? const Color(0xFF4F46E5).withValues(alpha: 0.2)
+                                : const Color(0xFFF59E0B).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isMorning
+                                  ? const Color(0xFF4F46E5).withValues(alpha: 0.4)
+                                  : const Color(0xFFF59E0B).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            isMorning ? '🌅 Morning' : '🌆 Evening',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: isMorning ? const Color(0xFF818CF8) : const Color(0xFFFBBF24),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          trip['busNo'] ?? 'Bus',
+                          style: GoogleFonts.plusJakartaSans(
+                            color: Colors.white,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        if ((trip['vehicleNo'] ?? '').toString().isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.06),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              trip['vehicleNo'] ?? '',
+                              style: GoogleFonts.plusJakartaSans(
+                                color: Colors.white54,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        // Punctuality Badge
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isOnTime
+                                ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                : const Color(0xFFEF4444).withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: isOnTime
+                                  ? const Color(0xFF10B981).withValues(alpha: 0.4)
+                                  : const Color(0xFFEF4444).withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            isOnTime ? 'On Time' : '+$delayMins min late',
+                            style: GoogleFonts.plusJakartaSans(
+                              color: isOnTime ? const Color(0xFF10B981) : const Color(0xFFEF4444),
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(width: 4),
@@ -1065,11 +1162,82 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
                 ],
               ),
 
-              // Expandable Stop-by-Stop Live Audit
+              // Telematics Metrics Row: Duration & Distance with Source
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.timer_outlined, color: Colors.white54, size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Duration: ${trip['duration'] ?? 'Unavailable'}',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.04),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.straighten_rounded, color: Colors.white54, size: 12),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Dist: ${trip['distanceKm'] ?? 'N/A'}${trip['distanceSource'] != null && trip['distanceSource'] != 'Unavailable' ? ' (${trip['distanceSource']})' : ''}',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              if (trip['cancellationReason'] != null && trip['cancellationReason'].toString().isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.warning_amber_rounded, color: Colors.redAccent, size: 13),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'Reason: ${trip['cancellationReason']}',
+                          style: GoogleFonts.plusJakartaSans(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.w600),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
+              // Expandable Stop-by-Stop Live Audit & Canonical Journey Analytics
               if (isExpanded) ...[
                 const SizedBox(height: 14),
                 const Divider(color: Colors.white10),
                 const SizedBox(height: 8),
+                _buildJourneyTelemetrySummary(trip),
+                const SizedBox(height: 10),
                 Text(
                   'STOP-BY-STOP AUDIT TIMELINE (${stops.length} STOPS)',
                   style: GoogleFonts.plusJakartaSans(
@@ -1085,6 +1253,8 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
                       style: GoogleFonts.plusJakartaSans(color: Colors.white38, fontSize: 11))
                 else
                   ...stops.map((s) => _buildStopAuditRow(s)),
+                _buildJourneySegmentsSection(trip),
+                _buildJourneyTimelineSection(trip),
               ],
             ],
           ),
@@ -1158,6 +1328,118 @@ class _ManagerReportHubScreenState extends State<ManagerReportHubScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildJourneyTelemetrySummary(dynamic trip) {
+    final gps = trip['gpsTelemetry'] as Map<String, dynamic>?;
+    final avgSpeed = trip['averageSpeedKmh'];
+    final avgDelay = trip['averageDelayMinutes'];
+    final samples = gps?['validSamples'] ?? trip['validGpsSamples'];
+    final completeness = gps?['completenessPercent'] ?? trip['telemetryCompletenessPercent'];
+    final gaps = gps?['gapCount'] ?? trip['gpsGapCount'];
+    final accuracy = gps?['averageAccuracyMeters'] ?? trip['averageAccuracyMeters'];
+
+    if (samples == null && avgSpeed == null && completeness == null) {
+      return const SizedBox.shrink();
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 6,
+      children: [
+        if (avgSpeed != null) _buildJourneyPill('Avg Speed', '$avgSpeed km/h', const Color(0xFF38BDF8)),
+        if (avgDelay != null) _buildJourneyPill('Avg Delay', '$avgDelay min', const Color(0xFFF59E0B)),
+        if (samples != null) _buildJourneyPill('GPS Samples', '$samples', const Color(0xFF10B981)),
+        if (completeness != null) _buildJourneyPill('Telemetry', '$completeness%', const Color(0xFFA855F7)),
+        if (gaps != null) _buildJourneyPill('GPS Gaps', '$gaps', const Color(0xFFFB7185)),
+        if (accuracy != null) _buildJourneyPill('Accuracy', '${accuracy}m', const Color(0xFF94A3B8)),
+      ],
+    );
+  }
+
+  Widget _buildJourneyPill(String label, String value, Color accent) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: accent.withValues(alpha: 0.25)),
+      ),
+      child: Text(
+        '$label: $value',
+        style: GoogleFonts.plusJakartaSans(color: accent, fontSize: 9.5, fontWeight: FontWeight.w700),
+      ),
+    );
+  }
+
+  Widget _buildJourneySegmentsSection(dynamic trip) {
+    final segments = (trip['segments'] as List<dynamic>?) ?? const [];
+    if (segments.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'TRAVEL SEGMENTS (${segments.length})',
+          style: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFF10B981),
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...segments.map((seg) {
+          final fromStop = (seg['fromStopName'] ?? seg['fromStop'] ?? 'Start').toString();
+          final toStop = (seg['toStopName'] ?? seg['toStop'] ?? 'End').toString();
+          final mins = seg['travelTimeMinutes']?.toString() ?? '--';
+          final dist = seg['distanceKm']?.toString() ?? '--';
+          final speed = seg['averageSpeedKmh']?.toString() ?? '--';
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '$fromStop -> $toStop • $mins min • $dist km • $speed km/h',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white70, fontSize: 10),
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildJourneyTimelineSection(dynamic trip) {
+    final timeline = (trip['journeyTimeline'] as List<dynamic>?) ?? const [];
+    if (timeline.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 12),
+        Text(
+          'ACTUAL JOURNEY TIMELINE (${timeline.length} EVENTS)',
+          style: GoogleFonts.plusJakartaSans(
+            color: const Color(0xFFA855F7),
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 1.0,
+          ),
+        ),
+        const SizedBox(height: 8),
+        ...timeline.take(8).map((ev) {
+          final eventType = (ev['eventType'] ?? ev['type'] ?? 'EVENT').toString();
+          final label = (ev['label'] ?? ev['stopName'] ?? '').toString();
+          final timeIst = (ev['timeIst'] ?? ev['timestampIst'] ?? ev['timestamp'] ?? '--').toString();
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Text(
+              '[$timeIst] $eventType${label.isNotEmpty ? ' — $label' : ''}',
+              style: GoogleFonts.plusJakartaSans(color: Colors.white60, fontSize: 10),
+            ),
+          );
+        }),
+      ],
     );
   }
 

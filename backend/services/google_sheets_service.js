@@ -80,14 +80,15 @@ async function initializeSpreadsheetTabs(sheets, spreadsheetId = SPREADSHEET_ID)
         // 1. Tab 1 Header: Morning Trips (Pickup)
         await sheets.spreadsheets.values.update({
             spreadsheetId,
-            range: `'🌅 Morning Trips (Pickup)'!A1:Q1`,
+            range: `'🌅 Morning Trips (Pickup)'!A1:AA1`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
                 values: [[
-                    'Date', 'Day', 'Bus No', 'Vehicle Plate', 'Official Route Name', 
-                    'Origin Terminus', 'Scheduled Start', 'Campus Arrival', 'Trip Duration', 
-                    'Assigned Driver', 'Driver Phone', 'Total Stops', 'Road Dist (km)', 
-                    'Punctuality Status', 'Delay (mins)', 'Trip Status', 'Last Synced At'
+                    'Trip ID', 'Date', 'Day', 'Bus No', 'Vehicle Plate', 'Official Route Name', 'Data Source',
+                    'Origin Terminus', 'Movement Start', 'Scheduled Departure', 'Actual Departure', 'Scheduled Arrival', 'Actual Arrival',
+                    'Duration (min)', 'Assigned Driver', 'Driver Phone', 'Stops Serviced', 'Distance (km)',
+                    'Avg Speed (km/h)', 'GPS Samples', 'GPS Gaps', 'Telemetry Completeness %',
+                    'Average Delay (min)', 'Punctuality Status', 'Delay (mins)', 'Trip Status', 'Direction'
                 ]]
             }
         });
@@ -95,14 +96,15 @@ async function initializeSpreadsheetTabs(sheets, spreadsheetId = SPREADSHEET_ID)
         // 2. Tab 2 Header: Evening Trips (Drop)
         await sheets.spreadsheets.values.update({
             spreadsheetId,
-            range: `'🌆 Evening Trips (Drop)'!A1:Q1`,
+            range: `'🌆 Evening Trips (Drop)'!A1:AA1`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
                 values: [[
-                    'Date', 'Day', 'Bus No', 'Vehicle Plate', 'Return Route Name', 
-                    'Origin (Campus)', 'Campus Departure', 'Destination Terminus', 'Scheduled Arrival', 
-                    'Trip Duration', 'Assigned Driver', 'Driver Phone', 'Total Stops', 
-                    'Road Dist (km)', 'Punctuality Status', 'Delay (mins)', 'Trip Status'
+                    'Trip ID', 'Date', 'Day', 'Bus No', 'Vehicle Plate', 'Return Route Name', 'Data Source',
+                    'Origin (Campus)', 'Destination Terminus', 'Movement Start', 'Scheduled Departure', 'Actual Departure', 'Scheduled Arrival', 'Actual Arrival',
+                    'Duration (min)', 'Assigned Driver', 'Driver Phone', 'Stops Serviced', 'Distance (km)',
+                    'Avg Speed (km/h)', 'GPS Samples', 'GPS Gaps', 'Telemetry Completeness %',
+                    'Average Delay (min)', 'Punctuality Status', 'Delay (mins)', 'Trip Status'
                 ]]
             }
         });
@@ -110,12 +112,12 @@ async function initializeSpreadsheetTabs(sheets, spreadsheetId = SPREADSHEET_ID)
         // 3. Tab 3 Header: Real-Time Stops Log
         await sheets.spreadsheets.values.update({
             spreadsheetId,
-            range: `'📍 Real-Time Stops Log'!A1:K1`,
+            range: `'📍 Real-Time Stops Log'!A1:M1`,
             valueInputOption: 'USER_ENTERED',
             requestBody: {
                 values: [[
-                    'Date', 'Shift', 'Bus No', 'Vehicle Plate', 'Route Name', 
-                    'Stop S.No', 'Stop Name', 'Scheduled Time', 'Actual Reached Time', 
+                    'Trip ID', 'Date', 'Shift', 'Data Source', 'Bus No', 'Vehicle Plate', 'Route Name',
+                    'Stop S.No', 'Stop Name', 'Scheduled Time', 'Actual Reached Time',
                     'Variance', 'Stop Status'
                 ]]
             }
@@ -128,9 +130,9 @@ async function initializeSpreadsheetTabs(sheets, spreadsheetId = SPREADSHEET_ID)
             valueInputOption: 'USER_ENTERED',
             requestBody: {
                 values: [[
-                    'Date', 'Day', 'Total Fleet Buses', 'Morning Trips (Pickup)', 
-                    'Evening Trips (Drop)', 'Total Daily Trips', 'On-Time Rate %', 
-                    'Total Fleet Distance (km)', 'Drivers Assigned', 'Fleet Health', 'Last Synced At'
+                    'Date', 'Day', 'Total Fleet Buses', 'Morning Trips (Pickup)',
+                    'Evening Trips (Drop)', 'Total Daily Trips', 'On-Time Rate %',
+                    'Total Fleet Distance (km)', 'LIVE GPS / Sched Trips', 'Fleet Health', 'Last Synced At'
                 ]]
             }
         });
@@ -172,31 +174,31 @@ async function applyProfessionalSpreadsheetStyling(sheets, spreadsheetId = SPREA
                 title: '🌅 Morning Trips (Pickup)',
                 headerBg: { red: 0.06, green: 0.09, blue: 0.16 }, // #0F172A Deep Slate Navy
                 tabColor: { red: 0.96, green: 0.62, blue: 0.04 }, // #F59E0B Golden Amber
-                punctualityCol: 13,
-                statusCol: 15,
-                columnWidths: [110, 95, 100, 130, 270, 190, 120, 120, 110, 160, 140, 110, 115, 165, 110, 135, 120],
-                leftCols: [4, 5, 9], // Route Name, Origin, Driver Name
-                numCols: 17
+                punctualityCol: 23,
+                statusCol: 25,
+                columnWidths: [190, 110, 95, 100, 130, 270, 160, 190, 130, 130, 130, 130, 130, 110, 160, 140, 110, 115, 120, 110, 100, 145, 130, 165, 110, 135, 135],
+                leftCols: [0, 5, 7, 14],
+                numCols: 27
             },
             {
                 title: '🌆 Evening Trips (Drop)',
                 headerBg: { red: 0.12, green: 0.11, blue: 0.29 }, // #1E1B4B Twilight Indigo
                 tabColor: { red: 0.55, green: 0.36, blue: 0.96 }, // #8B5CF6 Twilight Purple
-                punctualityCol: 14,
-                statusCol: 16,
-                columnWidths: [110, 95, 100, 130, 280, 190, 130, 190, 120, 110, 160, 140, 110, 115, 165, 110, 135],
-                leftCols: [4, 5, 7, 10], // Route, Campus Origin, Destination, Driver Name
-                numCols: 17
+                punctualityCol: 24,
+                statusCol: 26,
+                columnWidths: [190, 110, 95, 100, 130, 280, 160, 190, 190, 130, 130, 130, 130, 130, 110, 160, 140, 110, 115, 120, 110, 100, 145, 130, 165, 110, 135],
+                leftCols: [0, 5, 7, 8, 15],
+                numCols: 27
             },
             {
                 title: '📍 Real-Time Stops Log',
                 headerBg: { red: 0.02, green: 0.31, blue: 0.23 }, // #064E3B Deep Forest Emerald
                 tabColor: { red: 0.06, green: 0.73, blue: 0.51 }, // #10B981 Vibrant Mint
-                punctualityCol: 9,
-                statusCol: 10,
-                columnWidths: [110, 150, 100, 130, 260, 90, 240, 120, 140, 130, 140],
-                leftCols: [4, 6], // Route Name, Stop Name
-                numCols: 11
+                punctualityCol: 11,
+                statusCol: 12,
+                columnWidths: [190, 110, 150, 160, 100, 130, 260, 90, 240, 120, 140, 130, 140],
+                leftCols: [0, 6, 8], // Trip ID, Route Name, Stop Name
+                numCols: 13
             },
             {
                 title: '📊 Fleet KPI Summary',
@@ -204,7 +206,7 @@ async function applyProfessionalSpreadsheetStyling(sheets, spreadsheetId = SPREA
                 tabColor: { red: 0.15, green: 0.39, blue: 0.92 }, // #2563EB Cobalt Blue
                 punctualityCol: 6,
                 statusCol: 9,
-                columnWidths: [115, 105, 140, 155, 155, 140, 140, 165, 140, 150, 135],
+                columnWidths: [115, 105, 140, 155, 155, 140, 140, 165, 175, 150, 135],
                 leftCols: [9], // Fleet Health
                 numCols: 11
             }
@@ -481,93 +483,205 @@ async function applyProfessionalSpreadsheetStyling(sheets, spreadsheetId = SPREA
     }
 }
 
+function formatSheetDistance(distanceKm) {
+    if (distanceKm === undefined || distanceKm === null || distanceKm === '' || distanceKm === 'N/A') {
+        return 'N/A';
+    }
+    if (typeof distanceKm === 'number') {
+        return `${distanceKm.toFixed(1)} km`;
+    }
+    const str = String(distanceKm);
+    return str.includes('km') ? str : `${str} km`;
+}
+
+function fmtSheetIstTime(ts) {
+    if (!ts) return 'NO DATA';
+    const dt = new Date(ts);
+    if (Number.isNaN(dt.getTime())) return String(ts);
+    return dt.toLocaleTimeString('en-IN', {
+        timeZone: 'Asia/Kolkata',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: true
+    });
+}
+
+function buildMorningSheetRow(t) {
+    const dataSource = t.dataSource || 'SCHEDULED / ESTIMATED';
+    const scheduledDeparture = t.scheduledDeparture || 'NO DATA';
+    const actualDeparture = t.actualDeparture || 'NO DATA';
+    const scheduledArrival = t.scheduledArrival || 'NO DATA';
+    const actualArrival = t.actualArrival || 'NO DATA';
+    const movementStart = t.movementStartTimestamp ? fmtSheetIstTime(t.movementStartTimestamp) : 'NO DATA';
+    const distanceVal = t.actualDistanceKm !== undefined && t.actualDistanceKm !== null
+        ? formatSheetDistance(t.actualDistanceKm)
+        : formatSheetDistance(t.distanceKm);
+    const durationVal = t.totalDurationMinutes !== undefined && t.totalDurationMinutes !== null
+        ? t.totalDurationMinutes
+        : (t.duration || 'NO DATA');
+
+    return [
+        t.tripId || '',
+        t.date,
+        t.day,
+        t.busNo,
+        t.busNumber || t.vehicleNo || 'N/A',
+        t.routeName,
+        dataSource,
+        t.originStop,
+        movementStart,
+        scheduledDeparture,
+        actualDeparture,
+        scheduledArrival,
+        actualArrival,
+        durationVal,
+        t.driverName,
+        t.driverPhone,
+        t.stopsCompleted,
+        distanceVal,
+        t.averageSpeedKmh ?? 'NO DATA',
+        t.validGpsSamples ?? t.gpsSampleCount ?? 0,
+        t.gpsGapCount ?? 0,
+        t.telemetryCompletenessPercent ?? 'NO DATA',
+        t.averageDelayMinutes ?? 'NO DATA',
+        t.punctuality,
+        t.delayMinutes !== undefined ? (t.delayMinutes > 0 ? `+${t.delayMinutes} min` : '0 min') : '0 min',
+        t.status,
+        t.direction || 'stops -> campus'
+    ];
+}
+
+function buildEveningSheetRow(t) {
+    const dataSource = t.dataSource || 'SCHEDULED / ESTIMATED';
+    const scheduledDeparture = t.scheduledDeparture || 'NO DATA';
+    const actualDeparture = t.actualDeparture || 'NO DATA';
+    const scheduledArrival = t.scheduledArrival || 'NO DATA';
+    const actualArrival = t.actualArrival || 'NO DATA';
+    const movementStart = t.movementStartTimestamp ? fmtSheetIstTime(t.movementStartTimestamp) : 'NO DATA';
+    const distanceVal = t.actualDistanceKm !== undefined && t.actualDistanceKm !== null
+        ? formatSheetDistance(t.actualDistanceKm)
+        : formatSheetDistance(t.distanceKm);
+    const durationVal = t.totalDurationMinutes !== undefined && t.totalDurationMinutes !== null
+        ? t.totalDurationMinutes
+        : (t.duration || 'NO DATA');
+
+    return [
+        t.tripId || '',
+        t.date,
+        t.day,
+        t.busNo,
+        t.busNumber || t.vehicleNo || 'N/A',
+        t.routeName,
+        dataSource,
+        t.originStop || 'SISTec Ratibad Campus',
+        t.destinationStop,
+        movementStart,
+        scheduledDeparture,
+        actualDeparture,
+        scheduledArrival,
+        actualArrival,
+        durationVal,
+        t.driverName,
+        t.driverPhone,
+        t.stopsCompleted,
+        distanceVal,
+        t.averageSpeedKmh ?? 'NO DATA',
+        t.validGpsSamples ?? t.gpsSampleCount ?? 0,
+        t.gpsGapCount ?? 0,
+        t.telemetryCompletenessPercent ?? 'NO DATA',
+        t.averageDelayMinutes ?? 'NO DATA',
+        t.punctuality,
+        t.delayMinutes !== undefined ? (t.delayMinutes > 0 ? `+${t.delayMinutes} min` : '0 min') : '0 min',
+        t.status
+    ];
+}
+
+function buildStopSheetRow(s) {
+    return [
+        s.tripId || '',
+        s.date,
+        s.shift,
+        s.dataSource || 'SCHEDULED / ESTIMATED',
+        s.busNo,
+        s.vehicleNo,
+        s.routeName,
+        s.stopNo,
+        s.stopName,
+        s.scheduledTime,
+        s.actualTime || 'NO DATA',
+        s.variance,
+        s.status
+    ];
+}
+
+function buildKpiSheetRow(reportData, targetDate, syncTime) {
+    const totalTrips = reportData.totalTrips ?? ((reportData.morningTrips?.length || 0) + (reportData.eveningTrips?.length || 0));
+    const morningCount = reportData.morningTrips?.length || 0;
+    const eveningCount = reportData.eveningTrips?.length || 0;
+    const liveCount = reportData.liveGpsTrips ?? 0;
+    const schedCount = reportData.scheduledEstimatedTrips ?? Math.max(0, totalTrips - liveCount);
+    const punctualityRate = reportData.punctualityRate !== undefined ? `${reportData.punctualityRate}%` : '100.0%';
+    const totalDistance = reportData.totalDistance !== undefined ? `${reportData.totalDistance} km` : '0.0 km';
+
+    return [
+        targetDate,
+        reportData.day,
+        `${reportData.totalBuses || 0} Buses`,
+        `${morningCount} Trips`,
+        `${eveningCount} Trips`,
+        `${totalTrips} Trips`,
+        punctualityRate,
+        totalDistance,
+        `${liveCount} Live / ${schedCount} Sched`,
+        liveCount > 0 ? '🟢 Live GPS Active' : '⚪ Timetable Mode',
+        `${syncTime} IST`
+    ];
+}
+
 /**
- * Syncs full 2-Trip Daily Reports (Morning + Evening + Stops + KPI) to Google Sheets
+ * Syncs full Daily Reports (Morning + Evening + Stops + KPI) to Google Sheets
  * @param {Object} reportData Data object returned from generateTripReportData()
  */
-async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
+async function syncDailyTripReportsToGoogleSheets(reportData, targetDate, spreadsheetId = SPREADSHEET_ID) {
     try {
         const auth = getAuthClient();
         const sheets = google.sheets({ version: 'v4', auth });
-        const spreadsheetId = SPREADSHEET_ID;
 
         await initializeSpreadsheetTabs(sheets, spreadsheetId);
 
-        const syncTime = new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        const syncTime = new Date().toLocaleTimeString('en-IN', {
+            timeZone: 'Asia/Kolkata',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+        });
 
-        // Natural sort by Bus Number (Bus 01 -> Bus 27)
+        // Natural sort by Bus Number (Bus 01 -> Bus 27), then tripSequence
         const parseBusNum = str => parseInt(String(str).replace(/[^0-9]/g, ''), 10) || 0;
-        const sortedMorning = [...(reportData.morningTrips || [])].sort((a, b) => parseBusNum(a.busNo) - parseBusNum(b.busNo));
-        const sortedEvening = [...(reportData.eveningTrips || [])].sort((a, b) => parseBusNum(a.busNo) - parseBusNum(b.busNo));
+        const sortTrips = (a, b) => {
+            const busDiff = parseBusNum(a.busNo) - parseBusNum(b.busNo);
+            if (busDiff !== 0) return busDiff;
+            return (a.tripSequence || 1) - (b.tripSequence || 1);
+        };
+        const sortedMorning = [...(reportData.morningTrips || [])].sort(sortTrips);
+        const sortedEvening = [...(reportData.eveningTrips || [])].sort(sortTrips);
 
-        // Format Morning Rows with clean values
-        const morningRows = sortedMorning.map(t => [
-            t.date,
-            t.day,
-            t.busNo,
-            t.vehicleNo,
-            t.routeName,
-            t.originStop,
-            t.scheduledDeparture || t.departureTime,
-            t.scheduledArrival || t.arrivalTime,
-            t.duration,
-            t.driverName,
-            t.driverPhone,
-            t.stopsCompleted,
-            typeof t.distanceKm === 'number' ? `${t.distanceKm.toFixed(1)} km` : (String(t.distanceKm).includes('km') ? t.distanceKm : `${t.distanceKm} km`),
-            t.punctuality,
-            t.delayMinutes !== undefined ? (t.delayMinutes > 0 ? `+${t.delayMinutes} min` : '0 min') : '0 min',
-            t.status,
-            `${syncTime} IST`
-        ]);
+        const morningRows = sortedMorning.map(buildMorningSheetRow);
+        const eveningRows = sortedEvening.map(buildEveningSheetRow);
+        const stopRows = (reportData.stopLogs || []).map(buildStopSheetRow);
 
-        // Format Evening Rows with clean values
-        const eveningRows = sortedEvening.map(t => [
-            t.date,
-            t.day,
-            t.busNo,
-            t.vehicleNo,
-            t.routeName,
-            t.originStop || 'SISTec Ratibad Campus',
-            t.scheduledDeparture || t.departureTime,
-            t.destinationStop,
-            t.scheduledArrival || t.arrivalTime,
-            t.duration,
-            t.driverName,
-            t.driverPhone,
-            t.stopsCompleted,
-            typeof t.distanceKm === 'number' ? `${t.distanceKm.toFixed(1)} km` : (String(t.distanceKm).includes('km') ? t.distanceKm : `${t.distanceKm} km`),
-            t.punctuality,
-            t.delayMinutes !== undefined ? (t.delayMinutes > 0 ? `+${t.delayMinutes} min` : '0 min') : '0 min',
-            t.status
-        ]);
-
-        // Format Stop Log Rows
-        const stopRows = (reportData.stopLogs || []).map(s => [
-            s.date,
-            s.shift,
-            s.busNo,
-            s.vehicleNo,
-            s.routeName,
-            s.stopNo,
-            s.stopName,
-            s.scheduledTime,
-            s.actualTime,
-            s.variance,
-            s.status
-        ]);
-
-        // 1. Update Morning Trips Sheet
+        // 1. Update Morning Trips Sheet (Date is col B / index 1)
         const existingMorning = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: `'🌅 Morning Trips (Pickup)'!A2:Q`
+            range: `'🌅 Morning Trips (Pickup)'!A2:AA`
         });
-        let curMorning = (existingMorning.data.values || []).filter(r => r[0] !== targetDate);
+        let curMorning = (existingMorning.data.values || []).filter(r => r[1] !== targetDate);
         curMorning.push(...morningRows);
 
         await sheets.spreadsheets.values.clear({
             spreadsheetId,
-            range: `'🌅 Morning Trips (Pickup)'!A2:Q1000`
+            range: `'🌅 Morning Trips (Pickup)'!A2:AA1000`
         });
         await sheets.spreadsheets.values.update({
             spreadsheetId,
@@ -576,17 +690,17 @@ async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
             requestBody: { values: curMorning }
         });
 
-        // 2. Update Evening Trips Sheet
+        // 2. Update Evening Trips Sheet (Date is col B / index 1)
         const existingEvening = await sheets.spreadsheets.values.get({
             spreadsheetId,
-            range: `'🌆 Evening Trips (Drop)'!A2:Q`
+            range: `'🌆 Evening Trips (Drop)'!A2:AA`
         });
-        let curEvening = (existingEvening.data.values || []).filter(r => r[0] !== targetDate);
+        let curEvening = (existingEvening.data.values || []).filter(r => r[1] !== targetDate);
         curEvening.push(...eveningRows);
 
         await sheets.spreadsheets.values.clear({
             spreadsheetId,
-            range: `'🌆 Evening Trips (Drop)'!A2:Q1000`
+            range: `'🌆 Evening Trips (Drop)'!A2:AA1000`
         });
         await sheets.spreadsheets.values.update({
             spreadsheetId,
@@ -595,18 +709,18 @@ async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
             requestBody: { values: curEvening }
         });
 
-        // 3. Update Stop Timestamps Log Sheet (keep up to date)
+        // 3. Update Stop Timestamps Log Sheet (Date is col B / index 1)
         if (stopRows.length > 0) {
             const existingStops = await sheets.spreadsheets.values.get({
                 spreadsheetId,
-                range: `'📍 Real-Time Stops Log'!A2:K`
+                range: `'📍 Real-Time Stops Log'!A2:M`
             });
-            let curStops = (existingStops.data.values || []).filter(r => r[0] !== targetDate);
+            let curStops = (existingStops.data.values || []).filter(r => r[1] !== targetDate);
             curStops.push(...stopRows);
 
             await sheets.spreadsheets.values.clear({
                 spreadsheetId,
-                range: `'📍 Real-Time Stops Log'!A2:K3000`
+                range: `'📍 Real-Time Stops Log'!A2:M3000`
             });
             await sheets.spreadsheets.values.update({
                 spreadsheetId,
@@ -616,27 +730,8 @@ async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
             });
         }
 
-        // 4. Update Fleet KPI Summary Sheet
-        const totalTrips = morningRows.length + eveningRows.length;
-        const onTimeMorning = morningRows.filter(r => String(r[13]).includes('On-Time') || String(r[13]).includes('🟢')).length;
-        const onTimeEvening = eveningRows.filter(r => String(r[14]).includes('On-Time') || String(r[14]).includes('🟢')).length;
-        const punctualityRate = totalTrips > 0 ? (((onTimeMorning + onTimeEvening) / totalTrips) * 100).toFixed(1) + '%' : '100.0%';
-        const totalKm = (reportData.morningTrips || []).reduce((acc, t) => acc + (parseFloat(String(t.distanceKm).replace(/[^0-9.]/g, '')) || 0), 0) +
-                        (reportData.eveningTrips || []).reduce((acc, t) => acc + (parseFloat(String(t.distanceKm).replace(/[^0-9.]/g, '')) || 0), 0);
-
-        const kpiRow = [
-            targetDate,
-            reportData.day,
-            `${reportData.totalBuses || 27} Buses`,
-            `${morningRows.length} Trips`,
-            `${eveningRows.length} Trips`,
-            `${totalTrips} Trips`,
-            punctualityRate,
-            `${totalKm.toFixed(1)} km`,
-            `${reportData.totalBuses || 27} Drivers (100%)`,
-            '🟢 100% Operational',
-            `${syncTime} IST`
-        ];
+        // 4. Update Fleet KPI Summary Sheet from canonical reportData
+        const kpiRow = buildKpiSheetRow(reportData, targetDate, syncTime);
 
         const existingKpi = await sheets.spreadsheets.values.get({
             spreadsheetId,
@@ -679,6 +774,10 @@ async function syncDailyTripReportsToGoogleSheets(reportData, targetDate) {
 
 module.exports = {
     getAuthClient,
+    buildMorningSheetRow,
+    buildEveningSheetRow,
+    buildStopSheetRow,
+    buildKpiSheetRow,
     syncDailyTripReportsToGoogleSheets,
     initializeSpreadsheetTabs,
     SPREADSHEET_ID

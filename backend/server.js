@@ -25,8 +25,20 @@ const rateLimit = require('express-rate-limit');
 const admin = require('firebase-admin');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
-const { generateTripReportData, generateTripReportExcelBuffer } = require('./services/trip_report_generator');
+const {
+    generateTripReportData,
+    generateTripReportExcelBuffer,
+    generateTripReportCsvString,
+    generateTripReportPdfBuffer
+} = require('./services/trip_report_generator');
 const { syncDailyTripReportsToGoogleSheets, SPREADSHEET_ID } = require('./services/google_sheets_service');
+const {
+    noSqlSanitizeMiddleware,
+    validateStringInputs,
+    validatePagination,
+    validateObjectIdParam
+} = require('./middleware/noSqlSanitizer');
+const { defaultLimiter } = require('./middleware/socketRateLimiter');
 
 function areExternalNotificationsSuppressed(env = process.env) {
     const nodeEnv = (env.NODE_ENV || '').toLowerCase().trim();
@@ -145,6 +157,12 @@ const Notification = require('./models/Notification');
 const Complaint = require('./models/Complaint');
 const Schedule = require('./models/Schedule');
 const LiveTripLog = require('./models/LiveTripLog');
+const TripTelemetryPoint = require('./models/TripTelemetryPoint');
+const {
+    getIstDateString,
+    persistTelemetryPointIfSampled,
+    clearTelemetrySamplerState
+} = require('./services/telemetry_persistence_service');
 const RegistrationForm = require('./models/RegistrationForm');
 const RegistrationSubmission = require('./models/RegistrationSubmission');
 const BoardingLog = require('./models/BoardingLog');
@@ -345,9 +363,18 @@ function shutdownIngressMiddleware(req, res, next) {
 
 app.use(shutdownIngressMiddleware);
 
+// Trust reverse proxy (e.g. Render) to correctly identify client IP and HTTPS protocol
+app.set('trust proxy', 1);
+
 app.use(helmet({
-    contentSecurityPolicy: false, // Allows cross-origin map tiles
-    crossOriginEmbedderPolicy: false
+    contentSecurityPolicy: false, // APIs & mobile JSON endpoints do not serve browser UI
+    crossOriginEmbedderPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }, // Allows mobile & report file downloads
+    hsts: process.env.NODE_ENV === 'production' ? {
+        maxAge: 31536000,
+        includeSubDomains: true,
+        preload: true
+    } : false
 }));
 app.use(cors(corsOptions));
 
@@ -361,25 +388,10 @@ app.use(compression({
     }
 }));
 
-// 🛡️ Enterprise NoSQL Injection & Query Sanitization Middleware
-const sanitizeInput = (obj) => {
-    if (!obj || typeof obj !== 'object') return obj;
-    for (const key of Object.keys(obj)) {
-        if (key.startsWith('$') || key.includes('.')) {
-            delete obj[key];
-        } else if (typeof obj[key] === 'object') {
-            sanitizeInput(obj[key]);
-        }
-    }
-    return obj;
-};
-
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(noSqlSanitizeMiddleware);
 app.use((req, res, next) => {
-    if (req.body) sanitizeInput(req.body);
-    if (req.query) sanitizeInput(req.query);
-    if (req.params) sanitizeInput(req.params);
     res.setHeader('X-Content-Type-Options', 'nosniff');
     res.setHeader('X-Frame-Options', 'DENY');
     next();
@@ -411,7 +423,6 @@ app.get('/api/app-version', (req, res) => {
 });
 
 // Rate Limiting
-app.set('trust proxy', 1); // Trust reverse proxy (e.g. Render) to get correct client IP
 const isDevOrTest = process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -984,7 +995,7 @@ const broadcastStats = async (ioInstance = io, models = { Bus, Route, User }) =>
  * @param {string} req.body.role - User's role ('admin', 'manager', 'user').
  * @returns {Object} JSON response with JWT token and user details.
  */
-app.post('/api/auth/login', async (req, res) => {
+app.post('/api/auth/login', validateStringInputs(['username', 'password']), async (req, res) => {
     const username = req.body.username?.trim();
     const password = req.body.password;
     let role = req.body.role?.trim();
@@ -1131,7 +1142,7 @@ function buildForgotPasswordResponse() {
 /**
  * @api {post} /api/auth/forgot-password Secure Password Recovery (Token-based)
  */
-app.post('/api/auth/forgot-password', recoveryLimiter, async (req, res) => {
+app.post('/api/auth/forgot-password', recoveryLimiter, validateStringInputs([], ['identifier', 'email', 'username']), async (req, res) => {
     const rawIdentifier = (req.body.identifier || req.body.email || req.body.username || '').toString().trim();
     const providedEmail = (req.body.email || '').toString().trim();
 
@@ -1228,7 +1239,7 @@ app.post('/api/auth/forgot-password', recoveryLimiter, async (req, res) => {
 /**
  * @api {post} /api/auth/reset-password Reset Password Using Verification Token or Code
  */
-app.post('/api/auth/reset-password', recoveryLimiter, async (req, res) => {
+app.post('/api/auth/reset-password', recoveryLimiter, validateStringInputs(['newPassword'], ['token', 'code']), async (req, res) => {
     const rawToken = (req.body.token || req.body.code || '').toString().trim();
     const newPassword = req.body.newPassword;
 
@@ -1316,7 +1327,7 @@ app.post('/api/auth/reset-password', recoveryLimiter, async (req, res) => {
 /**
  * @api {post} /api/auth/force-change-password Mandatory First-Time Password Reset (Authenticated)
  */
-app.post('/api/auth/force-change-password', passwordChangeAuth, async (req, res) => {
+app.post('/api/auth/force-change-password', passwordChangeAuth, validateStringInputs(['newPassword'], ['currentPassword', 'oldPassword']), async (req, res) => {
     const { currentPassword, oldPassword, newPassword } = req.body;
     const pwdToCheck = (currentPassword || oldPassword || '').trim();
 
@@ -1489,7 +1500,7 @@ app.get('/api/routes', optionalAuth, async (req, res) => {
     }
 });
 
-app.get('/api/routes/:id', authMiddleware, async (req, res) => {
+app.get('/api/routes/:id', authMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const route = await Route.findById(req.params.id).lean();
         if (!route) return res.status(404).json({ error: 'Route not found' });
@@ -1522,7 +1533,7 @@ app.get('/api/routes/geocode-stop', authMiddleware, async (req, res) => {
 
 // ── CROWDSOURCED STOP VERIFICATION & AUTO-CALIBRATION API ───────────────────
 // Submit a stop verification or GPS coordinate suggestion
-app.post('/api/routes/:id/stops/feedback', authMiddleware, async (req, res) => {
+app.post('/api/routes/:id/stops/feedback', authMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const routeId = req.params.id;
         const { stopName, feedbackType, suggestedLat, suggestedLng, accuracy, comment } = req.body;
@@ -1575,7 +1586,7 @@ app.post('/api/routes/:id/stops/feedback', authMiddleware, async (req, res) => {
 });
 
 // Get feedback summary & consensus status for all stops on a route
-app.get('/api/routes/:id/stops/feedback-summary', authMiddleware, async (req, res) => {
+app.get('/api/routes/:id/stops/feedback-summary', authMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const routeId = req.params.id;
         const summary = await getRouteFeedbackSummary(routeId);
@@ -1601,7 +1612,7 @@ app.get('/api/manager/stop-feedback', authMiddleware, managerMiddleware, async (
 });
 
 // Manager: 1-Click Apply a suggested stop location to the route
-app.post('/api/manager/stop-feedback/:id/apply', authMiddleware, managerMiddleware, async (req, res) => {
+app.post('/api/manager/stop-feedback/:id/apply', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const feedback = await StopFeedback.findById(req.params.id);
         if (!feedback) return res.status(404).json({ error: 'Feedback report not found' });
@@ -1649,7 +1660,7 @@ app.post('/api/manager/stop-feedback/:id/apply', authMiddleware, managerMiddlewa
 });
 
 // Manager: Reject a feedback report
-app.post('/api/manager/stop-feedback/:id/reject', authMiddleware, managerMiddleware, async (req, res) => {
+app.post('/api/manager/stop-feedback/:id/reject', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const feedback = await StopFeedback.findByIdAndUpdate(
             req.params.id,
@@ -1819,7 +1830,7 @@ app.post('/api/users/fcm-token', authMiddleware, async (req, res) => {
 });
 
 // Grant Rights/Update User
-app.put('/api/users/:id/rights', authMiddleware, adminMiddleware, async (req, res) => {
+app.put('/api/users/:id/rights', authMiddleware, adminMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { accessRights, status } = req.body;
         const updateData = {};
@@ -1853,7 +1864,7 @@ app.post('/api/students', authMiddleware, managerMiddleware, async (req, res) =>
     }
 });
 
-app.delete('/api/students/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.delete('/api/students/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         await Student.findByIdAndDelete(req.params.id);
         res.json({ message: 'Student deleted' });
@@ -1896,7 +1907,7 @@ app.get('/api/buses', async (req, res) => {
     }
 });
 
-app.put('/api/buses/:id/status', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/buses/:id/status', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { status, routeId, routeName, routeColor } = req.body;
         const updateData = { status };
@@ -1998,7 +2009,7 @@ app.post('/api/manager/notifications', authMiddleware, managerMiddleware, async 
 });
 
 // Manager: Delete Notification
-app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], authMiddleware, managerMiddleware, async (req, res) => {
+app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { id } = req.params;
         const deletedNotif = await Notification.findByIdAndDelete(id);
@@ -2015,14 +2026,17 @@ app.delete(['/api/manager/notifications/:id', '/api/notifications/:id'], authMid
 // GET /api/manager/reports/bus-trip-report?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1&format=json|csv
 app.get('/api/manager/reports/bus-trip-report', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        const { date, shift, busId, days, format } = req.query;
-        const targetDate = date || new Date().toISOString().split('T')[0];
+        const { date, shift, busId, routeId, direction, tripId, days, format, csvType } = req.query;
+        const targetDate = date || getIstDateString();
         const targetShift = shift || 'all';
 
         const reportData = await generateTripReportData({
             targetDate,
             shift: targetShift,
             busId: busId || null,
+            routeId: routeId || null,
+            direction: direction || null,
+            tripId: tripId || null,
             days: days ? parseInt(days, 10) : 1
         });
 
@@ -2030,15 +2044,26 @@ app.get('/api/manager/reports/bus-trip-report', authMiddleware, managerMiddlewar
         if (format === 'xlsx' || format === 'excel') {
             const excelBuffer = generateTripReportExcelBuffer(reportData);
             const safeDate = targetDate.replace(/[^0-9-]/g, '');
+            const safeBus = busId ? `_${String(busId).replace(/[^a-zA-Z0-9_-]/g, '')}` : '';
             res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}.xlsx"`);
+            res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}${safeBus}.xlsx"`);
             return res.status(200).send(excelBuffer);
+        }
+
+        // If client requested PDF (.pdf) format
+        if (format === 'pdf') {
+            const pdfBuffer = await generateTripReportPdfBuffer(reportData);
+            const safeDate = targetDate.replace(/[^0-9-]/g, '');
+            const safeBus = busId ? `_${String(busId).replace(/[^a-zA-Z0-9_-]/g, '')}` : '';
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}${safeBus}.pdf"`);
+            return res.status(200).send(pdfBuffer);
         }
 
         // If client requested JSON or sent Accept: application/json
         const wantsJson = format === 'json' || 
                           req.query.json === 'true' || 
-                          (req.headers.accept && req.headers.accept.includes('application/json') && format !== 'csv' && format !== 'xlsx');
+                          (req.headers.accept && req.headers.accept.includes('application/json') && format !== 'csv' && format !== 'xlsx' && format !== 'pdf');
 
         if (wantsJson) {
             return res.json({
@@ -2047,19 +2072,15 @@ app.get('/api/manager/reports/bus-trip-report', authMiddleware, managerMiddlewar
             });
         }
 
-        // Generate clean, comprehensive CSV for spreadsheet/Excel
-        let csv = '# SISTec Ratibad - Official Campus Shuttle Operational Trip Log\n';
-        csv += `# Generated Date: ${reportData.date} | Shift: ${targetShift} | Total Buses: ${reportData.totalBuses} | Punctuality: ${reportData.punctualityRate}%\n\n`;
-        csv += 'Trip ID,Date,Day,Shift,Bus Name,License Plate,Route Name,Driver Name,Driver Phone,Origin Stop,Destination Stop,Departure Time,Arrival Time,Duration,Punctuality,Delay (mins),Stops Completed,Total Dist (km),Status,Stop Timeline (Stop: Scheduled [Actual | Variance])\n';
-
-        reportData.allTrips.forEach(t => {
-            const timelineStr = (t.stops || []).map(s => `${s.stopNumber}. ${s.name} (${s.scheduledTime}) [${s.actualTime} | ${s.variance}]`).join(' ➔ ');
-            csv += `"${t.tripId}","${t.date}","${t.day}","${t.shift}","${t.busNo}","${t.vehicleNo}","${t.routeName}","${t.driverName}","${t.driverPhone}","${t.originStop}","${t.destinationStop}","${t.departureTime}","${t.arrivalTime}","${t.duration}","${t.punctuality}",${t.delayMinutes},"${t.stopsCompleted}","${t.distanceKm}","${t.status}","${timelineStr.replace(/"/g, '""')}"\n`;
-        });
-
+        // Generate clean UTF-8 BOM CSV matching organized fleet schema (Row 1 header)
+        const selectedCsvType = csvType ? String(csvType).trim() : 'trip_summary';
+        const csv = generateTripReportCsvString(reportData, selectedCsvType);
         const safeDate = targetDate.replace(/[^0-9-]/g, '');
+        const safeBus = busId ? `_${String(busId).replace(/[^a-zA-Z0-9_-]/g, '')}` : '';
+        const safeCsvType = selectedCsvType.replace(/[^a-zA-Z0-9_-]/g, '');
+        const csvFilePrefix = csvType ? `sistec_${safeCsvType}` : 'sistec_fleet_report';
         res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-        res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}.csv"`);
+        res.setHeader('Content-Disposition', `attachment; filename="${csvFilePrefix}_${safeDate}_${targetShift}${safeBus}.csv"`);
         return res.status(200).send(csv);
     } catch (err) {
         console.error('Report Generation Error:', err);
@@ -2092,25 +2113,59 @@ const reportAuthMiddleware = async (req, res, next) => {
 
 app.get('/api/manager/reports/bus-trip-report/excel', reportAuthMiddleware, async (req, res) => {
     try {
-        const { date, shift, busId, days } = req.query;
-        const targetDate = date || new Date().toISOString().split('T')[0];
+        const { date, shift, busId, routeId, direction, tripId, days } = req.query;
+        const targetDate = date || getIstDateString();
         const targetShift = shift || 'all';
 
         const reportData = await generateTripReportData({
             targetDate,
             shift: targetShift,
             busId: busId || null,
+            routeId: routeId || null,
+            direction: direction || null,
+            tripId: tripId || null,
             days: days ? parseInt(days, 10) : 1
         });
 
         const excelBuffer = generateTripReportExcelBuffer(reportData);
         const safeDate = targetDate.replace(/[^0-9-]/g, '');
+        const safeBus = busId ? `_${String(busId).replace(/[^a-zA-Z0-9_-]/g, '')}` : '';
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}.xlsx"`);
+        res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}${safeBus}.xlsx"`);
         return res.status(200).send(excelBuffer);
     } catch (err) {
         console.error('Excel Report Generation Error:', err);
         res.status(500).json({ error: 'Failed to generate Excel report' });
+    }
+});
+
+// ─── MANAGER: DIRECT PDF (.PDF) REPORT DOWNLOAD ──────────────────────────────
+// GET /api/manager/reports/bus-trip-report/pdf?date=YYYY-MM-DD&shift=all|morning|evening&busId=<id>&days=1
+app.get('/api/manager/reports/bus-trip-report/pdf', reportAuthMiddleware, async (req, res) => {
+    try {
+        const { date, shift, busId, routeId, direction, tripId, days } = req.query;
+        const targetDate = date || getIstDateString();
+        const targetShift = shift || 'all';
+
+        const reportData = await generateTripReportData({
+            targetDate,
+            shift: targetShift,
+            busId: busId || null,
+            routeId: routeId || null,
+            direction: direction || null,
+            tripId: tripId || null,
+            days: days ? parseInt(days, 10) : 1
+        });
+
+        const pdfBuffer = await generateTripReportPdfBuffer(reportData);
+        const safeDate = targetDate.replace(/[^0-9-]/g, '');
+        const safeBus = busId ? `_${String(busId).replace(/[^a-zA-Z0-9_-]/g, '')}` : '';
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', `attachment; filename="sistec_fleet_report_${safeDate}_${targetShift}${safeBus}.pdf"`);
+        return res.status(200).send(pdfBuffer);
+    } catch (err) {
+        console.error('PDF Report Generation Error:', err);
+        res.status(500).json({ error: 'Failed to generate PDF report' });
     }
 });
 
@@ -2978,7 +3033,7 @@ function renderTripReportHtml(reportData) {
         const REPORT_TRIPS = ${safeEmbeddedTripsJson};
 
         function isStandaloneFileMode() {
-            return window.location.protocol === 'file:';
+            return window.location.protocol !== 'http:' && window.location.protocol !== 'https:';
         }
 
         function handleServerLinkClick(evt, featureLabel) {
@@ -3058,9 +3113,13 @@ function renderTripReportHtml(reportData) {
         }
 
         function setQuickDate(offsetDays) {
-            const d = new Date();
-            d.setDate(d.getDate() + offsetDays);
-            const iso = d.toISOString().split('T')[0];
+            const d = new Date(Date.now() + offsetDays * 86400000);
+            const iso = new Intl.DateTimeFormat('en-CA', {
+                timeZone: 'Asia/Kolkata',
+                year: 'numeric',
+                month: '2-digit',
+                day: '2-digit'
+            }).format(d);
             changeDate(iso);
         }
 
@@ -3128,14 +3187,17 @@ function renderTripReportHtml(reportData) {
 
 app.get('/api/manager/reports/bus-trip-report/html', reportAuthMiddleware, async (req, res) => {
     try {
-        const { date, shift, busId, days } = req.query;
-        const targetDate = date || new Date().toISOString().split('T')[0];
+        const { date, shift, busId, routeId, direction, tripId, days } = req.query;
+        const targetDate = date || getIstDateString();
         const targetShift = shift || 'all';
 
         const reportData = await generateTripReportData({
             targetDate,
             shift: targetShift,
             busId: busId || null,
+            routeId: routeId || null,
+            direction: direction || null,
+            tripId: tripId || null,
             days: days ? parseInt(days, 10) : 1
         });
 
@@ -3153,11 +3215,18 @@ app.get('/api/manager/reports/bus-trip-report/html', reportAuthMiddleware, async
 // Body: { date: 'YYYY-MM-DD' }
 app.post('/api/manager/reports/sync-google-sheets', authMiddleware, managerMiddleware, async (req, res) => {
     try {
-        const { date } = req.body;
-        const targetDate = date || new Date().toISOString().split('T')[0];
+        const { date, shift, busId, routeId, direction, tripId } = req.body || {};
+        const targetDate = date || getIstDateString();
 
-        // Generate full 2-trip records with real official timetable and live logs
-        const reportData = await generateTripReportData({ targetDate, shift: 'all' });
+        // Generate canonical trip records with official timetable and live logs
+        const reportData = await generateTripReportData({
+            targetDate,
+            shift: shift || 'all',
+            busId: busId || null,
+            routeId: routeId || null,
+            direction: direction || null,
+            tripId: tripId || null
+        });
         const syncResult = await syncDailyTripReportsToGoogleSheets(reportData, targetDate);
 
         if (syncResult.success) {
@@ -3296,7 +3365,7 @@ app.post('/api/manager/buses', authMiddleware, managerMiddleware, async (req, re
 });
 
 // Update Bus
-app.put('/api/manager/buses/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/buses/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const busId = req.params.id;
         const oldBus = await Bus.findById(busId);
@@ -3330,7 +3399,7 @@ app.put('/api/manager/buses/:id', authMiddleware, managerMiddleware, async (req,
 });
 
 // Delete Bus
-app.delete('/api/manager/buses/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.delete('/api/manager/buses/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const busId = req.params.id;
         const bus = await Bus.findById(busId);
@@ -3409,7 +3478,7 @@ app.post('/api/manager/routes', authMiddleware, managerMiddleware, async (req, r
 });
 
 // Delete Route
-app.delete('/api/manager/routes/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.delete('/api/manager/routes/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const routeId = req.params.id;
         const route = await Route.findById(routeId);
@@ -3507,7 +3576,7 @@ app.get('/api/manager/users', authMiddleware, managerMiddleware, async (req, res
 
 
 // Manager: Update User Status/Route
-app.put('/api/manager/users/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/users/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const userId = req.params.id;
         const user = await User.findById(userId);
@@ -3564,7 +3633,7 @@ app.put('/api/manager/users/:id', authMiddleware, managerMiddleware, async (req,
 });
 
 // Manager: Delete User Account
-app.delete('/api/manager/users/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.delete('/api/manager/users/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const user = await User.findById(req.params.id);
         if (!user) return res.status(404).json({ error: 'User not found' });
@@ -3747,7 +3816,7 @@ app.get('/api/drivers/my-bus', authMiddleware, driverMiddleware, async (req, res
 
 
 // Manager: Update Driver
-app.put('/api/manager/drivers/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/drivers/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const driverId = req.params.id;
         const { assignedBus, ...otherData } = req.body;
@@ -3840,7 +3909,7 @@ app.post('/api/manager/drivers', authMiddleware, managerMiddleware, async (req, 
 });
 
 // Manager: Upload Document to Driver Profile
-app.post('/api/manager/drivers/:id/documents', authMiddleware, managerMiddleware, async (req, res) => {
+app.post('/api/manager/drivers/:id/documents', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { id } = req.params;
         const { name, url, fileType } = req.body;
@@ -3871,7 +3940,7 @@ app.post('/api/manager/drivers/:id/documents', authMiddleware, managerMiddleware
 });
 
 // Manager: Delete Document from Driver Profile
-app.delete('/api/manager/drivers/:id/documents/:docId', authMiddleware, managerMiddleware, async (req, res) => {
+app.delete('/api/manager/drivers/:id/documents/:docId', authMiddleware, managerMiddleware, validateObjectIdParam(['id', 'docId']), async (req, res) => {
     try {
         const { id, docId } = req.params;
         const driver = await Driver.findById(id);
@@ -3890,7 +3959,7 @@ app.delete('/api/manager/drivers/:id/documents/:docId', authMiddleware, managerM
 });
 
 // Manager: Delete Driver
-app.delete('/api/manager/drivers/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.delete('/api/manager/drivers/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { id } = req.params;
         const driver = await Driver.findById(id);
@@ -3917,7 +3986,7 @@ app.delete('/api/manager/drivers/:id', authMiddleware, managerMiddleware, async 
 
 // ─── MANAGER: EDIT ROUTE (name, color, stops) ────────────────────────────────
 // Body: { name, color, stops: [{ name, lat, lng }] }
-app.put('/api/manager/routes/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/routes/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { name, color, stops } = req.body;
         const { geocodeStopName } = require('./geocode_stops');
@@ -3987,7 +4056,7 @@ app.put('/api/manager/routes/:id', authMiddleware, managerMiddleware, async (req
 // ─── MANAGER: UPDATE BUS NUMBER / BASIC FIELDS / QUICK ROUTE REASSIGN ────────
 // PATCH /api/manager/buses/:id
 // Body: { busNumber, occupancy, routeId, routeName, routeColor, name, shift }
-app.patch('/api/manager/buses/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.patch('/api/manager/buses/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const allowed = {};
         if (req.body.busNumber)  allowed.busNumber  = req.body.busNumber.trim();
@@ -4306,11 +4375,11 @@ app.get('/api/manager/reports/bus/:busId/summary', authMiddleware, managerMiddle
 
 // ─── MANAGER: TRIP RECORDS & HISTORY (Paginated, Filtered, Sorted) ────────────
 // GET /api/manager/trips?page=1&limit=20&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&busId=<id>&status=all|Active|Completed|Cancelled|Failed&tripType=all|pickup|dropoff&sortBy=-startTime
-app.get('/api/manager/trips', authMiddleware, managerMiddleware, async (req, res) => {
+app.get('/api/manager/trips', authMiddleware, managerMiddleware, validatePagination({ defaultPage: 1, defaultLimit: 20, maxLimit: 100 }), async (req, res) => {
     try {
-        const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-        const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
-        const skip = (page - 1) * limit;
+        const page = (req.pagination && req.pagination.page) || Math.max(1, parseInt(req.query.page, 10) || 1);
+        const limit = (req.pagination && req.pagination.limit) || Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+        const skip = (req.pagination && req.pagination.skip) != null ? req.pagination.skip : (page - 1) * limit;
 
         const filter = {};
 
@@ -4493,7 +4562,7 @@ app.get('/api/manager/trips/export/csv', authMiddleware, managerMiddleware, asyn
 
 // ─── MANAGER: SINGLE TRIP RECORD DETAIL & STOP TIMELINE ───────────────────────
 // GET /api/manager/trips/:id
-app.get('/api/manager/trips/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.get('/api/manager/trips/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { id } = req.params;
         if (!id || id.length < 10) {
@@ -5070,6 +5139,74 @@ async function completeActiveTripLog({
     return tripLog;
 }
 
+async function resolveFindOneWithOptionalSort(model, query, sortSpec) {
+    const q = model.findOne(query);
+    if (q && typeof q.sort === 'function' && sortSpec) {
+        return await q.sort(sortSpec);
+    }
+    return await q;
+}
+
+/**
+ * Resolves and terminates (Cancels or Fails) an active LiveTripLog using strong trip identity
+ * (_id/tripLogId if provided, else active status for busId + optional tripType sorted by latest startTime)
+ * without restricting lookup to today's IST date so cross-midnight trips terminate cleanly.
+ */
+async function terminateActiveTripLog({
+    LiveTripLogModel,
+    busId,
+    tripId = null,
+    tripType = null,
+    targetStatus,
+    reason,
+    verifiedDriverId = null,
+    clearSamplerFn = clearTelemetrySamplerState,
+    samplerState
+}) {
+    let tripLog = null;
+    const explicitTripId = tripId ? String(tripId).trim() : '';
+
+    if (explicitTripId) {
+        tripLog = await resolveFindOneWithOptionalSort(
+            LiveTripLogModel,
+            { _id: explicitTripId, busId: String(busId), status: 'Active' }
+        );
+    } else {
+        const activeQuery = { busId: String(busId), status: 'Active' };
+        if (tripType && String(tripType).trim().length > 0) {
+            activeQuery.tripType = normalizeTripType(tripType);
+        }
+        tripLog = await resolveFindOneWithOptionalSort(
+            LiveTripLogModel,
+            activeQuery,
+            { startTime: -1, createdAt: -1 }
+        );
+    }
+
+    if (!tripLog) return null;
+
+    if (
+        verifiedDriverId &&
+        tripLog.driverId &&
+        tripLog.driverId.toString() !== String(verifiedDriverId)
+    ) {
+        return null;
+    }
+
+    if (samplerState !== undefined) {
+        clearSamplerFn(tripLog._id, samplerState);
+    } else {
+        clearSamplerFn(tripLog._id);
+    }
+
+    tripLog.endTime = new Date();
+    tripLog.durationMinutes = Math.max(1, Math.round((tripLog.endTime - tripLog.startTime) / 60000));
+    tripLog.status = targetStatus;
+    tripLog.cancellationReason = reason;
+    await tripLog.save();
+    return tripLog;
+}
+
 io.on('connection', (socket) => {
     console.log('🔌 New Client Connected:', socket.id, socket.user ? `(Authenticated: ${socket.user.role} ${socket.user.id})` : '(Guest/Unauthenticated)');
 
@@ -5083,6 +5220,14 @@ io.on('connection', (socket) => {
     // Privileged room subscription handler with strict RBAC verification
     socket.on('joinManager', (dataOrCallback, maybeCallback) => {
         const callback = typeof dataOrCallback === 'function' ? dataOrCallback : maybeCallback;
+
+        const limitCheck = defaultLimiter.consume(defaultLimiter.getSocketEntities(socket), 'joinManager');
+        if (!limitCheck.allowed) {
+            console.warn(`⚠️ [RATE-LIMIT] Socket ${socket.id} exceeded joinManager rate limit`);
+            if (typeof callback === 'function') callback({ success: false, error: limitCheck.reason, code: 'RATE_LIMIT_EXCEEDED' });
+            return;
+        }
+
         if (socket.user && (socket.user.role === 'manager' || socket.user.role === 'admin')) {
             socket.join('managers');
             broadcastStats();
@@ -5104,6 +5249,30 @@ io.on('connection', (socket) => {
             if (typeof callback === 'function') callback({ success: false, error: 'SERVER_SHUTTING_DOWN' });
             return;
         }
+
+        // Payload size protection
+        if (!defaultLimiter.validatePayloadSize(data, 2048)) {
+            console.warn(`⚠️ [SECURITY] Rejected oversized SOS payload from socket ${socket.id}`);
+            if (typeof callback === 'function') callback({ success: false, error: 'Oversized payload rejected' });
+            return;
+        }
+
+        // Per-socket / per-user SOS Rate Limiting (Never silently drop)
+        const limitCheck = defaultLimiter.consume(defaultLimiter.getSocketEntities(socket), 'triggerSOS');
+        if (!limitCheck.allowed) {
+            console.warn(`⚠️ [AUDIT-ALERT] SOS trigger rate limit reached for socket ${socket.id} (user: ${socket.user?.id || 'guest'})`);
+            const existingAlert = sosCooldownMap.get(socket.user?.id) || sosCooldownMap.get(socket.id);
+            if (typeof callback === 'function') {
+                callback({
+                    success: false,
+                    error: 'SOS rate limit exceeded. Existing alert is active and already broadcast to managers.',
+                    code: 'SOS_THROTTLED',
+                    existingAlertId: existingAlert?.alertId
+                });
+            }
+            return;
+        }
+
         operationTracker.begin();
         console.log('🚨 \x1b[31mACTIVE SOS EMERGENCY RECEIVED\x1b[0m:', data);
         
@@ -5260,17 +5429,27 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('joinRoute', (routeId) => {
+    socket.on('joinRoute', (routeId, callback) => {
+        const limitCheck = defaultLimiter.consume(defaultLimiter.getSocketEntities(socket), 'joinRoute');
+        if (!limitCheck.allowed) {
+            console.warn(`⚠️ [RATE-LIMIT] Socket ${socket.id} exceeded joinRoute rate limit`);
+            if (typeof callback === 'function') callback({ success: false, error: limitCheck.reason, code: 'RATE_LIMIT_EXCEEDED' });
+            return;
+        }
+
         if (routeId) {
-            const roomName = `route_${routeId}`;
+            const cleanRouteId = String(routeId).trim().slice(0, 64);
+            const roomName = `route_${cleanRouteId}`;
             socket.join(roomName);
             console.log(`🚪 Socket ${socket.id} joined room: ${roomName}`);
+            if (typeof callback === 'function') callback({ success: true, room: roomName });
         }
     });
 
     socket.on('leaveRoute', (routeId) => {
         if (routeId) {
-            const roomName = `route_${routeId}`;
+            const cleanRouteId = String(routeId).trim().slice(0, 64);
+            const roomName = `route_${cleanRouteId}`;
             socket.leave(roomName);
             console.log(`🚪 Socket ${socket.id} left room: ${roomName}`);
         }
@@ -5286,14 +5465,52 @@ io.on('connection', (socket) => {
             return;
         }
 
+        // Rate limiting check across socket, user and IP
+        const limitCheck = defaultLimiter.consume(defaultLimiter.getSocketEntities(socket), 'locationUpdate');
+        if (!limitCheck.allowed) {
+            socket.emit('telemetryRejected', {
+                code: 'RATE_LIMIT_EXCEEDED',
+                message: limitCheck.reason,
+                retryAfterMs: limitCheck.retryAfterMs
+            });
+            return;
+        }
+
+        // Payload size check
+        if (!defaultLimiter.validatePayloadSize(data, 4096)) {
+            socket.emit('telemetryRejected', {
+                code: 'PAYLOAD_TOO_LARGE',
+                message: 'Telemetry payload exceeds maximum permitted byte size (4KB).'
+            });
+            return;
+        }
+
+        // Payload structure and coordinate bounds validation
+        const payloadValidation = defaultLimiter.validateLocationPayload(data);
+        if (!payloadValidation.valid) {
+            socket.emit('telemetryRejected', {
+                code: 'INVALID_TELEMETRY_PAYLOAD',
+                message: payloadValidation.error
+            });
+            return;
+        }
+
         // STRICT DRIVER AUTHENTICATION: Never trust client-supplied driverId or role
         if (!socket.user) {
             console.warn(`🚫 [AUTH-BLOCK] Unauthenticated socket ${socket.id} attempted locationUpdate`);
+            socket.emit('telemetryRejected', {
+                code: 'UNAUTHENTICATED',
+                message: 'Authentication required for telemetry updates.'
+            });
             return;
         }
 
         if (socket.user.role !== 'driver' && socket.user.role !== 'manager' && socket.user.role !== 'admin') {
             console.warn(`🚫 [AUTH-BLOCK] Unauthorized role "${socket.user.role}" attempted locationUpdate`);
+            socket.emit('telemetryRejected', {
+                code: 'UNAUTHORIZED_ROLE',
+                message: 'Driver privileges required for telemetry updates.'
+            });
             return;
         }
 
@@ -5392,7 +5609,7 @@ io.on('connection', (socket) => {
 
             const lat = rawLat;
             const lng = rawLng;
-            const speed = Math.max(0, Math.min(140, isNaN(rawSpeed) ? 0 : rawSpeed));
+            const speed = Math.max(0, Math.min(130, isNaN(rawSpeed) ? 0 : rawSpeed));
             const heading = Math.max(0, Math.min(360, isNaN(rawHeading) ? 0 : rawHeading));
 
             const gpsAccuracy = data.gpsAccuracy !== undefined ? Number(data.gpsAccuracy) : null;
@@ -5403,8 +5620,8 @@ io.on('connection', (socket) => {
             const tripType = normalizeTripType(data.tripType);
             bus.tripType = tripType;
 
-            // ── LIVE TRIP LOG: Auto-create or sync today's trip scoped by tripType ──────────────
-            const todayStr = new Date().toISOString().split('T')[0];
+            // ── LIVE TRIP LOG: Auto-create or sync today's trip scoped by tripType (IST date) ──
+            const todayStr = getIstDateString();
             const tripLog = await syncActiveTripLogForTelemetry({
                 LiveTripLogModel: LiveTripLog,
                 bus,
@@ -5648,6 +5865,33 @@ io.on('connection', (socket) => {
                 io.to(`route_${bus.routeId.toString()}`).emit('locationUpdate', busPayload);
             }
 
+            // ── HISTORICAL TELEMETRY PERSISTENCE (Non-blocking, sampled, tripLogId-scoped) ──
+            if (tripLog && tripLog._id) {
+                const rawTelemetrySpeed = (data.speed !== undefined && data.speed !== null && data.speed !== '')
+                    ? Number(data.speed)
+                    : null;
+                const rawTelemetryHeading = (data.heading !== undefined && data.heading !== null && data.heading !== '')
+                    ? Number(data.heading)
+                    : null;
+                const rawTelemetryAccuracy = (data.gpsAccuracy !== undefined && data.gpsAccuracy !== null && data.gpsAccuracy !== '')
+                    ? Number(data.gpsAccuracy)
+                    : null;
+
+                persistTelemetryPointIfSampled({
+                    TripTelemetryPointModel: TripTelemetryPoint,
+                    tripLogId: tripLog._id,
+                    busId: bus._id.toString(),
+                    lat,
+                    lng,
+                    speed: rawTelemetrySpeed,
+                    heading: rawTelemetryHeading,
+                    accuracy: rawTelemetryAccuracy,
+                    timestamp: validPacketTime
+                }).catch(err => {
+                    console.warn('⚠️ [TELEMETRY PERSISTENCE WARNING]:', err.message);
+                });
+            }
+
         } catch (err) {
             console.error('❌ [TRACKING ERROR]:', err.message);
         } finally {
@@ -5658,6 +5902,12 @@ io.on('connection', (socket) => {
     // Driver signals end of trip or stops broadcast
     const handleTripEndOrStopBroadcast = async (data) => {
         if (isShuttingDown) return;
+        const limitCheck = defaultLimiter.consume(defaultLimiter.getSocketEntities(socket), 'tripEnd');
+        if (!limitCheck.allowed) {
+            console.warn(`⚠️ [RATE-LIMIT] Socket ${socket.id} exceeded tripEnd rate limit`);
+            socket.emit('error', { code: 'RATE_LIMIT_EXCEEDED', message: limitCheck.reason });
+            return;
+        }
         operationTracker.begin();
         try {
             // STRICT DRIVER AUTHENTICATION: Never trust client-supplied driverId or role
@@ -5719,7 +5969,7 @@ io.on('connection', (socket) => {
                 }
                 console.log(`🏁 [TRIP END / STOP BROADCAST] Bus ${busId} marked Offline`);
             }
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getIstDateString();
             const tripLog = await completeActiveTripLog({
                 LiveTripLogModel: LiveTripLog,
                 busId,
@@ -5729,6 +5979,7 @@ io.on('connection', (socket) => {
                 verifiedDriverId: socket.user.role === 'driver' ? socket.user.id : null
             });
             if (tripLog) {
+                clearTelemetrySamplerState(tripLog._id);
                 io.emit('tripCompleted', {
                     tripId: tripLog._id,
                     busId,
@@ -5748,6 +5999,12 @@ io.on('connection', (socket) => {
 
     const handleTripStart = async (data) => {
         if (isShuttingDown) return;
+        const limitCheck = defaultLimiter.consume(defaultLimiter.getSocketEntities(socket), 'startTrip');
+        if (!limitCheck.allowed) {
+            console.warn(`⚠️ [RATE-LIMIT] Socket ${socket.id} exceeded startTrip rate limit`);
+            socket.emit('error', { code: 'RATE_LIMIT_EXCEEDED', message: limitCheck.reason });
+            return;
+        }
         operationTracker.begin();
         try {
             if (!socket.user) return;
@@ -5770,7 +6027,7 @@ io.on('connection', (socket) => {
                 return;
             }
 
-            const todayStr = new Date().toISOString().split('T')[0];
+            const todayStr = getIstDateString();
             const tripType = normalizeTripType(data.tripType);
             const verifiedDriverId = socket.user.role === 'driver' ? socket.user.id : null;
 
@@ -5896,18 +6153,17 @@ io.on('connection', (socket) => {
             io.emit('busUpdated', cancelPayload);
             io.emit('tripCancelled', { busId, reason: data.reason || 'Trip cancelled by driver' });
 
-            const todayStr = new Date().toISOString().split('T')[0];
-            const tripQuery = { busId, date: todayStr, status: 'Active' };
-            if (data && data.tripType && String(data.tripType).trim().length > 0) {
-                tripQuery.tripType = normalizeTripType(data.tripType);
-            }
-            const tripLog = await LiveTripLog.findOne(tripQuery);
+            const verifiedDriverId = socket.user.role === 'driver' ? socket.user.id : null;
+            const tripLog = await terminateActiveTripLog({
+                LiveTripLogModel: LiveTripLog,
+                busId,
+                tripId: data?.tripId || data?.tripLogId || null,
+                tripType: data?.tripType || null,
+                targetStatus: 'Cancelled',
+                reason: data.reason || 'Trip cancelled by driver',
+                verifiedDriverId
+            });
             if (tripLog) {
-                tripLog.endTime = new Date();
-                tripLog.durationMinutes = Math.max(1, Math.round((tripLog.endTime - tripLog.startTime) / 60000));
-                tripLog.status = 'Cancelled';
-                tripLog.cancellationReason = data.reason || 'Trip cancelled by driver';
-                await tripLog.save();
                 io.emit('tripCancelled', {
                     tripId: tripLog._id,
                     busId,
@@ -5949,18 +6205,17 @@ io.on('connection', (socket) => {
             }
 
             await Bus.findByIdAndUpdate(busId, { status: 'Offline', speed: 0, lastUpdated: new Date() });
-            const todayStr = new Date().toISOString().split('T')[0];
-            const tripQuery = { busId, date: todayStr, status: 'Active' };
-            if (data && data.tripType && String(data.tripType).trim().length > 0) {
-                tripQuery.tripType = normalizeTripType(data.tripType);
-            }
-            const tripLog = await LiveTripLog.findOne(tripQuery);
+            const verifiedDriverId = socket.user.role === 'driver' ? socket.user.id : null;
+            const tripLog = await terminateActiveTripLog({
+                LiveTripLogModel: LiveTripLog,
+                busId,
+                tripId: data?.tripId || data?.tripLogId || null,
+                tripType: data?.tripType || null,
+                targetStatus: 'Failed',
+                reason: data.reason || 'Vehicle breakdown / mechanical failure',
+                verifiedDriverId
+            });
             if (tripLog) {
-                tripLog.endTime = new Date();
-                tripLog.durationMinutes = Math.max(1, Math.round((tripLog.endTime - tripLog.startTime) / 60000));
-                tripLog.status = 'Failed';
-                tripLog.cancellationReason = data.reason || 'Vehicle breakdown / mechanical failure';
-                await tripLog.save();
                 io.emit('tripFailed', {
                     tripId: tripLog._id,
                     busId,
@@ -5986,7 +6241,10 @@ io.on('connection', (socket) => {
     socket.on('failTrip', handleTripFail);
     socket.on('tripFailed', handleTripFail);
     socket.on('ping', () => socket.emit('pong'));
-    socket.on('disconnect', () => { console.log('Client disconnected'); });
+    socket.on('disconnect', () => {
+        defaultLimiter.handleDisconnect(socket.id);
+        console.log('Client disconnected');
+    });
 });
 
 
@@ -6186,7 +6444,7 @@ app.post('/api/manager/sync-official-timetable', authMiddleware, managerMiddlewa
 });
 
 // --- UPDATE ROUTE STOPS & AUTOMATIC GEOCODING ---
-app.put('/api/routes/:id/stops', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/routes/:id/stops', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const { stops } = req.body;
         if (!Array.isArray(stops)) {
@@ -6373,19 +6631,21 @@ app.post('/api/complaints', authMiddleware, async (req, res) => {
     }
 });
 
-app.get('/api/complaints', authMiddleware, async (req, res) => {
+app.get('/api/complaints', authMiddleware, validatePagination({ defaultPage: 1, defaultLimit: 50, maxLimit: 100 }), async (req, res) => {
     try {
         const query = (req.user.role === 'admin' || req.user.role === 'manager')
             ? {}
             : { userId: req.user.id };
-        const complaints = await Complaint.find(query).sort({ createdAt: -1 }).limit(100);
+        const limit = (req.pagination && req.pagination.limit) || 50;
+        const skip = (req.pagination && req.pagination.skip) || 0;
+        const complaints = await Complaint.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit);
         res.json(complaints);
     } catch (_err) {
         res.status(500).json({ error: 'Failed to fetch complaints' });
     }
 });
 
-app.put('/api/complaints/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/complaints/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const updated = await Complaint.findByIdAndUpdate(
             req.params.id,
@@ -6846,7 +7106,7 @@ app.get('/api/public/active-form', async (req, res) => {
 });
 
 // ── MANAGER: Close a form ─────────────────────────────────────────────────
-app.put('/api/manager/registration-form/:id/close', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/registration-form/:id/close', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const form = await RegistrationForm.findByIdAndUpdate(
             req.params.id, { isActive: false, closedAt: new Date() }, { new: true }
@@ -6986,7 +7246,7 @@ app.post('/api/manager/registrations/bulk', authMiddleware, managerMiddleware, a
 });
 
 // ── MANAGER: Approve → auto-create user account & dispatch credentials email ──
-app.put('/api/manager/registrations/:id/approve', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/registrations/:id/approve', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -7090,7 +7350,7 @@ app.put('/api/manager/registrations/:id/approve', authMiddleware, managerMiddlew
 
 // ── MANAGER: Resend Credentials Email ───────────────────────────────────────
 // POST /api/manager/registrations/:id/resend-email
-app.post('/api/manager/registrations/:id/resend-email', authMiddleware, managerMiddleware, async (req, res) => {
+app.post('/api/manager/registrations/:id/resend-email', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -7172,7 +7432,7 @@ app.post('/api/manager/test-email', authMiddleware, managerMiddleware, async (re
 });
 
 // ── MANAGER: Unapprove → delete user account & revert status ────────────────
-app.put('/api/manager/registrations/:id/unapprove', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/registrations/:id/unapprove', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -7322,7 +7582,7 @@ app.post('/api/manager/registrations/bulk-approve', authMiddleware, managerMiddl
 });
 
 // ── MANAGER: Reject a submission ──────────────────────────────────────────
-app.put('/api/manager/registrations/:id/reject', authMiddleware, managerMiddleware, async (req, res) => {
+app.put('/api/manager/registrations/:id/reject', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const updated = await RegistrationSubmission.findByIdAndUpdate(
@@ -7338,7 +7598,7 @@ app.put('/api/manager/registrations/:id/reject', authMiddleware, managerMiddlewa
 });
 
 // ── MANAGER: Delete a single registration submission ───────────────────────
-app.delete('/api/manager/registrations/:id', authMiddleware, managerMiddleware, async (req, res) => {
+app.delete('/api/manager/registrations/:id', authMiddleware, managerMiddleware, validateObjectIdParam('id'), async (req, res) => {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid submission ID format' });
     try {
         const submission = await RegistrationSubmission.findById(req.params.id);
@@ -7662,7 +7922,7 @@ app.post('/api/admin/users', authMiddleware, adminMiddleware, async (req, res) =
 });
 
 // UPDATE user (supports moving between collections if role changes)
-app.put('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, async (req, res) => {
+app.put('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const currentRole = req.params.role.toLowerCase();
         const id = req.params.id;
@@ -7789,7 +8049,7 @@ app.put('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, async (re
 });
 
 // DELETE user from specified collection
-app.delete('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, async (req, res) => {
+app.delete('/api/admin/users/:role/:id', authMiddleware, adminMiddleware, validateObjectIdParam('id'), async (req, res) => {
     try {
         const role = req.params.role.toLowerCase();
         const id = req.params.id;
@@ -7951,9 +8211,11 @@ app.post('/api/driver/fuel-log', authMiddleware, driverMiddleware, async (req, r
 });
 
 // 2. GET /api/manager/fuel-logs — Manager fetches refill history
-app.get('/api/manager/fuel-logs', authMiddleware, managerMiddleware, async (req, res) => {
+app.get('/api/manager/fuel-logs', authMiddleware, managerMiddleware, validatePagination({ defaultPage: 1, defaultLimit: 50, maxLimit: 200 }), async (req, res) => {
     try {
-        const logs = await FuelLog.find().sort({ refillDate: -1 }).limit(100);
+        const limit = (req.pagination && req.pagination.limit) || 100;
+        const skip = (req.pagination && req.pagination.skip) || 0;
+        const logs = await FuelLog.find().sort({ refillDate: -1 }).skip(skip).limit(limit);
         res.json({ success: true, logs });
     } catch (err) {
         console.error('Fuel logs fetch error:', err);
@@ -8097,9 +8359,11 @@ app.post('/api/driver/scan-pass', authMiddleware, driverMiddleware, async (req, 
 });
 
 // 3. GET /api/manager/boarding-logs — Fetch daily attendance logs for Web Dashboard
-app.get('/api/manager/boarding-logs', authMiddleware, managerMiddleware, async (req, res) => {
+app.get('/api/manager/boarding-logs', authMiddleware, managerMiddleware, validatePagination({ defaultPage: 1, defaultLimit: 50, maxLimit: 200 }), async (req, res) => {
     try {
-        const logs = await BoardingLog.find().sort({ boardedAt: -1 }).limit(100);
+        const limit = (req.pagination && req.pagination.limit) || 100;
+        const skip = (req.pagination && req.pagination.skip) || 0;
+        const logs = await BoardingLog.find().sort({ boardedAt: -1 }).skip(skip).limit(limit);
         res.json({ success: true, logs });
     } catch (err) {
         console.error('Boarding logs error:', err);
@@ -8391,6 +8655,7 @@ module.exports = {
     app,
     server,
     io,
+    defaultLimiter,
     getCorsOptions,
     runDriverInactivityWatchdogCycle,
     DRIVER_STALE_THRESHOLD_MS,
@@ -8415,6 +8680,7 @@ module.exports = {
     startOrResumeTripLog,
     syncActiveTripLogForTelemetry,
     completeActiveTripLog,
+    terminateActiveTripLog,
     broadcastStats,
     normalizeNotificationPayload,
     emitBroadcastNotification,
