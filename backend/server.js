@@ -4792,6 +4792,31 @@ function normalizeDistanceKm(rawDistanceKm) {
     return Number(parsed.toFixed(2));
 }
 
+function parseTelemetryPacketTimestamp(rawTimestamp, nowMs = Date.now()) {
+    if (rawTimestamp === null || rawTimestamp === undefined || rawTimestamp === '') {
+        return new Date(nowMs);
+    }
+    if (rawTimestamp instanceof Date) {
+        return !isNaN(rawTimestamp.getTime()) ? rawTimestamp : new Date(nowMs);
+    }
+    if (typeof rawTimestamp === 'number') {
+        return Number.isFinite(rawTimestamp) ? new Date(rawTimestamp) : new Date(nowMs);
+    }
+    if (typeof rawTimestamp === 'string') {
+        const trimmed = rawTimestamp.trim();
+        if (!trimmed) return new Date(nowMs);
+        let normalized = trimmed;
+        // Legacy driver APKs emit Dart DateTime.now().toIso8601String() without Z/offset.
+        // Interpret timezone-naive ISO datetime strings as IST (+05:30) rather than server UTC.
+        if (/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?$/.test(trimmed)) {
+            normalized = `${trimmed.replace(' ', 'T')}+05:30`;
+        }
+        const parsed = new Date(normalized);
+        return !isNaN(parsed.getTime()) ? parsed : new Date(nowMs);
+    }
+    return new Date(nowMs);
+}
+
 function resolveBusTelemetryStatus(currentBusStatus, incomingStatus, explicitStatusOverride = false) {
     const current = String(currentBusStatus || '').trim();
     const incoming = String(incomingStatus || '').trim();
@@ -5575,11 +5600,15 @@ io.on('connection', (socket) => {
             }
 
             // Timestamp parsing & out-of-order rejection
-            const incomingTimestamp = data.timestamp ? new Date(data.timestamp) : new Date();
-            const validPacketTime = !isNaN(incomingTimestamp.getTime()) ? incomingTimestamp : new Date();
+            const validPacketTime = parseTelemetryPacketTimestamp(data.timestamp);
 
             // Reject anomalous packets timestamped > 60s in future
             if (validPacketTime.getTime() > Date.now() + 60000) {
+                console.warn(`⚠️ [TELEMETRY-REJECTED] Future timestamp from bus ${bus.busNumber || incomingBusId}: ${data.timestamp}`);
+                socket.emit('telemetryRejected', {
+                    code: 'FUTURE_TIMESTAMP',
+                    message: 'Telemetry packet timestamp is too far in the future.'
+                });
                 return;
             }
 
@@ -8674,6 +8703,7 @@ module.exports = {
     buildBusApproachingStopPayload,
     normalizeTripType,
     normalizeDistanceKm,
+    parseTelemetryPacketTimestamp,
     resolveBusTelemetryStatus,
     verifyDriverBusAuthorization,
     authorizeDelayNotification,

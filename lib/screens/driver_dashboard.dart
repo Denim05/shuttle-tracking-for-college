@@ -809,7 +809,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
       'nextStop': nextStopName,
       'distanceToNextStopMeters': distToNext?.round(),
       'distanceToFinalStopMeters': distToFinal?.round(),
-      'timestamp': DateTime.now().toIso8601String(),
+      'timestamp': DateTime.now().toUtc().toIso8601String(),
     });
   }
 
@@ -1929,7 +1929,7 @@ class _DriverDashboardState extends State<DriverDashboard> {
         'role': 'driver',
         'latitude': position?.latitude ?? _currentPosition?.latitude ?? 0.0,
         'longitude': position?.longitude ?? _currentPosition?.longitude ?? 0.0,
-        'timestamp': DateTime.now().toIso8601String(),
+        'timestamp': DateTime.now().toUtc().toIso8601String(),
         'busId': _selectedBusId,
       };
 
