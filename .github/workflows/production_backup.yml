@@ -1,0 +1,78 @@
+name: Production Encrypted MongoDB Backup
+
+on:
+  schedule:
+    # Daily at 21:00 UTC (02:30 IST off-peak)
+    - cron: '0 21 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  encrypted-backup-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      mongo-verify:
+        image: mongo:7
+        ports:
+          - 27017:27017
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install MongoDB Database Tools
+        run: |
+          set -euo pipefail
+          curl -fsSL https://fastdl.mongodb.org/tools/db/mongodb-database-tools-ubuntu2204-x86_64-100.10.0.tgz -o /tmp/mongo-tools.tgz
+          tar -xzf /tmp/mongo-tools.tgz -C /tmp
+          sudo install -m 0755 /tmp/mongodb-database-tools-*/bin/mongodump /usr/local/bin/mongodump
+          sudo install -m 0755 /tmp/mongodb-database-tools-*/bin/mongorestore /usr/local/bin/mongorestore
+          rm -rf /tmp/mongo-tools.tgz /tmp/mongodb-database-tools-*
+          mongodump --version
+          mongorestore --version
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci --omit=dev
+
+      - name: Wait for isolated local MongoDB container
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 30); do
+            if mongosh --host 127.0.0.1 --port 27017 --eval "db.adminCommand({ ping: 1 })" >/dev/null 2>&1 || nc -z 127.0.0.1 27017; then
+              echo "Isolated MongoDB container ready."
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Isolated MongoDB container failed to start."
+          exit 1
+
+      - name: Run encrypted backup and isolated restore verification
+        env:
+          MONGODB_BACKUP_URI: ${{ secrets.MONGODB_BACKUP_URI }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+          B2_KEY_ID: ${{ secrets.B2_KEY_ID }}
+          B2_APPLICATION_KEY: ${{ secrets.B2_APPLICATION_KEY }}
+          B2_ENDPOINT: ${{ secrets.B2_ENDPOINT }}
+          B2_BUCKET: ${{ secrets.B2_BUCKET }}
+          B2_REGION: ${{ secrets.B2_REGION }}
+          RESTORE_VERIFY_URI: mongodb://127.0.0.1:27017
+          RESTORE_VERIFY_DB: sistecChalo_restore_verify
+        run: |
+          set -euo pipefail
+          node backend/scripts/backup_and_verify.js
+
+      - name: Guaranteed cleanup of temporary files
+        if: always()
+        run: |
+          rm -rf /tmp/sistec_prod_backup_*
