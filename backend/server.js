@@ -426,7 +426,7 @@ app.get('/api/app-version', (req, res) => {
 const isDevOrTest = process.env.NODE_ENV === 'staging' || process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development';
 const limiter = rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
-    max: isDevOrTest ? 10000 : 100, // Relaxed in staging/test for automated test runs; 100 in production
+    max: isDevOrTest ? 10000 : 400, // Relaxed in staging/test; 400 in production for fleet/timetable operations
     message: { error: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);
@@ -1469,8 +1469,7 @@ app.get('/api/guest/buses', async (req, res) => {
         const nowTime = Date.now();
         const staleIds = [];
         for (const b of buses) {
-            const lastUp = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
-            if (b.status && b.status.toLowerCase() !== 'offline' && (nowTime - lastUp) > 30000) {
+            if (isBusTelemetryStale(b, nowTime)) {
                 b.status = 'Offline';
                 b.speed = 0;
                 b.etas = [];
@@ -1674,6 +1673,10 @@ app.post('/api/manager/stop-feedback/:id/reject', authMiddleware, managerMiddlew
         return res.status(500).json({ error: 'Failed to reject stop feedback' });
     }
 });
+
+// ── STOP VERIFICATION & COMMUNITY-ASSISTED COORDINATE CORRECTION API ─────────
+const createStopVerificationRouter = require('./routes/stop_verification_routes');
+app.use('/api', createStopVerificationRouter(io));
 
 // --- User Management Routes (For Admin/Manager) ---
 
@@ -1886,8 +1889,7 @@ app.get('/api/buses', async (req, res) => {
         const nowTime = Date.now();
         const staleIds = [];
         for (const b of buses) {
-            const lastUp = b.lastUpdated ? new Date(b.lastUpdated).getTime() : 0;
-            if (b.status && b.status.toLowerCase() !== 'offline' && (nowTime - lastUp) > 30000) {
+            if (isBusTelemetryStale(b, nowTime)) {
                 b.status = 'Offline';
                 b.speed = 0;
                 b.etas = [];
@@ -4779,6 +4781,14 @@ function parseSosCoordinates(data) {
 
 // 60s stale threshold = 5x the 12s stationary driver heartbeat interval (12x the 5s moving timer)
 const DRIVER_STALE_THRESHOLD_MS = 60 * 1000;
+
+function isBusTelemetryStale(bus, nowMs = Date.now()) {
+    if (!bus || !bus.status || String(bus.status).toLowerCase() === 'offline') {
+        return false;
+    }
+    const lastUp = bus.lastUpdated ? new Date(bus.lastUpdated).getTime() : 0;
+    return (nowMs - lastUp) > DRIVER_STALE_THRESHOLD_MS;
+}
 
 function normalizeTripType(rawTripType) {
     const cleaned = String(rawTripType || '').trim().toLowerCase();
@@ -8688,6 +8698,7 @@ module.exports = {
     getCorsOptions,
     runDriverInactivityWatchdogCycle,
     DRIVER_STALE_THRESHOLD_MS,
+    isBusTelemetryStale,
     sanitizeConnectionError,
     resolveKeepAliveUrl,
     areExternalNotificationsSuppressed,

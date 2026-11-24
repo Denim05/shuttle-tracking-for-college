@@ -383,10 +383,13 @@ async function syncRosterToDatabase(rosterEntries, io = null) {
     // 1. Gather all existing stop coordinates for strict preservation
     const preservedCoords = await loadPreservedDatabaseCoordinates();
 
-    const syncedResults = [];
+    const existingRoutes = await Route.find({}).lean();
+    const existingByBusKey = new Map();
+    for (const er of existingRoutes) {
+        if (er.name) existingByBusKey.set(er.name.toLowerCase(), er);
+    }
 
-    for (let idx = 0; idx < rosterEntries.length; idx++) {
-        const item = rosterEntries[idx];
+    async function processEntry(item, idx) {
         const rawBusNo = String(item.busNumber || item.busNo || (idx + 1)).trim();
         const busNoClean = rawBusNo.replace(/^bus\s*/i, '').trim();
         const displayBusLabel = rawBusNo.toUpperCase().startsWith('BUS') ? rawBusNo.toUpperCase() : `Bus ${busNoClean}`;
@@ -394,7 +397,7 @@ async function syncRosterToDatabase(rosterEntries, io = null) {
         let cleanRouteName = String(item.routeName || item.name || `Route ${busNoClean}`).trim();
         // Remove duplicate "Bus XX -" if already present in routeName
         cleanRouteName = cleanRouteName.replace(/^bus\s*\d+\s*[\-\:]\s*/i, '').trim();
-        
+
         // Full official route title with Bus No clearly indicated
         const fullRouteName = `${displayBusLabel} - ${cleanRouteName}`;
 
@@ -425,13 +428,27 @@ async function syncRosterToDatabase(rosterEntries, io = null) {
             });
         }
 
-        // Generate high-resolution road-following coordinates
+        // Reuse existing high-res polyline if stop names match; otherwise fetch with 2.5s timeout guard
+        const prevRoute = existingByBusKey.get(fullRouteName.toLowerCase()) ||
+            existingByBusKey.get(cleanRouteName.toLowerCase());
+        const prevStopNames = prevRoute && Array.isArray(prevRoute.stops)
+            ? prevRoute.stops.map(s => (s.name || '').toLowerCase()).join('|')
+            : '';
+        const nextStopNames = stops.map(s => (s.name || '').toLowerCase()).join('|');
+
         let roadCoordinates = [];
-        try {
-            roadCoordinates = await getRoadPolylineForStops(stops);
-        } catch (rErr) {
-            console.warn(`Road polyline generation failed for ${fullRouteName}, falling back to stop waypoints:`, rErr.message);
-            roadCoordinates = stops.map(s => ({ latitude: s.lat, longitude: s.lng }));
+        if (prevRoute && Array.isArray(prevRoute.coordinates) && prevRoute.coordinates.length > 20 && prevStopNames === nextStopNames) {
+            roadCoordinates = prevRoute.coordinates;
+        } else {
+            try {
+                roadCoordinates = await Promise.race([
+                    getRoadPolylineForStops(stops),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('Polyline timeout')), 2500))
+                ]);
+            } catch (rErr) {
+                console.warn(`Road polyline generation skipped/timed out for ${fullRouteName}:`, rErr.message);
+                roadCoordinates = stops.map(s => ({ latitude: s.lat, longitude: s.lng }));
+            }
         }
 
         // ── Upsert Route Document ──
@@ -510,7 +527,6 @@ async function syncRosterToDatabase(rosterEntries, io = null) {
                 ]
             });
             if (!driverUser) {
-                // Default secure password hash for 123456
                 const argon2 = require('argon2');
                 const defaultHash = await argon2.hash('123456');
                 await User.create({
@@ -533,7 +549,7 @@ async function syncRosterToDatabase(rosterEntries, io = null) {
             // Driver user creation is non-blocking
         }
 
-        syncedResults.push({
+        return {
             busNumber: displayBusLabel,
             vehicleNo: vehiclePlate,
             routeName: fullRouteName,
@@ -541,7 +557,17 @@ async function syncRosterToDatabase(rosterEntries, io = null) {
             driverPhone: driverPhone,
             stopsCount: stops.length,
             routeId: route._id.toString()
-        });
+        };
+    }
+
+    const syncedResults = [];
+    const CONCURRENCY = 6;
+    for (let i = 0; i < rosterEntries.length; i += CONCURRENCY) {
+        const batch = rosterEntries.slice(i, i + CONCURRENCY);
+        const batchResults = await Promise.all(
+            batch.map((item, offset) => processEntry(item, i + offset))
+        );
+        syncedResults.push(...batchResults);
     }
 
     // Emit live WebSocket update so every device refreshes instantly
